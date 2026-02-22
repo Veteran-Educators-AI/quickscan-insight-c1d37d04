@@ -27,15 +27,10 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Always define these with fallbacks to ensure they're available
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
-        env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL
-      ),
-      'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(
-        env.VITE_SUPABASE_PUBLISHABLE_KEY || FALLBACK_SUPABASE_KEY
-      ),
-      'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(
-        env.VITE_SUPABASE_PROJECT_ID || FALLBACK_SUPABASE_PROJECT_ID
-      ),
+      // Always use the shared database credentials (ignore .env overrides from Cloud)
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(FALLBACK_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(FALLBACK_SUPABASE_KEY),
+      'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(FALLBACK_SUPABASE_PROJECT_ID),
     },
     build: {
       target: "esnext",
