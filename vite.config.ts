@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// No hardcoded fallbacks - use Cloud-provided env vars
+// Cloud-provided Supabase credentials (from .env managed by Lovable Cloud)
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -21,7 +21,12 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    // No define overrides - let Cloud .env provide Supabase vars naturally
+    define: {
+      // Ensure Supabase env vars are available even if .env loading has issues
+      ...(env.VITE_SUPABASE_URL ? { 'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL) } : {}),
+      ...(env.VITE_SUPABASE_PUBLISHABLE_KEY ? { 'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(env.VITE_SUPABASE_PUBLISHABLE_KEY) } : {}),
+      ...(env.VITE_SUPABASE_PROJECT_ID ? { 'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(env.VITE_SUPABASE_PROJECT_ID) } : {}),
+    },
     build: {
       target: "esnext",
     },
