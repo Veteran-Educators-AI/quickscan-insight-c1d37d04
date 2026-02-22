@@ -151,7 +151,7 @@ async function upsertExternalStudent(
 
   const { data, error } = await scholar
     .from("external_students")
-    .upsert(row, { onConflict: "external_id" })
+    .upsert(row, { onConflict: "external_id,source" })
     .select("id")
     .single();
 
