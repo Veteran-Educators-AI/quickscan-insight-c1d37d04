@@ -110,8 +110,9 @@ interface ParticipantResult {
  *  SCHOLAR_* secrets for backward compatibility.                    */
 // deno-lint-ignore no-explicit-any
 function getScholarClient(): any {
-  const url = Deno.env.get("SUPABASE_URL") || Deno.env.get("SCHOLAR_SUPABASE_URL");
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+  // Scholar is a SEPARATE database — always use SCHOLAR_* secrets
+  const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
+  const key = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) throw new Error("Scholar DB secrets not configured");
   return createClient(url, key);
 }
