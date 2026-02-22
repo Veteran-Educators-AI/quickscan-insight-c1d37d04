@@ -40,15 +40,38 @@ export default function Classes() {
     if (!user) return;
 
     try {
-      // Use RPC function to fetch classes with student counts in a single query
-      // This replaces the N+1 query pattern (1 for classes + 1 per class for counts)
-      const { data, error } = await supabase.rpc('get_classes_with_student_counts', {
-        teacher_uuid: user.id,
-      });
+      // Fetch classes for this teacher
+      const { data: classData, error: classError } = await supabase
+        .from('classes')
+        .select('id, name, join_code, school_year, class_period, created_at, archived_at')
+        .eq('teacher_id', user.id)
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (classError) throw classError;
 
-      setClasses(data || []);
+      // Fetch student counts per class
+      const classIds = (classData || []).map(c => c.id);
+      let studentCounts: Record<string, number> = {};
+      
+      if (classIds.length > 0) {
+        const { data: students, error: studentError } = await supabase
+          .from('students')
+          .select('class_id')
+          .in('class_id', classIds);
+        
+        if (!studentError && students) {
+          for (const s of students) {
+            studentCounts[s.class_id] = (studentCounts[s.class_id] || 0) + 1;
+          }
+        }
+      }
+
+      const merged = (classData || []).map(c => ({
+        ...c,
+        student_count: studentCounts[c.id] || 0,
+      }));
+
+      setClasses(merged);
     } catch (error) {
       console.error('Error fetching classes:', error);
       toast({
