@@ -113,6 +113,7 @@ function getScholarClient(): any {
   // Scholar is a SEPARATE database — always use SCHOLAR_* secrets
   const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
   const key = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+  console.log("Scholar DB URL:", url?.substring(0, 40) + "...");
   if (!url || !key) throw new Error("Scholar DB secrets not configured");
   return createClient(url, key);
 }
