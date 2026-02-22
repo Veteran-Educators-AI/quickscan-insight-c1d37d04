@@ -104,11 +104,14 @@ interface ParticipantResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build a Scholar Supabase client (service-role, bypasses RLS). */
+/** Build a Scholar Supabase client (service-role, bypasses RLS).
+ *  Since both apps now share the same Cloud database, we use the
+ *  primary SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Falls back to
+ *  SCHOLAR_* secrets for backward compatibility.                    */
 // deno-lint-ignore no-explicit-any
 function getScholarClient(): any {
-  const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
-  const key = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+  const url = Deno.env.get("SUPABASE_URL") || Deno.env.get("SCHOLAR_SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) throw new Error("Scholar DB secrets not configured");
   return createClient(url, key);
 }
