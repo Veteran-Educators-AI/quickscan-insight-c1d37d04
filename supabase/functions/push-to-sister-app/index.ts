@@ -149,17 +149,35 @@ async function upsertExternalStudent(
   if (req.xp_reward !== undefined) row.xp_potential = req.xp_reward;
   if (req.coin_reward !== undefined) row.coin_potential = req.coin_reward;
 
-  const { data, error } = await scholar
+  // Check if student already exists (avoid upsert since Scholar DB may lack the UNIQUE constraint)
+  const { data: existing } = await scholar
     .from("external_students")
-    .upsert(row, { onConflict: "external_id,source" })
     .select("id")
-    .single();
+    .eq("external_id", req.student_id)
+    .eq("source", "nycologic_ai")
+    .maybeSingle();
 
-  if (error) {
-    console.error("external_students upsert error:", error.message);
-    return null;
+  if (existing?.id) {
+    // Update existing record
+    const { error: updateErr } = await scholar
+      .from("external_students")
+      .update(row)
+      .eq("id", existing.id);
+    if (updateErr) console.error("external_students update error:", updateErr.message);
+    return existing.id;
+  } else {
+    // Insert new record
+    const { data, error } = await scholar
+      .from("external_students")
+      .insert(row)
+      .select("id")
+      .single();
+    if (error) {
+      console.error("external_students insert error:", error.message);
+      return null;
+    }
+    return data?.id ?? null;
   }
-  return data?.id ?? null;
 }
 
 /** Create a practice set + questions on Scholar. */
