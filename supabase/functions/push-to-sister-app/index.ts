@@ -1,18 +1,15 @@
 /**
  * ============================================================================
- * PUSH TO SISTER APP — HYBRID APPROACH
+ * PUSH TO SISTER APP — Scholar Webhook Integration
  * ============================================================================
  *
- * Uses Scholar's edge functions for writes (they may have verify_jwt=false)
- * and REST API (PostgREST) for reads (using anon key).
- *
- * Falls back to receive-sister-app-data edge function if nycologic-webhook
- * is not available.
+ * Sends data to Scholar's nycologic-webhook edge function.
+ * Scholar requires an x-api-key header validated against its integration_tokens table.
  *
  * REQUIRED SECRETS:
  *   SCHOLAR_SUPABASE_URL              – Scholar project URL
- *   SCHOLAR_SUPABASE_ANON_KEY         – Scholar anon/publishable key  
- *   SCHOLAR_SUPABASE_SERVICE_ROLE_KEY – Scholar service-role key (sb_secret_)
+ *   SCHOLAR_SUPABASE_ANON_KEY         – Scholar anon/publishable key
+ *   SISTER_APP_API_KEY                – API key registered in Scholar's integration_tokens
  *   BREVO_API_KEY                     – (optional) for email notifications
  * ============================================================================
  */
@@ -90,89 +87,44 @@ interface ParticipantResult {
 function getScholarConfig() {
   const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
   const anonKey = Deno.env.get("SCHOLAR_SUPABASE_ANON_KEY");
-  const serviceKey = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !anonKey) throw new Error("Scholar secrets not configured (need URL + anon key)");
-  return { url, anonKey, serviceKey: serviceKey || anonKey };
+  const sisterApiKey = Deno.env.get("SISTER_APP_API_KEY");
+  if (!url) throw new Error("SCHOLAR_SUPABASE_URL not configured");
+  if (!anonKey) throw new Error("SCHOLAR_SUPABASE_ANON_KEY not configured");
+  if (!sisterApiKey) throw new Error("SISTER_APP_API_KEY not configured");
+  return { url, anonKey, sisterApiKey };
 }
 
-/** Call a Scholar edge function (tries multiple function names) */
-async function callScholarEdgeFunction(payload: Record<string, unknown>): Promise<{ success: boolean; data?: any; error?: string }> {
-  const { url, anonKey, serviceKey } = getScholarConfig();
+/** Call Scholar's nycologic-webhook with the x-api-key header */
+async function postToScholar(payload: Record<string, unknown>): Promise<{ success: boolean; data?: any; error?: string }> {
+  const { url, anonKey, sisterApiKey } = getScholarConfig();
+  const webhookUrl = `${url}/functions/v1/nycologic-webhook`;
 
-  // Try these Scholar edge functions in order
-  const functionNames = ["receive-sister-app-data", "nycologic-webhook"];
+  console.log("Posting to Scholar:", webhookUrl, "payload type:", payload.type || payload.action);
 
-  for (const funcName of functionNames) {
-    const fullUrl = `${url}/functions/v1/${funcName}`;
-    console.log(`Trying Scholar function: ${funcName}`);
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": anonKey,
+      "Authorization": `Bearer ${anonKey}`,
+      "x-api-key": sisterApiKey,
+      "x-source-app": "nycologic-ai",
+    },
+    body: JSON.stringify(payload),
+  });
 
-    try {
-      const response = await fetch(fullUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": anonKey,
-          "Authorization": `Bearer ${serviceKey}`,
-          "x-source-app": "nycologic-ai",
-        },
-        body: JSON.stringify(payload),
-      });
+  const text = await response.text();
+  console.log("Scholar response:", response.status, text.substring(0, 500));
 
-      const text = await response.text();
-      console.log(`Scholar ${funcName}: ${response.status} ${text.substring(0, 300)}`);
-
-      if (response.status === 404) {
-        console.log(`Function ${funcName} not found, trying next...`);
-        continue;
-      }
-
-      if (response.status === 401) {
-        // Try again with anon key as Authorization (some functions have verify_jwt=false)
-        const retryResponse = await fetch(fullUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": anonKey,
-            "Authorization": `Bearer ${anonKey}`,
-            "x-source-app": "nycologic-ai",
-            "x-service-key": serviceKey,
-          },
-          body: JSON.stringify(payload),
-        });
-
-        const retryText = await retryResponse.text();
-        console.log(`Scholar ${funcName} retry: ${retryResponse.status} ${retryText.substring(0, 300)}`);
-
-        if (retryResponse.ok) {
-          try { return { success: true, data: JSON.parse(retryText) }; } catch { return { success: true, data: retryText }; }
-        }
-        // If retry also fails, continue to next function
-        continue;
-      }
-
-      if (!response.ok) {
-        return { success: false, error: `${funcName} error ${response.status}: ${text}` };
-      }
-
-      try { return { success: true, data: JSON.parse(text) }; } catch { return { success: true, data: text }; }
-    } catch (e) {
-      console.error(`Error calling ${funcName}:`, e);
-      continue;
-    }
+  if (!response.ok) {
+    return { success: false, error: `Scholar error ${response.status}: ${text}` };
   }
 
-  return { success: false, error: "No Scholar edge function responded successfully" };
-}
-
-/** Read from Scholar's REST API (anon role, read-only) */
-async function scholarRead(path: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  const { url, anonKey } = getScholarConfig();
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { "apikey": anonKey, "Authorization": `Bearer ${anonKey}` },
-  });
-  const text = await response.text();
-  if (!response.ok) return { success: false, error: `REST ${response.status}: ${text}` };
-  try { return { success: true, data: JSON.parse(text) }; } catch { return { success: true, data: text }; }
+  try {
+    return { success: true, data: JSON.parse(text) };
+  } catch {
+    return { success: true, data: text };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -227,53 +179,127 @@ async function sendEmailNotification(req: PushRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// Build Payload
+// Build Scholar Webhook Payload
 // ---------------------------------------------------------------------------
 
 function buildScholarPayload(req: PushRequest): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    source: "nycologic-ai",
-    event_type: req.type || "grade",
-    timestamp: new Date().toISOString(),
-    student_id: req.student_id,
-    student_name: req.student_name,
-    first_name: req.first_name,
-    last_name: req.last_name,
-    student_email: req.student_email,
-    class_id: req.class_id,
-    class_name: req.class_name,
-    title: req.title,
-    description: req.description,
-    topic_name: req.topic_name,
-    grade: req.grade,
-    xp_reward: req.xp_reward,
-    coin_reward: req.coin_reward,
-    questions: req.questions,
-    difficulty_level: req.difficulty_level,
-    teacher_name: req.teacher_name,
-    overall_average: req.overall_average,
-    grades: req.grades,
-    misconceptions: req.misconceptions,
-    weak_topics: req.weak_topics,
-    skill_tags: req.skill_tags,
-    remediation_recommendations: req.remediation_recommendations,
+  // Scholar's webhook expects { type: "...", data: { ... } } format
+  const eventType = req.type || "grade";
+
+  if (eventType === "student_created" || eventType === "student_updated") {
+    return {
+      type: "student_created",
+      data: {
+        external_id: req.student_id,
+        full_name: req.student_name || `${req.first_name || ""} ${req.last_name || ""}`.trim(),
+        first_name: req.first_name,
+        last_name: req.last_name,
+        email: req.student_email,
+        class_name: req.class_name,
+        class_id: req.class_id,
+        teacher_name: req.teacher_name,
+        source: "nycologic",
+      },
+    };
+  }
+
+  if (eventType === "roster_sync") {
+    return {
+      type: "student_created",
+      data: {
+        external_id: req.student_id,
+        full_name: req.student_name || `${req.first_name || ""} ${req.last_name || ""}`.trim(),
+        first_name: req.first_name,
+        last_name: req.last_name,
+        email: req.student_email,
+        class_name: req.class_name,
+        class_id: req.class_id,
+        teacher_name: req.teacher_name,
+        source: "nycologic",
+      },
+    };
+  }
+
+  if (eventType === "grade") {
+    return {
+      type: "grade_completed",
+      data: {
+        student_id: req.student_id,
+        assignment_title: req.title || req.topic_name,
+        score: req.grade || 0,
+        max_score: 100,
+        percentage: req.grade || 0,
+        feedback: req.description,
+        xp_reward: req.xp_reward,
+        coin_reward: req.coin_reward,
+      },
+    };
+  }
+
+  if (eventType === "behavior") {
+    return {
+      type: "behavior_deduction",
+      data: {
+        student_id: req.student_id,
+        class_id: req.class_id,
+        teacher_id: req.class_id, // placeholder
+        reason: req.reason || "Behavior point adjustment",
+        points_deducted: req.xp_deduction || 0,
+        notes: req.notes,
+      },
+    };
+  }
+
+  if (eventType === "assignment_push") {
+    return {
+      type: "assignment_push",
+      data: {
+        student_id: req.student_id,
+        student_name: req.student_name || `${req.first_name || ""} ${req.last_name || ""}`.trim(),
+        title: req.title || "Assignment",
+        topic_name: req.topic_name,
+        description: req.description,
+        xp_reward: req.xp_reward,
+        coin_reward: req.coin_reward,
+        questions: req.questions?.map(q => ({
+          prompt: q.prompt || q.question_text || q.text,
+          question_type: q.question_type || q.type || "multiple_choice",
+          options: q.options || q.choices,
+          answer_key: q.answer_key || q.correct_answer || q.answer,
+          hint: q.hint,
+          difficulty: q.difficulty,
+          skill_tag: q.skill_tag || q.topic,
+        })),
+      },
+    };
+  }
+
+  if (eventType === "live_session_completed") {
+    // Send individual results for each participant
+    return {
+      type: "grade_completed",
+      data: {
+        student_id: req.student_id,
+        assignment_title: `Live Session: ${req.title || req.session_code}`,
+        score: req.grade || 0,
+        max_score: 100,
+        percentage: req.grade || 0,
+        xp_reward: req.xp_reward || req.credit_for_participation,
+        coin_reward: req.coin_reward,
+      },
+    };
+  }
+
+  // Fallback
+  return {
+    type: eventType,
+    data: {
+      student_id: req.student_id,
+      title: req.title,
+      topic_name: req.topic_name,
+      grade: req.grade,
+    },
   };
-
-  if (req.type === "behavior") {
-    Object.assign(payload, { xp_deduction: req.xp_deduction, coin_deduction: req.coin_deduction, reason: req.reason, notes: req.notes });
-  }
-  if (req.type === "live_session_completed") {
-    Object.assign(payload, {
-      session_code: req.session_code, participation_mode: req.participation_mode,
-      credit_for_participation: req.credit_for_participation, deduction_for_non_participation: req.deduction_for_non_participation,
-      total_participants: req.total_participants, active_participants: req.active_participants, participant_results: req.participant_results,
-    });
-  }
-  if (req.type === "assignment_push") {
-    Object.assign(payload, { due_at: req.due_at, standard_code: req.standard_code, printable_url: req.printable_url, source: req.source || "nycologic_ai" });
-  }
-
-  return payload;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +319,17 @@ serve(async (req) => {
     if (requestData.type === "ping") {
       try {
         const config = getScholarConfig();
-        const readTest = await scholarRead("external_students?select=id&limit=1");
-        const funcTest = await callScholarEdgeFunction({ source: "nycologic-ai", event_type: "ping", timestamp: new Date().toISOString() });
+        // Test the webhook with a simple student_created
+        const testResult = await postToScholar({
+          type: "student_created",
+          data: {
+            external_id: "ping-test",
+            full_name: "Ping Test",
+            source: "nycologic",
+          },
+        });
         return new Response(
-          JSON.stringify({ success: true, message: "Scholar connection test", rest_api: readTest, edge_function: funcTest, url_prefix: config.url.substring(0, 30) }),
+          JSON.stringify({ success: true, message: "Scholar webhook test", result: testResult, url_prefix: config.url.substring(0, 35) }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (e) {
@@ -307,10 +340,26 @@ serve(async (req) => {
       }
     }
 
-    // --- Send data to Scholar via edge function ---
+    // --- Build and send Scholar payload ---
     const payload = buildScholarPayload(requestData);
-    const result = await callScholarEdgeFunction(payload);
+    const result = await postToScholar(payload);
     console.log("Scholar result:", JSON.stringify(result).substring(0, 500));
+
+    // For live sessions, process each participant individually
+    if (requestData.type === "live_session_completed" && requestData.participant_results) {
+      for (const participant of requestData.participant_results) {
+        if (participant.participated) {
+          const participantPayload = buildScholarPayload({
+            ...requestData,
+            student_id: participant.student_id,
+            student_name: participant.student_name,
+            grade: participant.accuracy,
+            xp_reward: participant.credit_awarded,
+          });
+          await postToScholar(participantPayload);
+        }
+      }
+    }
 
     // Send email for relevant types
     if (requestData.type === "assignment_push" || requestData.type === "grade") {
