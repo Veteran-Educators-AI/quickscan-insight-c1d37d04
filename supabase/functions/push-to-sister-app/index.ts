@@ -104,175 +104,43 @@ interface ParticipantResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build a Scholar Supabase client (service-role, bypasses RLS).
- *  Since both apps now share the same Cloud database, we use the
- *  primary SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Falls back to
- *  SCHOLAR_* secrets for backward compatibility.                    */
-// deno-lint-ignore no-explicit-any
-function getScholarClient(): any {
-  // Scholar is a SEPARATE database — always use SCHOLAR_* secrets
-  const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
-  const key = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
-  console.log("Scholar DB URL (full):", url);
-  console.log("Scholar key prefix:", key?.substring(0, 20) + "...", "length:", key?.length);
-  if (!url || !key) throw new Error("Scholar DB secrets not configured");
-  return createClient(url, key);
-}
+/** POST data to Scholar's webhook endpoint instead of direct DB writes.
+ *  The sb_secret_ key format used by Lovable Cloud is incompatible with
+ *  createClient(), so we use Scholar's nycologic-webhook edge function. */
+async function postToScholar(payload: Record<string, unknown>): Promise<{ success: boolean; data?: any; error?: string }> {
+  const scholarUrl = Deno.env.get("SCHOLAR_SUPABASE_URL");
+  const scholarKey = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+  if (!scholarUrl || !scholarKey) throw new Error("Scholar DB secrets not configured");
 
-/** Upsert the student into Scholar's external_students table. Returns the row id. */
-async function upsertExternalStudent(
-  scholar: any,
-  req: PushRequest
-): Promise<string | null> {
-  if (!req.student_id) return null;
+  const webhookUrl = `${scholarUrl}/functions/v1/nycologic-webhook`;
+  console.log("Posting to Scholar webhook:", webhookUrl);
 
-  const row: Record<string, unknown> = {
-    external_id: req.student_id,
-    full_name: req.student_name || `${req.first_name || ""} ${req.last_name || ""}`.trim(),
-    first_name: req.first_name || req.student_name?.split(" ")[0] || null,
-    last_name: req.last_name || req.student_name?.split(" ").slice(1).join(" ") || null,
-    email: req.student_email || null,
-    class_id: req.class_id || null,
-    class_name: req.class_name || null,
-    source: "nycologic_ai",
-    sync_timestamp: new Date().toISOString(),
-  };
-
-  // Optional enrichment fields
-  if (req.teacher_name) row.teacher_name = req.teacher_name;
-  if (req.overall_average !== undefined) row.overall_average = req.overall_average;
-  if (req.grades) row.grades = req.grades;
-  if (req.misconceptions) row.misconceptions = req.misconceptions;
-  if (req.weak_topics) row.weak_topics = req.weak_topics;
-  if (req.remediation_recommendations)
-    row.remediation_recommendations = req.remediation_recommendations;
-  if (req.skill_tags) row.skill_tags = req.skill_tags;
-  if (req.xp_reward !== undefined) row.xp_potential = req.xp_reward;
-  if (req.coin_reward !== undefined) row.coin_potential = req.coin_reward;
-
-  // Check if student already exists — match on external_id only (Scholar has UNIQUE on external_id alone)
-  const { data: existing } = await scholar
-    .from("external_students")
-    .select("id")
-    .eq("external_id", req.student_id)
-    .maybeSingle();
-
-  if (existing?.id) {
-    // Update existing record
-    const { error: updateErr } = await scholar
-      .from("external_students")
-      .update(row)
-      .eq("id", existing.id);
-    if (updateErr) console.error("external_students update error:", updateErr.message);
-    return existing.id;
-  } else {
-    // Insert new record
-    const { data, error } = await scholar
-      .from("external_students")
-      .insert(row)
-      .select("id")
-      .single();
-    if (error) {
-      console.error("external_students insert error:", error.message);
-      return null;
-    }
-    return data?.id ?? null;
-  }
-}
-
-/** Create a practice set + questions on Scholar. */
-async function createPracticeSet(
-  scholar: any,
-  scholarStudentId: string | null,
-  req: PushRequest
-) {
-  // If we don't have a linked Scholar user, look it up
-  let studentUserId = scholarStudentId;
-  if (!studentUserId && req.student_id) {
-    const { data } = await scholar
-      .from("external_students")
-      .select("linked_user_id")
-      .eq("external_id", req.student_id)
-      .maybeSingle();
-    studentUserId = data?.linked_user_id ?? null;
-  }
-
-  if (!studentUserId) {
-    console.log("No linked Scholar user found — skipping practice_set creation");
-    return null;
-  }
-
-  const { data: ps, error: psErr } = await scholar
-    .from("practice_sets")
-    .insert({
-      student_id: studentUserId,
-      title: req.title || req.topic_name || "Assignment",
-      description: req.description || null,
-      source: req.source || "nycologic_ai",
-      external_ref: req.student_id,
-      status: req.type === "assignment_push" ? "assigned" : "graded",
-      score: req.grade ?? null,
-      total_questions: req.questions?.length ?? 0,
-      skill_tags: req.skill_tags || [],
-      xp_reward: req.xp_reward ?? 0,
-      coin_reward: req.coin_reward ?? 0,
-    })
-    .select("id")
-    .single();
-
-  if (psErr) {
-    console.error("practice_sets insert error:", psErr.message);
-    return null;
-  }
-
-  // Insert practice questions
-  if (req.questions?.length && ps?.id) {
-    const questionRows = req.questions.map((q: any, i: number) => ({
-      practice_set_id: ps.id,
-      prompt: q.question || q.prompt || q.text || JSON.stringify(q),
-      question_type: q.type || "multiple_choice",
-      options: q.options || q.choices || [],
-      answer_key: q.answer || q.correct_answer || q.answer_key || null,
-      hint: q.hint || null,
-      difficulty: req.difficulty_level || q.difficulty || null,
-      order_index: i,
-      skill_tag: q.skill_tag || q.topic || req.topic_name || null,
-    }));
-
-    const { error: qErr } = await scholar
-      .from("practice_questions")
-      .insert(questionRows);
-
-    if (qErr) console.error("practice_questions insert error:", qErr.message);
-  }
-
-  return ps?.id ?? null;
-}
-
-/** Send a notification to the student inside Scholar. */
-async function sendScholarNotification(
-  scholar: any,
-  userId: string,
-  req: PushRequest,
-  type: string
-) {
-  const { error } = await scholar.from("notifications").insert({
-    user_id: userId,
-    type,
-    title: req.title || "Update from NYCLogic Ai",
-    message: req.description || `You have a new ${type} update.`,
-    icon: type === "assignment" ? "📚" : type === "behavior" ? "⚠️" : "🔔",
-    data: {
-      source: "nycologic_ai",
-      class_name: req.class_name,
-      xp_reward: req.xp_reward,
-      coin_reward: req.coin_reward,
-      grade: req.grade,
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${scholarKey}`,
+      "apikey": scholarKey,
+      "x-source-app": "nycologic-ai",
     },
-    read: false,
+    body: JSON.stringify(payload),
   });
-  if (error) console.error("notifications insert error:", error.message);
+
+  const text = await response.text();
+  console.log("Scholar webhook response:", response.status, text);
+
+  if (!response.ok) {
+    return { success: false, error: `Scholar webhook error ${response.status}: ${text}` };
+  }
+
+  try {
+    return { success: true, data: JSON.parse(text) };
+  } catch {
+    return { success: true, data: text };
+  }
 }
+
+// Direct DB helpers removed — all data is now sent via Scholar's webhook endpoint
 
 /** Send email notification via Brevo (non-fatal). */
 async function sendEmailNotification(req: PushRequest) {
@@ -345,9 +213,14 @@ serve(async (req) => {
     // --- Ping: verify secrets are configured ---
     if (requestData.type === "ping") {
       try {
-        getScholarClient();
+        const scholarUrl = Deno.env.get("SCHOLAR_SUPABASE_URL");
+        const scholarKey = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+        if (!scholarUrl || !scholarKey) throw new Error("Scholar DB secrets not configured");
+        
+        // Test the webhook endpoint
+        const testResult = await postToScholar({ type: "ping", source: "nycologic-ai" });
         return new Response(
-          JSON.stringify({ success: true, message: "Scholar DB connection configured" }),
+          JSON.stringify({ success: true, message: "Scholar webhook connection configured", test: testResult }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (e) {
@@ -358,137 +231,71 @@ serve(async (req) => {
       }
     }
 
-    const scholar = getScholarClient();
+    // --- Build webhook payload and POST to Scholar ---
+    const webhookPayload: Record<string, unknown> = {
+      source: "nycologic-ai",
+      event_type: requestData.type || "grade",
+      timestamp: new Date().toISOString(),
+      student_id: requestData.student_id,
+      student_name: requestData.student_name,
+      first_name: requestData.first_name,
+      last_name: requestData.last_name,
+      student_email: requestData.student_email,
+      class_id: requestData.class_id,
+      class_name: requestData.class_name,
+      title: requestData.title,
+      description: requestData.description,
+      topic_name: requestData.topic_name,
+      grade: requestData.grade,
+      xp_reward: requestData.xp_reward,
+      coin_reward: requestData.coin_reward,
+      questions: requestData.questions,
+      difficulty_level: requestData.difficulty_level,
+      teacher_name: requestData.teacher_name,
+      overall_average: requestData.overall_average,
+      grades: requestData.grades,
+      misconceptions: requestData.misconceptions,
+      weak_topics: requestData.weak_topics,
+      skill_tags: requestData.skill_tags,
+      remediation_recommendations: requestData.remediation_recommendations,
+    };
 
-    // --- Always upsert external_students ---
-    const externalStudentId = await upsertExternalStudent(scholar, requestData);
-    console.log("Upserted external_student, id:", externalStudentId);
-
-    // Resolve the Scholar user_id for notifications / practice sets
-    let scholarUserId: string | null = null;
-    if (requestData.student_id) {
-      const { data } = await scholar
-        .from("external_students")
-        .select("linked_user_id")
-        .eq("external_id", requestData.student_id)
-        .maybeSingle();
-      scholarUserId = data?.linked_user_id ?? null;
-    }
-
-    // --- Route by type ---
-    let result: Record<string, unknown> = { external_student_id: externalStudentId };
-
+    // Add type-specific fields
     if (requestData.type === "behavior") {
-      // Behavior deduction → notification only
-      if (scholarUserId) {
-        await sendScholarNotification(scholar, scholarUserId, {
-          ...requestData,
-          title: `Behavior: ${requestData.reason}`,
-          description: `XP −${requestData.xp_deduction || 0}, Coins −${requestData.coin_deduction || 0}. ${requestData.notes || ""}`,
-        }, "behavior");
-      }
-      result.action = "behavior_notification_sent";
+      webhookPayload.xp_deduction = requestData.xp_deduction;
+      webhookPayload.coin_deduction = requestData.coin_deduction;
+      webhookPayload.reason = requestData.reason;
+      webhookPayload.notes = requestData.notes;
+    }
 
-    } else if (
-      requestData.type === "student_created" ||
-      requestData.type === "roster_sync" ||
-      requestData.type === "student_updated"
-    ) {
-      // Student roster sync — already handled by upsertExternalStudent above
-      result.action = "student_synced";
+    if (requestData.type === "live_session_completed") {
+      webhookPayload.session_code = requestData.session_code;
+      webhookPayload.participation_mode = requestData.participation_mode;
+      webhookPayload.credit_for_participation = requestData.credit_for_participation;
+      webhookPayload.deduction_for_non_participation = requestData.deduction_for_non_participation;
+      webhookPayload.total_participants = requestData.total_participants;
+      webhookPayload.active_participants = requestData.active_participants;
+      webhookPayload.participant_results = requestData.participant_results;
+    }
 
-    } else if (requestData.type === "live_session_completed") {
-      // Live session → create notifications for each participant
-      if (requestData.participant_results?.length) {
-        for (const p of requestData.participant_results) {
-          const { data: ext } = await scholar
-            .from("external_students")
-            .select("linked_user_id")
-            .eq("external_id", p.student_id)
-            .maybeSingle();
-          if (ext?.linked_user_id) {
-            await sendScholarNotification(scholar, ext.linked_user_id, {
-              ...requestData,
-              title: `Live Session: ${requestData.title}`,
-              description: `You answered ${p.correct_answers}/${p.total_questions_answered} correctly. Credit: ${p.credit_awarded}`,
-              xp_reward: p.credit_awarded,
-            }, "live_session");
-          }
-        }
-      }
-      result.action = "live_session_notifications_sent";
+    if (requestData.type === "assignment_push") {
+      webhookPayload.due_at = requestData.due_at;
+      webhookPayload.standard_code = requestData.standard_code;
+      webhookPayload.printable_url = requestData.printable_url;
+      webhookPayload.source = requestData.source || "nycologic_ai";
+    }
 
-    } else if (requestData.type === "assignment_push") {
-      // Assignment push → write to Scholar's assignments + questions tables
-      const { data: assignment, error: assignError } = await scholar
-        .from("assignments")
-        .insert({
-          class_id: requestData.class_id,
-          title: requestData.title,
-          description: requestData.description,
-          subject: requestData.topic_name || "General",
-          status: "active",
-          xp_reward: requestData.xp_reward || 100,
-          coin_reward: requestData.coin_reward || 50,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+    const scholarResult = await postToScholar(webhookPayload);
+    console.log("Scholar webhook result:", JSON.stringify(scholarResult));
 
-      if (assignError) {
-        console.error("assignments insert error:", assignError.message, assignError);
-      }
-
-      // Insert questions linked to the assignment
-      if (requestData.questions?.length && assignment?.id) {
-        const questionRows = requestData.questions.map((q: any, i: number) => ({
-          assignment_id: assignment.id,
-          question_type: q.type || "multiple_choice",
-          prompt: q.question || q.prompt || q.text || JSON.stringify(q),
-          options: q.options || q.choices || [],
-          answer_key: q.answer || q.correct_answer || q.answer_key || null,
-          hint: q.hint || null,
-          difficulty: requestData.difficulty_level || q.difficulty || null,
-          order_index: i,
-          skill_tag: q.skill_tag || q.topic || requestData.topic_name || null,
-        }));
-
-        const { error: qErr } = await scholar
-          .from("questions")
-          .insert(questionRows);
-
-        if (qErr) console.error("questions insert error:", qErr.message, qErr);
-      }
-
-      result.assignment_id = assignment?.id;
-      result.questions_inserted = requestData.questions?.length || 0;
-      result.action = "assignment_push";
-
-      if (scholarUserId) {
-        await sendScholarNotification(scholar, scholarUserId, requestData, "assignment");
-      }
-
-      // Email notification
-      await sendEmailNotification(requestData);
-
-    } else {
-      // Grade push → create practice set + notification
-      const practiceSetId = await createPracticeSet(scholar, scholarUserId, requestData);
-      result.practice_set_id = practiceSetId;
-      result.action = "grade_pushed";
-
-      if (scholarUserId) {
-        await sendScholarNotification(scholar, scholarUserId, requestData, "assignment");
-      }
-
-      // Email notification
+    // Send email notification for relevant types
+    if (requestData.type === "assignment_push" || requestData.type === "grade") {
       await sendEmailNotification(requestData);
     }
 
-    console.log("push-to-sister-app result:", JSON.stringify(result));
+    console.log("push-to-sister-app result:", JSON.stringify(scholarResult));
     return new Response(
-      JSON.stringify({ success: true, response: result }),
+      JSON.stringify({ success: true, response: scholarResult }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
