@@ -110,18 +110,21 @@ interface ParticipantResult {
 async function postToScholar(payload: Record<string, unknown>): Promise<{ success: boolean; data?: any; error?: string }> {
   const scholarUrl = Deno.env.get("SCHOLAR_SUPABASE_URL");
   const scholarKey = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
+  const scholarAnonKey = Deno.env.get("SCHOLAR_SUPABASE_ANON_KEY");
   if (!scholarUrl || !scholarKey) throw new Error("Scholar DB secrets not configured");
 
+  const anonKey = scholarAnonKey || scholarKey;
   const webhookUrl = `${scholarUrl}/functions/v1/nycologic-webhook`;
-  console.log("Posting to Scholar webhook:", webhookUrl);
+  console.log("Scholar debug - URL:", webhookUrl, "| anonKey exists:", !!scholarAnonKey, "| anonKey length:", scholarAnonKey?.length, "| anonKey first 30:", anonKey?.substring(0, 30), "| serviceKey first 20:", scholarKey?.substring(0, 20));
 
   const response = await fetch(webhookUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${scholarKey}`,
-      "apikey": scholarKey,
+      "Authorization": `Bearer ${anonKey}`,
+      "apikey": anonKey,
       "x-source-app": "nycologic-ai",
+      "x-service-role-key": scholarKey,
     },
     body: JSON.stringify(payload),
   });
