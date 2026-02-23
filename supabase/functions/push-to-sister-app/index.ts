@@ -149,12 +149,11 @@ async function upsertExternalStudent(
   if (req.xp_reward !== undefined) row.xp_potential = req.xp_reward;
   if (req.coin_reward !== undefined) row.coin_potential = req.coin_reward;
 
-  // Check if student already exists (avoid upsert since Scholar DB may lack the UNIQUE constraint)
+  // Check if student already exists — match on external_id only (Scholar has UNIQUE on external_id alone)
   const { data: existing } = await scholar
     .from("external_students")
     .select("id")
     .eq("external_id", req.student_id)
-    .eq("source", "nycologic_ai")
     .maybeSingle();
 
   if (existing?.id) {
