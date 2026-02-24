@@ -162,15 +162,18 @@ async function sendEmailNotification(req: PushRequest) {
         </div>
       </div>`;
 
+    const emailPayload: any = {
+      sender: { name: "NYCLogic Ai", email: "notifications@nyclogic.ai" },
+      to: [{ email: req.student_email, name: req.student_name || name }],
+      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
+      subject: `📚 New Assignment: ${req.title}`,
+      htmlContent: html,
+    };
+
     await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: { accept: "application/json", "api-key": brevoApiKey, "content-type": "application/json" },
-      body: JSON.stringify({
-        sender: { name: "NYCLogic Ai", email: "notifications@nyclogic.ai" },
-        to: [{ email: req.student_email, name: req.student_name || name }],
-        subject: `📚 New Assignment: ${req.title}`,
-        htmlContent: html,
-      }),
+      body: JSON.stringify(emailPayload),
     });
     console.log("Email sent to", req.student_email);
   } catch (e) {
