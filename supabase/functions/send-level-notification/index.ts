@@ -118,7 +118,7 @@ async function sendLevelNotification(request: NotificationRequest): Promise<Resp
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      sender: { name: "ScanGenius", email: "noreply@lovable.dev" },
+      sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: teacherEmail, name: teacherName || "Teacher" }],
       subject: subject,
       htmlContent: emailHtml,

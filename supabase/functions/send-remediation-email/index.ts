@@ -205,7 +205,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sender: { name: teacherName, email: "noreply@lovable.dev" },
+          sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: student.email, name: studentName }],
           subject: `📚 Practice Questions: ${topic}`,
           htmlContent: studentHtml,
@@ -233,7 +233,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sender: { name: teacherName, email: "noreply@lovable.dev" },
+          sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: student.parent_email, name: `Parent of ${studentName}` }],
           subject: `📚 ${studentName}'s Practice Questions: ${topic}`,
           htmlContent: parentHtml,

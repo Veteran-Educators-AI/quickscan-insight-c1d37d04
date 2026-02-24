@@ -267,7 +267,7 @@ async function sendPerformanceDropAlert(request: PerformanceDropAlertRequest): P
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sender: { name: "ScanGenius", email: "noreply@lovable.dev" },
+        sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: teacherEmail, name: teacherName || "Teacher" }],
         subject: teacherSubject,
         htmlContent: teacherEmailHtml,
@@ -303,7 +303,7 @@ async function sendPerformanceDropAlert(request: PerformanceDropAlertRequest): P
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sender: { name: "ScanGenius", email: "noreply@lovable.dev" },
+          sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: parentEmail, name: "Parent/Guardian" }],
           subject: parentSubject,
           htmlContent: parentEmailHtml,

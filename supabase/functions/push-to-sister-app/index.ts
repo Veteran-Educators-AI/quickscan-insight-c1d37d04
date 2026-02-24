@@ -163,7 +163,7 @@ async function sendEmailNotification(req: PushRequest) {
       </div>`;
 
     const emailPayload: any = {
-      sender: { name: "NYCLogic Ai", email: "notifications@nyclogic.ai" },
+      sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: req.student_email, name: req.student_name || name }],
       cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: `📚 New Assignment: ${req.title}`,

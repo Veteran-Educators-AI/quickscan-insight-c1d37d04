@@ -130,7 +130,7 @@ async function sendParentNotification(request: ParentNotificationRequest): Promi
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      sender: { name: "ScanGenius", email: "noreply@lovable.dev" },
+      sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: parentEmail }],
       subject: subject,
       htmlContent: emailHtml,
