@@ -828,7 +828,8 @@ serve(async (req) => {
               student_resolution: resolvedStudent2.resolution,
             },
             source_app: 'scholar_app',
-            processed: false,
+            processed: workGradeSaved,
+            processed_at: workGradeSaved ? new Date().toISOString() : null,
           })
           .select()
           .single();
@@ -971,7 +972,8 @@ serve(async (req) => {
             student_resolution: resolvedStudent.resolution,
           },
           source_app: 'sister_app',
-          processed: false,
+          processed: true,
+          processed_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -1032,16 +1034,7 @@ serve(async (req) => {
           break;
       }
 
-      // Mark single event as processed (only if log entry was created)
-      if (logEntry?.id) {
-        await supabaseAdmin
-          .from('sister_app_sync_log')
-          .update({ 
-            processed: true, 
-            processed_at: new Date().toISOString() 
-          })
-          .eq('id', logEntry.id);
-      }
+      // Events are now auto-marked as processed above
     }
 
     // -------------------------------------------------------------------------
