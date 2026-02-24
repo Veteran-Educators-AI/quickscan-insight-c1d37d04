@@ -78,6 +78,7 @@ serve(async (req) => {
         email: teacher.email,
         name: teacher.full_name || teacher.email
       }],
+      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: `${student.full_name || 'A student'} completed "${assignment.title}"`,
       htmlContent: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

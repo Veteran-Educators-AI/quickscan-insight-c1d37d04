@@ -165,6 +165,7 @@ const handler = async (req: Request): Promise<Response> => {
           email: "noreply@nyclogicai.com",
         },
         to: [{ email: student_email, name: student_name }],
+        cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
         subject: `🎓 Welcome to ScholarQuest, ${firstName}!`,
         htmlContent,
       }),

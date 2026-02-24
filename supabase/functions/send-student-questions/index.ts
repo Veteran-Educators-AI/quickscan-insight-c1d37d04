@@ -132,6 +132,7 @@ async function sendQuestionEmail(request: SendQuestionRequest): Promise<Response
     body: JSON.stringify({
       sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: student.email, name: `${student.first_name} ${student.last_name}` }],
+      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: "New Question for You",
       htmlContent: emailHtml,
     }),
