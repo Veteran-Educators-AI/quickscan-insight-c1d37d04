@@ -943,6 +943,9 @@ serve(async (req) => {
       // ---------------------------------------------------------------------
       // SINGLE EVENT PROCESSING (original behavior)
       // ---------------------------------------------------------------------
+      console.log(`Processing single event: action=${body.action}, student_id=${body.student_id}, data_keys=${Object.keys(body.data || {}).join(',')}`);
+      console.log(`Full incoming body for ${body.action}:`, JSON.stringify(body).substring(0, 1000));
+
       const incomingStudentId = body.student_id || undefined;
       const existingStudentIds = await fetchExistingStudentIds(
         supabaseAdmin,
@@ -979,9 +982,6 @@ serve(async (req) => {
         .single();
 
       if (logError) {
-        // Log the error but don't fail the request - the sync log is secondary
-        // to actually processing the incoming data. Previous versions would
-        // return 500 here, causing the sister app to think the sync failed.
         console.error('Error logging sync data (non-fatal):', logError);
         console.error('Will continue processing the request despite log failure');
       }
@@ -991,28 +991,43 @@ serve(async (req) => {
       switch (body.action) {
         case 'grade_completed':
         case 'activity_completed':
-          if (body.data?.score !== undefined && body.data?.topic_name) {
+        case 'sync_practice_session': {
+          // Handle practice session completions from Scholar
+          const score = body.data?.score;
+          const topicName = body.data?.topic_name || body.data?.activity_name || (body.data as any)?.title;
+          
+          if (score !== undefined && topicName) {
             if (!resolvedStudent.resolvedId) {
-              processedResult = { grade_skipped_missing_student: true };
+              processedResult = { grade_skipped_missing_student: true, action: body.action };
               break;
             }
+            const justification = body.action === 'sync_practice_session'
+              ? `Practice session completed on Scholar: ${body.data?.activity_name || topicName} (${(body.data as any)?.questions_correct || '?'}/${(body.data as any)?.questions_attempted || '?'} correct)`
+              : `Synced from sister app: ${body.data?.activity_name || body.action}`;
+
             const { error: gradeError } = await supabaseAdmin
               .from('grade_history')
               .insert({
                 student_id: resolvedStudent.resolvedId,
                 teacher_id: teacherId,
-                topic_name: body.data.topic_name,
-                grade: body.data.score,
-                grade_justification: `Synced from sister app: ${body.data.activity_name || body.action}`,
+                topic_name: topicName,
+                grade: score,
+                grade_justification: justification,
               });
 
             if (gradeError) {
               console.error('Error saving grade:', gradeError);
+              processedResult = { grade_save_error: gradeError.message };
             } else {
-              processedResult = { grade_saved: true };
+              console.log(`Grade saved for ${body.action}: student=${resolvedStudent.resolvedId}, topic=${topicName}, score=${score}`);
+              processedResult = { grade_saved: true, action: body.action };
             }
+          } else {
+            console.log(`No score/topic for ${body.action}: score=${score}, topic=${topicName}, data_keys=${Object.keys(body.data || {}).join(',')}`);
+            processedResult = { logged: true, no_grade_data: true, action: body.action };
           }
           break;
+        }
 
         case 'reward_earned':
         case 'level_up':
@@ -1021,7 +1036,6 @@ serve(async (req) => {
           break;
 
         case 'behavior_deduction':
-          // Log behavior deduction - Scholar app will handle the actual point removal
           console.log('Behavior deduction received:', body.data);
           const xpVal = body.data?.xp_deducted || (body.data?.xp_earned ? Math.abs(body.data.xp_earned) : 0);
           const coinVal = body.data?.coins_deducted || (body.data?.coins_earned ? Math.abs(body.data.coins_earned) : 0);
@@ -1032,9 +1046,12 @@ serve(async (req) => {
             coins_deducted: coinVal,
           };
           break;
-      }
 
-      // Events are now auto-marked as processed above
+        default:
+          console.log(`Unhandled action type: ${body.action}, logging only`);
+          processedResult = { logged: true, action: body.action };
+          break;
+      }
     }
 
     // -------------------------------------------------------------------------
