@@ -274,6 +274,11 @@ function buildScholarPayload(req: PushRequest): Record<string, unknown> {
       data: {
         student_id: req.student_id,
         student_name: req.student_name || `${req.first_name || ""} ${req.last_name || ""}`.trim(),
+        student_email: req.student_email,
+        first_name: req.first_name,
+        last_name: req.last_name,
+        class_id: req.class_id,
+        class_name: req.class_name,
         title: req.title || "Assignment",
         topic_name: req.topic_name,
         description: req.description,
@@ -376,16 +381,22 @@ serve(async (req) => {
       console.log("Student sync result:", JSON.stringify(syncResult).substring(0, 500));
 
       if (syncResult.success) {
-        // Extract the linked_user_id from sync response and override student_id
+        // Prefer linked_user_id, fallback to external_student_id when account linking isn't complete yet
         const linkedUserId = syncResult.data?.linked_user_id || syncResult.data?.user_id;
-        if (linkedUserId) {
-          console.log("Using linked_user_id from Scholar:", linkedUserId);
+        const externalStudentId = syncResult.data?.external_student_id;
+        const fallbackStudentId = linkedUserId || externalStudentId;
+
+        if (fallbackStudentId) {
+          console.log(
+            `Using ${linkedUserId ? "linked_user_id" : "external_student_id"} from Scholar:`,
+            fallbackStudentId,
+          );
           const retryPayload = buildScholarPayload(requestData);
-          (retryPayload as any).data.student_id = linkedUserId;
+          (retryPayload as any).data.student_id = fallbackStudentId;
           result = await postToScholar(retryPayload);
         } else {
           // Retry with original student_id
-          console.log("No linked_user_id returned, retrying with original ID...");
+          console.log("No linked_user_id or external_student_id returned, retrying with original ID...");
           result = await postToScholar(payload);
         }
         console.log("Retry result:", JSON.stringify(result).substring(0, 500));
