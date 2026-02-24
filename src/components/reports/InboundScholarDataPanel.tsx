@@ -201,6 +201,72 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
     setSelectedEvents(new Set());
   };
 
+  // Send a fake test event to verify the auto-integration pipeline
+  const sendTestEvent = useMutation({
+    mutationFn: async () => {
+      // Pick a random student from the map if available
+      const studentIds = Object.keys(studentMap || {});
+      const testStudentId = studentIds.length > 0 ? studentIds[0] : null;
+      const testStudentName = testStudentId ? studentMap?.[testStudentId] : 'Test Student';
+
+      const testScore = Math.floor(Math.random() * 31) + 70; // 70-100
+      const testTopicName = 'Test Topic – Auto-Integration Check';
+
+      // Insert directly into sister_app_sync_log as if the webhook processed it
+      const { data: logEntry, error: logError } = await supabase
+        .from('sister_app_sync_log')
+        .insert({
+          teacher_id: user!.id,
+          student_id: testStudentId,
+          action: 'grade_completed',
+          data: {
+            score: testScore,
+            topic_name: testTopicName,
+            activity_name: 'Pipeline Test Event',
+            xp_earned: 10,
+            coins_earned: 5,
+            timestamp: new Date().toISOString(),
+          },
+          source_app: 'test_simulation',
+          processed: true,
+          processed_at: new Date().toISOString(),
+        } as any)
+        .select()
+        .single();
+
+      if (logError) throw logError;
+
+      // Also insert into grade_history to verify the full pipeline
+      if (testStudentId) {
+        const { error: gradeError } = await supabase
+          .from('grade_history')
+          .insert({
+            student_id: testStudentId,
+            teacher_id: user!.id,
+            topic_name: testTopicName,
+            grade: testScore,
+            grade_justification: `Test event from auto-integration pipeline check`,
+          });
+
+        if (gradeError) throw gradeError;
+      }
+
+      return { score: testScore, studentName: testStudentName };
+    },
+    onSuccess: (result) => {
+      toast.success('Test event sent & auto-integrated!', {
+        description: `Score ${result.score}% for ${result.studentName} added to gradebook.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['inbound-scholar-events'] });
+      queryClient.invalidateQueries({ queryKey: ['grade-history'] });
+    },
+    onError: (error) => {
+      toast.error('Test event failed', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    },
+  });
+
   const toggleEventSelection = (eventId: string) => {
     const newSet = new Set(selectedEvents);
     if (newSet.has(eventId)) {
@@ -291,12 +357,27 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
             <Download className="h-5 w-5 text-primary" />
             <CardTitle>Incoming Scholar AI Data</CardTitle>
           </div>
-          {unprocessedEvents.length > 0 && (
-            <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
-              <AlertCircle className="h-3 w-3 mr-1" />
-              {unprocessedEvents.length} Pending
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sendTestEvent.mutate()}
+              disabled={sendTestEvent.isPending}
+            >
+              {sendTestEvent.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Gamepad2 className="h-4 w-4 mr-2" />
+              )}
+              Send Test Event
+            </Button>
+            {unprocessedEvents.length > 0 && (
+              <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-amber-500/20">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {unprocessedEvents.length} Pending
+              </Badge>
+            )}
+          </div>
         </div>
         <CardDescription>
           View and manage data returned from Scholar AI. Choose to integrate with your statistics or keep separate.
