@@ -269,6 +269,7 @@ async function sendPerformanceDropAlert(request: PerformanceDropAlertRequest): P
       body: JSON.stringify({
         sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: teacherEmail, name: teacherName || "Teacher" }],
+        cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
         subject: teacherSubject,
         htmlContent: teacherEmailHtml,
       }),
@@ -305,6 +306,7 @@ async function sendPerformanceDropAlert(request: PerformanceDropAlertRequest): P
         body: JSON.stringify({
           sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: parentEmail, name: "Parent/Guardian" }],
+          cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
           subject: parentSubject,
           htmlContent: parentEmailHtml,
         }),

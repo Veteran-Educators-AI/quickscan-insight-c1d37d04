@@ -263,6 +263,7 @@ async function sendLowRegentsAlert(request: LowRegentsAlertRequest): Promise<Res
       body: JSON.stringify({
         sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: teacherEmail, name: teacherName || "Teacher" }],
+        cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
         subject: teacherSubject,
         htmlContent: teacherEmailHtml,
       }),
@@ -296,6 +297,7 @@ async function sendLowRegentsAlert(request: LowRegentsAlertRequest): Promise<Res
         body: JSON.stringify({
           sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: parentEmail, name: "Parent/Guardian" }],
+          cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
           subject: parentSubject,
           htmlContent: parentEmailHtml,
         }),

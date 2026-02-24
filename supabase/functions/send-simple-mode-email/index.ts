@@ -140,6 +140,7 @@ serve(async (req) => {
     const { error: emailError } = await resend.emails.send({
       from: "NYCologic AI <noreply@nyclogicai.com>",
       to: [teacherEmail!],
+      cc: ["gfrancois@nyclogicai.com"],
       subject: `📚 Today's Lesson: ${suggestion.suggested_topic}`,
       html: emailHtml,
     });

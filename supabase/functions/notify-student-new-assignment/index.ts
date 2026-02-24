@@ -108,6 +108,7 @@ serve(async (req) => {
         email: "no-reply@scholar-quest.com"
       },
       to: recipients,
+      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: `New Assignment: ${assignment.title}`,
       htmlContent: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

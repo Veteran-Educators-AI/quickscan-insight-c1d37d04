@@ -142,6 +142,7 @@ serve(async (req) => {
       body: JSON.stringify({
         sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: email.toLowerCase().trim() }],
+        cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
         subject: `Join ${classData.name} - Click to Join!`,
         htmlContent: emailHtml,
       }),
