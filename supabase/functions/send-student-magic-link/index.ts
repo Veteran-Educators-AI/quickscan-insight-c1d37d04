@@ -140,7 +140,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sender: { name: "NYCLogic AI", email: "noreply@lovable.dev" },
+        sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: email.toLowerCase().trim() }],
         subject: `Join ${classData.name} - Click to Join!`,
         htmlContent: emailHtml,

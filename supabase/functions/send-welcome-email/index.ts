@@ -161,8 +161,8 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         sender: {
-          name: "ScholarQuest",
-          email: "noreply@scholarquest.app",
+          name: "NYCologic AI",
+          email: "noreply@nyclogicai.com",
         },
         to: [{ email: student_email, name: student_name }],
         subject: `🎓 Welcome to ScholarQuest, ${firstName}!`,

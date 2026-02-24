@@ -159,7 +159,7 @@ async function sendAutoPushNotification(request: AutoPushNotificationRequest): P
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sender: { name: "NYCLogic Ai", email: "noreply@lovable.dev" },
+        sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
         to: [{ email: parentEmail, name: "Parent/Guardian" }],
         subject: subject,
         htmlContent: emailHtml,
