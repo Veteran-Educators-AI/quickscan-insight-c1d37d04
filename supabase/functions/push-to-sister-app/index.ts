@@ -170,12 +170,27 @@ async function sendEmailNotification(req: PushRequest) {
       htmlContent: html,
     };
 
-    await fetch("https://api.brevo.com/v3/smtp/email", {
+    console.log("Sending email with CC to gfrancois@nyclogicai.com, payload:", JSON.stringify({
+      to: emailPayload.to,
+      cc: emailPayload.cc,
+      sender: emailPayload.sender,
+      subject: emailPayload.subject,
+    }));
+
+    const emailResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: { accept: "application/json", "api-key": brevoApiKey, "content-type": "application/json" },
       body: JSON.stringify(emailPayload),
     });
-    console.log("Email sent to", req.student_email);
+
+    const emailResponseText = await emailResponse.text();
+    console.log("Brevo API response:", emailResponse.status, emailResponseText);
+
+    if (!emailResponse.ok) {
+      console.error("Brevo API error for", req.student_email, ":", emailResponseText);
+    } else {
+      console.log("Email sent successfully to", req.student_email, "with CC to gfrancois@nyclogicai.com");
+    }
   } catch (e) {
     console.error("Email error (non-fatal):", e);
   }
@@ -345,8 +360,39 @@ serve(async (req) => {
 
     // --- Build and send Scholar payload ---
     const payload = buildScholarPayload(requestData);
-    const result = await postToScholar(payload);
+    let result = await postToScholar(payload);
     console.log("Scholar result:", JSON.stringify(result).substring(0, 500));
+
+    // --- Retry logic for 404 "Student not found" on assignment_push ---
+    if (!result.success && requestData.type === "assignment_push" && result.error?.includes("Student not found")) {
+      console.log("Student not found in Scholar, syncing student first...");
+      
+      // Sync the student to Scholar first
+      const syncPayload = buildScholarPayload({
+        ...requestData,
+        type: "student_created",
+      });
+      const syncResult = await postToScholar(syncPayload);
+      console.log("Student sync result:", JSON.stringify(syncResult).substring(0, 500));
+
+      if (syncResult.success) {
+        // Extract the linked_user_id from sync response and override student_id
+        const linkedUserId = syncResult.data?.linked_user_id || syncResult.data?.user_id;
+        if (linkedUserId) {
+          console.log("Using linked_user_id from Scholar:", linkedUserId);
+          const retryPayload = buildScholarPayload(requestData);
+          (retryPayload as any).data.student_id = linkedUserId;
+          result = await postToScholar(retryPayload);
+        } else {
+          // Retry with original student_id
+          console.log("No linked_user_id returned, retrying with original ID...");
+          result = await postToScholar(payload);
+        }
+        console.log("Retry result:", JSON.stringify(result).substring(0, 500));
+      } else {
+        console.error("Student sync failed, cannot retry assignment push:", syncResult.error);
+      }
+    }
 
     // For live sessions, process each participant individually
     if (requestData.type === "live_session_completed" && requestData.participant_results) {
