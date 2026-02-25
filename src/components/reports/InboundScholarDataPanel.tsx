@@ -42,6 +42,24 @@ interface InboundEventData {
   achievement_name?: string;
   topic_name?: string;
   timestamp?: string;
+  // Practice session fields
+  questions_attempted?: number;
+  questions_correct?: number;
+  completed_at?: string;
+  student_name?: string;
+  assignment_title?: string;
+  topics_processed?: number;
+  grades_created?: number;
+  topic_details?: Array<{
+    topic: string;
+    standard?: string;
+    score: number;
+    correct: number;
+    attempted: number;
+  }>;
+  // Assignment fields
+  time_spent_minutes?: number;
+  grade_saved?: boolean;
   [key: string]: unknown;
 }
 
@@ -530,7 +548,13 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {studentMap?.[event.student_id || ''] || 'Unknown Student'} • {event.data?.topic_name || event.data?.activity_name || 'No details'}
+                                {event.data?.student_name || studentMap?.[event.student_id || ''] || 'Unknown Student'} • {event.data?.topic_name || event.data?.activity_name || event.data?.assignment_title || 'No details'}
+                                {event.data?.questions_correct !== undefined && event.data?.questions_attempted !== undefined && (
+                                  <span className="ml-1">({event.data.questions_correct}/{event.data.questions_attempted} correct)</span>
+                                )}
+                                {event.data?.completed_at && (
+                                  <span className="ml-1">• Completed {formatDistanceToNow(new Date(event.data.completed_at), { addSuffix: true })}</span>
+                                )}
                               </p>
                             </div>
                           </div>
@@ -592,6 +616,36 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
                             <div>
                               <p className="text-muted-foreground">Activity Type</p>
                               <p className="font-medium capitalize">{event.data.activity_type}</p>
+                            </div>
+                          )}
+                          {event.data?.questions_correct !== undefined && event.data?.questions_attempted !== undefined && (
+                            <div>
+                              <p className="text-muted-foreground">Questions</p>
+                              <p className="font-medium">{event.data.questions_correct}/{event.data.questions_attempted} correct</p>
+                            </div>
+                          )}
+                          {event.data?.completed_at && (
+                            <div>
+                              <p className="text-muted-foreground">Completed</p>
+                              <p className="font-medium">{format(new Date(event.data.completed_at), 'MMM d, h:mm a')}</p>
+                            </div>
+                          )}
+                          {event.data?.time_spent_minutes !== undefined && (
+                            <div>
+                              <p className="text-muted-foreground">Time Spent</p>
+                              <p className="font-medium">{event.data.time_spent_minutes} min</p>
+                            </div>
+                          )}
+                          {event.data?.grade_saved && (
+                            <div>
+                              <p className="text-muted-foreground">Grade Status</p>
+                              <p className="font-medium text-emerald-600">✓ Saved to Gradebook</p>
+                            </div>
+                          )}
+                          {event.data?.topics_processed !== undefined && event.data.topics_processed > 0 && (
+                            <div>
+                              <p className="text-muted-foreground">Topics Covered</p>
+                              <p className="font-medium">{event.data.topics_processed} topics</p>
                             </div>
                           )}
                         </div>

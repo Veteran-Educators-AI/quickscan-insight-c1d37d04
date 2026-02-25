@@ -321,25 +321,38 @@ Deno.serve(async (req) => {
             studentRecord = studentByEmail;
           }
         }
+
+        // Also try direct ID lookup
+        if (!studentRecord) {
+          const { data: studentById } = await supabase
+            .from("students")
+            .select("id, first_name, last_name, class_id")
+            .eq("id", studentId)
+            .maybeSingle();
+          if (studentById) {
+            studentRecord = studentById;
+          }
+        }
+
+        // Resolve teacher_id
+        let teacherIdForLog: string | null = null;
+        if (studentRecord?.class_id) {
+          try {
+            const { data: classInfo } = await supabase
+              .from("classes")
+              .select("teacher_id")
+              .eq("id", studentRecord.class_id)
+              .single();
+            teacherIdForLog = classInfo?.teacher_id || null;
+          } catch (err) {
+            console.error("Failed to resolve teacher_id:", err);
+          }
+        }
         
         // Update mastery levels from topic_performance array
         let masteryUpdated = false;
+        let gradesCreatedCount = 0;
         if (sessionData.topic_performance && sessionData.topic_performance.length > 0) {
-          // Resolve teacher_id once (not per-topic)
-          let teacherId: string | null = null;
-          if (studentRecord?.class_id) {
-            try {
-              const { data: classInfo } = await supabase
-                .from("classes")
-                .select("teacher_id")
-                .eq("id", studentRecord.class_id)
-                .single();
-              teacherId = classInfo?.teacher_id || null;
-            } catch (err) {
-              console.error("Failed to resolve teacher_id:", err);
-            }
-          }
-
           for (const topic of sessionData.topic_performance) {
             try {
               // Record grade history for each topic
@@ -347,7 +360,7 @@ Deno.serve(async (req) => {
                 .from("grade_history")
                 .insert({
                   student_id: studentRecord?.id || studentId,
-                  teacher_id: teacherId,
+                  teacher_id: teacherIdForLog,
                   topic_name: topic.topic,
                   grade: topic.masteryPercentage,
                   nys_standard: topic.standardCode,
@@ -358,6 +371,7 @@ Deno.serve(async (req) => {
               
               if (!gradeError) {
                 masteryUpdated = true;
+                gradesCreatedCount++;
                 console.log(`Updated mastery for topic ${topic.topic}: ${topic.masteryPercentage}%`);
               } else {
                 console.error(`Failed to update mastery for ${topic.topic}:`, gradeError);
@@ -365,6 +379,48 @@ Deno.serve(async (req) => {
             } catch (topicErr) {
               console.error(`Error processing topic ${topic.topic}:`, topicErr);
             }
+          }
+        }
+
+        // LOG TO sister_app_sync_log so InboundScholarDataPanel can see it
+        if (teacherIdForLog) {
+          try {
+            const studentName = studentRecord
+              ? `${studentRecord.first_name} ${studentRecord.last_name}`
+              : sessionData.student_email || studentId;
+
+            await supabase.from("sister_app_sync_log").insert({
+              teacher_id: teacherIdForLog,
+              student_id: studentRecord?.id || studentId,
+              action: "sync_practice_session",
+              data: {
+                student_name: studentName,
+                activity_name: `${sessionData.subject || "Practice"} Session`,
+                topic_name: sessionData.topic_performance?.[0]?.topic || sessionData.subject || "Practice Session",
+                score: sessionData.percentage,
+                questions_attempted: sessionData.questions_attempted,
+                questions_correct: sessionData.questions_correct,
+                completed_at: sessionData.completed_at,
+                exam_type: sessionData.exam_type,
+                max_streak: sessionData.max_streak,
+                timed_mode: sessionData.timed_mode,
+                topics_processed: sessionData.topic_performance?.length || 0,
+                grades_created: gradesCreatedCount,
+                topic_details: sessionData.topic_performance?.map((t: TopicPerformance) => ({
+                  topic: t.topic,
+                  standard: t.standardCode,
+                  score: t.masteryPercentage,
+                  correct: t.questionsCorrect,
+                  attempted: t.questionsAttempted,
+                })),
+              },
+              source_app: "scholar_app",
+              processed: masteryUpdated,
+              processed_at: masteryUpdated ? new Date().toISOString() : null,
+            });
+            console.log("Logged practice session to sister_app_sync_log for teacher:", teacherIdForLog);
+          } catch (logErr) {
+            console.error("Non-fatal: Failed to log practice session to sync log:", logErr);
           }
         }
         
@@ -426,6 +482,7 @@ Deno.serve(async (req) => {
             plan_updated: planUpdated,
             mastery_updated: masteryUpdated,
             topics_processed: sessionData.topic_performance?.length || 0,
+            grades_created: gradesCreatedCount,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
