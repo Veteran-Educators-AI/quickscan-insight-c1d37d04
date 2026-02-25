@@ -76,7 +76,7 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
         .from('sister_app_sync_log')
         .select('*')
         .eq('teacher_id', user!.id)
-        .in('action', ['grade_completed', 'activity_completed', 'reward_earned', 'level_up', 'achievement_unlocked', 'behavior_deduction', 'work_submitted'])
+        .in('action', ['grade_completed', 'activity_completed', 'reward_earned', 'level_up', 'achievement_unlocked', 'behavior_deduction', 'work_submitted', 'sync_practice_session', 'sync_assignment', 'sync_student_data', 'sync_progress'])
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -293,6 +293,14 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
         return <AlertCircle className="h-4 w-4 text-destructive" />;
       case 'work_submitted':
         return <ClipboardCheck className="h-4 w-4 text-teal-500" />;
+      case 'sync_practice_session':
+        return <Gamepad2 className="h-4 w-4 text-indigo-500" />;
+      case 'sync_assignment':
+        return <ClipboardCheck className="h-4 w-4 text-orange-500" />;
+      case 'sync_student_data':
+        return <Users className="h-4 w-4 text-cyan-500" />;
+      case 'sync_progress':
+        return <TrendingUp className="h-4 w-4 text-emerald-500" />;
       default:
         return <Star className="h-4 w-4 text-muted-foreground" />;
     }
@@ -307,6 +315,10 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
       case 'achievement_unlocked': return 'Achievement Unlocked';
       case 'behavior_deduction': return 'Behavior Deduction';
       case 'work_submitted': return 'Work Submitted';
+      case 'sync_practice_session': return 'Practice Session';
+      case 'sync_assignment': return 'Assignment Synced';
+      case 'sync_student_data': return 'Student Data Synced';
+      case 'sync_progress': return 'Progress Update';
       default: return action;
     }
   };

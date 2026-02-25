@@ -97,7 +97,7 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
         .from('sister_app_sync_log')
         .select('*')
         .eq('teacher_id', user!.id)
-        .eq('action', 'batch_sync')
+        .in('action', ['batch_sync', 'individual_sync'])
         .order('created_at', { ascending: false })
         .limit(20);
 
