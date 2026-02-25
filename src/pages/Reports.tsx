@@ -250,6 +250,15 @@ export default function Reports() {
               </Card>
             </div>
 
+            {/* Inbound Scholar Data - Data returned FROM scholar app */}
+            <InboundScholarDataPanel classId={selectedClassId === 'all' ? undefined : selectedClassId} />
+
+            {/* Scholar AI Sync Dashboard - Outbound */}
+            <ScholarSyncDashboard classId={selectedClassId === 'all' ? undefined : selectedClassId} />
+
+            {/* Scholar Sync Data Details - What's Being Sent */}
+            <ScholarSyncDataDetails classId={selectedClassId === 'all' ? undefined : selectedClassId} />
+
             {/* Standards by Class - Clickable to view all work */}
             <StandardsByClass classId={selectedClassId === 'all' ? undefined : selectedClassId} />
 
@@ -305,14 +314,8 @@ export default function Reports() {
             {/* Regents Score Report */}
             <RegentsScoreReport classId={selectedClassId === 'all' ? undefined : selectedClassId} />
 
-            {/* Scholar AI Sync Dashboard - Outbound */}
-            <ScholarSyncDashboard classId={selectedClassId === 'all' ? undefined : selectedClassId} />
 
-            {/* Scholar Sync Data Details - What's Being Sent */}
-            <ScholarSyncDataDetails classId={selectedClassId === 'all' ? undefined : selectedClassId} />
 
-            {/* Inbound Scholar Data - Data returned FROM scholar app */}
-            <InboundScholarDataPanel classId={selectedClassId === 'all' ? undefined : selectedClassId} />
 
             {/* Scan Analysis History */}
             <ScanAnalysisHistory classId={selectedClassId === 'all' ? undefined : selectedClassId} />
