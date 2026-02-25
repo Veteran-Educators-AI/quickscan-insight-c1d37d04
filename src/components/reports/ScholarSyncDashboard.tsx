@@ -20,7 +20,8 @@ import {
   TrendingUp,
   RefreshCw,
   Clock,
-  Eye
+  Eye,
+  Download
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -88,6 +89,7 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
   const { user } = useAuth();
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
 
   const { data: syncLogs, isLoading, refetch } = useQuery({
@@ -97,7 +99,7 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
         .from('sister_app_sync_log')
         .select('*')
         .eq('teacher_id', user!.id)
-        .in('action', ['batch_sync', 'individual_sync'])
+        .in('action', ['batch_sync', 'individual_sync', 'pull_completions'])
         .order('created_at', { ascending: false })
         .limit(20);
 
@@ -153,6 +155,47 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handlePullCompletions = async () => {
+    if (!user) return;
+    setIsPulling(true);
+    
+    try {
+      const response = await supabase.functions.invoke('pull-scholar-completions', {
+        body: classId ? { class_id: classId, since_days: 30 } : { since_days: 30 },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      const data = response.data;
+      if (data && !data.success) {
+        toast.error(data.error || 'Pull failed');
+        return;
+      }
+
+      if (data?.grades_created > 0) {
+        toast.success(`Pulled ${data.grades_created} new grades from Scholar`, {
+          description: `${data.students_matched} students matched, ${data.duplicates_skipped} duplicates skipped`,
+        });
+      } else {
+        toast.info(data?.message || 'No new completions found', {
+          description: data?.completions_found > 0 
+            ? `${data.completions_found} found, ${data.duplicates_skipped} already recorded`
+            : 'Students may not have completed any practice yet',
+        });
+      }
+      refetch();
+    } catch (err) {
+      console.error('Pull error:', err);
+      toast.error('Failed to pull from Scholar', {
+        description: err instanceof Error ? err.message : 'Network or server error',
+      });
+    } finally {
+      setIsPulling(false);
     }
   };
 
@@ -242,6 +285,15 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
               <CardTitle>Scholar AI Sync Dashboard</CardTitle>
             </div>
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handlePullCompletions}
+                disabled={isPulling}
+              >
+                <Download className={`h-4 w-4 mr-2 ${isPulling ? 'animate-bounce' : ''}`} />
+                {isPulling ? 'Pulling...' : 'Pull from Scholar'}
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
