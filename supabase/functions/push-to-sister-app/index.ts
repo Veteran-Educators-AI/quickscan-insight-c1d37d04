@@ -165,14 +165,12 @@ async function sendEmailNotification(req: PushRequest) {
     const emailPayload: any = {
       sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: req.student_email, name: req.student_name || name }],
-      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: `📚 New Assignment: ${req.title}`,
       htmlContent: html,
     };
 
-    console.log("Sending email with CC to gfrancois@nyclogicai.com, payload:", JSON.stringify({
+    console.log("Sending email, payload:", JSON.stringify({
       to: emailPayload.to,
-      cc: emailPayload.cc,
       sender: emailPayload.sender,
       subject: emailPayload.subject,
     }));
@@ -189,7 +187,7 @@ async function sendEmailNotification(req: PushRequest) {
     if (!emailResponse.ok) {
       console.error("Brevo API error for", req.student_email, ":", emailResponseText);
     } else {
-      console.log("Email sent successfully to", req.student_email, "with CC to gfrancois@nyclogicai.com");
+      console.log("Email sent successfully to", req.student_email);
     }
   } catch (e) {
     console.error("Email error (non-fatal):", e);

@@ -54,7 +54,7 @@ async function sendBalanceAlert(balance: number, currency: string) {
       email: ALERT_EMAIL,
       name: "Gregory Francois"
     }],
-    cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
+    
     subject: `⚠️ Anthropic API Balance Low: $${balance.toFixed(2)}`,
     htmlContent: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
