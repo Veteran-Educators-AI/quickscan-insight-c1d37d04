@@ -9,9 +9,7 @@ const corsHeaders = {
  * Pull practice session completions FROM Scholar's database
  * and create grade_history entries locally.
  * 
- * Scholar stores practice results that we can read via PostgREST.
- * This function queries Scholar for recent completions by our students,
- * then creates local grade_history entries so the teacher can see them.
+ * Uses SCHOLAR_SUPABASE_SERVICE_ROLE_KEY to bypass RLS on Scholar's side.
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -44,13 +42,23 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { class_id, since_days = 30 } = body;
 
-    // Get Scholar connection config
+    // Get Scholar connection config - USE SERVICE ROLE KEY to bypass RLS
     const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
+    const scholarServiceRoleKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
     const scholarAnonKey = Deno.env.get('SCHOLAR_SUPABASE_ANON_KEY');
     
-    if (!scholarUrl || !scholarAnonKey) {
+    if (!scholarUrl) {
       return new Response(
         JSON.stringify({ success: false, error: 'Scholar connection not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Prefer service role key for full access, fall back to anon key
+    const scholarKey = scholarServiceRoleKey || scholarAnonKey;
+    if (!scholarKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Scholar keys not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -73,216 +81,150 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Found ${students.length} local students to check for Scholar completions`);
+    // Filter to only students that belong to this teacher's classes
+    const teacherStudents = students.filter(s => s.classes && (s.classes as any)?.teacher_id === user.id);
+    console.log(`Found ${teacherStudents.length} students for teacher (from ${students.length} total)`);
 
-    // Collect student emails and IDs for matching
-    const studentEmails = students
-      .filter(s => s.email)
-      .map(s => s.email!.toLowerCase());
-    
-    const studentUserIds = students
-      .filter(s => s.user_id)
-      .map(s => s.user_id!);
-
-    // Build a lookup map
-    const emailToStudent = new Map<string, typeof students[0]>();
-    const userIdToStudent = new Map<string, typeof students[0]>();
-    for (const s of students) {
+    // Build lookup maps
+    const emailToStudent = new Map<string, typeof teacherStudents[0]>();
+    const userIdToStudent = new Map<string, typeof teacherStudents[0]>();
+    const idToStudent = new Map<string, typeof teacherStudents[0]>();
+    for (const s of teacherStudents) {
       if (s.email) emailToStudent.set(s.email.toLowerCase(), s);
       if (s.user_id) userIdToStudent.set(s.user_id, s);
+      idToStudent.set(s.id, s);
     }
 
-    // Query Scholar's database via PostgREST for practice sessions
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - since_days);
     const sinceISO = sinceDate.toISOString();
 
-    // Try to read from Scholar's practice_sessions or similar table
-    // We'll try multiple possible table names
-    const scholarClient = createClient(scholarUrl, scholarAnonKey);
+    // Create Scholar client with service role key for full access
+    const scholarClient = createClient(scholarUrl, scholarKey);
     
     let completions: any[] = [];
     let sourceTable = '';
+    const tablesChecked: string[] = [];
 
-    // Try practice_sessions table first
-    try {
-      const { data, error } = await scholarClient
-        .from('practice_sessions')
-        .select('*')
-        .gte('completed_at', sinceISO)
-        .order('completed_at', { ascending: false })
-        .limit(500);
+    // Try multiple possible table names on Scholar's side
+    const tablesToTry = [
+      { name: 'practice_sessions', dateCol: 'completed_at' },
+      { name: 'practice_session_results', dateCol: 'completed_at' },
+      { name: 'student_practice_sessions', dateCol: 'completed_at' },
+      { name: 'game_sessions', dateCol: 'completed_at' },
+      { name: 'student_submissions', dateCol: 'submitted_at' },
+      { name: 'assignment_submissions', dateCol: 'submitted_at' },
+      { name: 'student_activity', dateCol: 'created_at' },
+      { name: 'activity_log', dateCol: 'created_at' },
+      { name: 'grade_entries', dateCol: 'created_at' },
+      { name: 'grades', dateCol: 'created_at' },
+      { name: 'student_grades', dateCol: 'created_at' },
+      { name: 'external_students', dateCol: 'updated_at' },
+    ];
+
+    for (const table of tablesToTry) {
+      if (completions.length > 0) break;
       
-      if (!error && data && data.length > 0) {
-        completions = data;
-        sourceTable = 'practice_sessions';
-        console.log(`Found ${data.length} practice sessions from Scholar`);
-      }
-    } catch (e) {
-      console.log('practice_sessions table not accessible:', e);
-    }
-
-    // If no practice_sessions, try student_activity or activity_log
-    if (completions.length === 0) {
       try {
         const { data, error } = await scholarClient
-          .from('student_activity')
+          .from(table.name)
           .select('*')
-          .gte('created_at', sinceISO)
-          .order('created_at', { ascending: false })
+          .gte(table.dateCol, sinceISO)
+          .order(table.dateCol, { ascending: false })
           .limit(500);
+        
+        tablesChecked.push(`${table.name}: ${error ? error.message : `${data?.length || 0} rows`}`);
         
         if (!error && data && data.length > 0) {
           completions = data;
-          sourceTable = 'student_activity';
-          console.log(`Found ${data.length} student activities from Scholar`);
+          sourceTable = table.name;
+          console.log(`✅ Found ${data.length} records from Scholar table: ${table.name}`);
+          // Log sample record structure
+          console.log(`Sample record keys: ${Object.keys(data[0]).join(', ')}`);
+          console.log(`Sample record: ${JSON.stringify(data[0]).substring(0, 500)}`);
         }
       } catch (e) {
-        console.log('student_activity table not accessible:', e);
+        tablesChecked.push(`${table.name}: exception`);
       }
     }
 
-    // Try assignment_submissions
+    // If we still have nothing, try to discover tables by querying information_schema
     if (completions.length === 0) {
       try {
-        const { data, error } = await scholarClient
-          .from('assignment_submissions')
-          .select('*')
-          .gte('submitted_at', sinceISO)
-          .order('submitted_at', { ascending: false })
-          .limit(500);
+        // Try RPC call to list tables (may not be available)
+        const { data: schemaData, error: schemaError } = await scholarClient
+          .rpc('get_tables_list')
+          .limit(50);
         
-        if (!error && data && data.length > 0) {
-          completions = data;
-          sourceTable = 'assignment_submissions';
-          console.log(`Found ${data.length} assignment submissions from Scholar`);
+        if (!schemaError && schemaData) {
+          console.log('Scholar tables via RPC:', JSON.stringify(schemaData).substring(0, 500));
+          tablesChecked.push(`rpc:get_tables_list: ${JSON.stringify(schemaData).substring(0, 200)}`);
         }
       } catch (e) {
-        console.log('assignment_submissions table not accessible:', e);
+        // Not available, that's fine
       }
     }
 
-    // Try grade_entries or grades
-    if (completions.length === 0) {
-      try {
-        const { data, error } = await scholarClient
-          .from('grade_entries')
-          .select('*')
-          .gte('created_at', sinceISO)
-          .order('created_at', { ascending: false })
-          .limit(500);
-        
-        if (!error && data && data.length > 0) {
-          completions = data;
-          sourceTable = 'grade_entries';
-          console.log(`Found ${data.length} grade entries from Scholar`);
-        }
-      } catch (e) {
-        console.log('grade_entries table not accessible:', e);
-      }
-    }
-
-    // Try external_students table on Scholar (where our synced data may live)
-    if (completions.length === 0) {
-      try {
-        const { data, error } = await scholarClient
-          .from('external_students')
-          .select('*')
-          .gte('updated_at', sinceISO)
-          .order('updated_at', { ascending: false })
-          .limit(500);
-        
-        if (!error && data && data.length > 0) {
-          completions = data;
-          sourceTable = 'external_students';
-          console.log(`Found ${data.length} external student records from Scholar`);
-        }
-      } catch (e) {
-        console.log('external_students table not accessible:', e);
-      }
-    }
-
-    // Also try to list available tables by querying a few common ones
-    if (completions.length === 0) {
-      // Try querying the Scholar nycologic-webhook to get completions
-      const sisterApiKey = Deno.env.get('SISTER_APP_API_KEY');
-      if (sisterApiKey) {
-        try {
-          const pullUrl = `${scholarUrl}/functions/v1/nycologic-webhook`;
-          console.log(`Trying to pull completions via Scholar webhook: ${pullUrl}`);
-          
-          const response = await fetch(pullUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': scholarAnonKey,
-              'Authorization': `Bearer ${scholarAnonKey}`,
-              'x-api-key': sisterApiKey,
-              'x-source-app': 'nycologic-ai',
-            },
-            body: JSON.stringify({
-              type: 'pull_completions',
-              data: {
-                student_emails: studentEmails.slice(0, 100),
-                student_ids: studentUserIds.slice(0, 100),
-                since: sinceISO,
-              },
-            }),
-          });
-
-          const responseText = await response.text();
-          console.log(`Scholar pull response: ${response.status} ${responseText.substring(0, 500)}`);
-          
-          if (response.ok) {
-            try {
-              const result = JSON.parse(responseText);
-              if (result.completions && result.completions.length > 0) {
-                completions = result.completions;
-                sourceTable = 'webhook_pull';
-              }
-            } catch (e) {
-              console.log('Failed to parse Scholar pull response');
-            }
-          }
-        } catch (e) {
-          console.error('Failed to pull from Scholar webhook:', e);
-        }
-      }
-    }
-
+    console.log(`Tables checked: ${tablesChecked.join(' | ')}`);
     console.log(`Total completions found: ${completions.length} from ${sourceTable || 'none'}`);
 
     // Match completions to our students and create grade_history entries
     let gradesCreated = 0;
     let matchedStudents = new Set<string>();
     let skippedDuplicates = 0;
+    let skippedNoScore = 0;
 
     for (const completion of completions) {
-      // Try to match to a local student
-      const email = (completion.student_email || completion.email || '').toLowerCase();
-      const userId = completion.user_id || completion.student_id || '';
+      // Try to match to a local student by multiple fields
+      const email = (completion.student_email || completion.email || completion.user_email || '').toLowerCase();
+      const userId = completion.user_id || completion.student_user_id || '';
+      const externalId = completion.external_id || completion.student_external_id || completion.nycologic_student_id || '';
       
-      let matchedStudent = emailToStudent.get(email) || userIdToStudent.get(userId);
-      
-      // Also try matching by external_id
-      if (!matchedStudent && completion.external_id) {
-        matchedStudent = students.find(s => s.id === completion.external_id) || undefined;
+      let matchedStudent = emailToStudent.get(email) 
+        || userIdToStudent.get(userId)
+        || idToStudent.get(externalId);
+
+      // Try matching by name as fallback
+      if (!matchedStudent && (completion.student_name || completion.full_name)) {
+        const name = (completion.student_name || completion.full_name || '').toLowerCase().trim();
+        for (const s of teacherStudents) {
+          const fullName = `${s.first_name} ${s.last_name}`.toLowerCase().trim();
+          if (fullName === name) {
+            matchedStudent = s;
+            break;
+          }
+        }
       }
 
       if (!matchedStudent) continue;
 
       matchedStudents.add(matchedStudent.id);
 
-      // Determine the score and topic
-      const score = completion.score || completion.percentage || completion.grade || completion.overall_average || 0;
-      const topicName = completion.topic_name || completion.topic || completion.subject || completion.activity_name || 'Scholar Practice';
-      const completedAt = completion.completed_at || completion.submitted_at || completion.created_at || completion.updated_at;
-      const questionsCorrect = completion.questions_correct || completion.correct_count || 0;
-      const questionsAttempted = completion.questions_attempted || completion.total_questions || 0;
+      // Determine the score and topic from various possible field names
+      const score = completion.score ?? completion.percentage ?? completion.grade 
+        ?? completion.overall_score ?? completion.final_score ?? completion.result_score ?? null;
+      const topicName = completion.topic_name || completion.topic || completion.subject 
+        || completion.activity_name || completion.game_name || completion.assignment_title
+        || completion.title || completion.lesson_name || 'Scholar Practice';
+      const completedAt = completion.completed_at || completion.submitted_at 
+        || completion.created_at || completion.updated_at;
+      const questionsCorrect = completion.questions_correct || completion.correct_count 
+        || completion.correct_answers || 0;
+      const questionsAttempted = completion.questions_attempted || completion.total_questions 
+        || completion.question_count || 0;
 
-      if (score === 0 && questionsCorrect === 0) continue;
+      // Calculate score from questions if no direct score
+      let finalScore = score;
+      if (finalScore === null && questionsAttempted > 0 && questionsCorrect >= 0) {
+        finalScore = Math.round((questionsCorrect / questionsAttempted) * 100);
+      }
 
-      // Check for duplicates - avoid re-inserting the same grade
+      if (finalScore === null || finalScore === 0) {
+        skippedNoScore++;
+        continue;
+      }
+
+      // Check for duplicates
       const { data: existing } = await supabase
         .from('grade_history')
         .select('id')
@@ -299,16 +241,20 @@ Deno.serve(async (req) => {
       }
 
       // Create grade_history entry
+      const justification = questionsAttempted > 0
+        ? `Scholar practice: ${questionsCorrect}/${questionsAttempted} correct (pulled from Scholar - ${sourceTable})`
+        : `Scholar practice session: ${topicName} (pulled from Scholar)`;
+
       const { error: insertError } = await supabase
         .from('grade_history')
         .insert({
           student_id: matchedStudent.id,
           teacher_id: user.id,
           topic_name: topicName,
-          grade: Math.round(score),
+          grade: Math.round(finalScore),
           raw_score_earned: questionsCorrect || null,
           raw_score_possible: questionsAttempted || null,
-          grade_justification: `Scholar practice: ${questionsCorrect}/${questionsAttempted} correct (pulled from Scholar)`,
+          grade_justification: justification,
         });
 
       if (!insertError) {
@@ -325,12 +271,15 @@ Deno.serve(async (req) => {
         action: 'pull_completions',
         data: {
           source_table: sourceTable,
+          tables_checked: tablesChecked,
           completions_found: completions.length,
           students_matched: matchedStudents.size,
           grades_created: gradesCreated,
           duplicates_skipped: skippedDuplicates,
+          skipped_no_score: skippedNoScore,
           since_date: sinceISO,
           class_id: class_id || 'all',
+          used_service_role: !!scholarServiceRoleKey,
         },
         processed: true,
         processed_at: new Date().toISOString(),
@@ -343,6 +292,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         source: sourceTable || 'none',
+        tables_checked: tablesChecked,
         completions_found: completions.length,
         students_matched: matchedStudents.size,
         grades_created: gradesCreated,
@@ -351,7 +301,7 @@ Deno.serve(async (req) => {
           ? `Pulled ${gradesCreated} new grades from Scholar for ${matchedStudents.size} students`
           : completions.length > 0
             ? `Found ${completions.length} completions but ${skippedDuplicates} were already recorded`
-            : `No new completions found in Scholar (checked ${sourceTable || 'multiple tables'})`,
+            : `No completions found in Scholar (checked: ${tablesChecked.map(t => t.split(':')[0]).join(', ')})`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
