@@ -270,7 +270,6 @@ const handler = async (req: Request): Promise<Response> => {
             email: "notifications@scholarquest.app",
           },
           to: [{ email: parent.email, name: parent.name }],
-          cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
           subject,
           htmlContent,
         }),

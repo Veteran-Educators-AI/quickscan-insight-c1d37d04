@@ -207,7 +207,6 @@ serve(async (req) => {
         body: JSON.stringify({
           sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: student.email, name: studentName }],
-          cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
           subject: `📚 Practice Questions: ${topic}`,
           htmlContent: studentHtml,
         }),
@@ -236,7 +235,6 @@ serve(async (req) => {
         body: JSON.stringify({
           sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
           to: [{ email: student.parent_email, name: `Parent of ${studentName}` }],
-          cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
           subject: `📚 ${studentName}'s Practice Questions: ${topic}`,
           htmlContent: parentHtml,
         }),

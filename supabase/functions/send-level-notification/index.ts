@@ -120,7 +120,6 @@ async function sendLevelNotification(request: NotificationRequest): Promise<Resp
     body: JSON.stringify({
       sender: { name: "NYCologic AI", email: "noreply@nyclogicai.com" },
       to: [{ email: teacherEmail, name: teacherName || "Teacher" }],
-      cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
       subject: subject,
       htmlContent: emailHtml,
     }),

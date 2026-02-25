@@ -77,7 +77,6 @@ const handler = async (req: Request): Promise<Response> => {
           email: "notifications@scholarquest.app",
         },
         to: [{ email, name: name || "User" }],
-        cc: [{ email: "gfrancois@nyclogicai.com", name: "Gregory Francois" }],
         subject: "🔐 Your password has been changed",
         htmlContent,
       }),
