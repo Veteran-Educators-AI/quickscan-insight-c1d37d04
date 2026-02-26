@@ -85,6 +85,7 @@ interface GeneratedQuestion {
   topic: string;
   standard: string;
   question: string;
+  answer?: string;
   difficulty: string;
   advancementLevel: AdvancementLevel;
   hint?: string;
@@ -1756,7 +1757,7 @@ const toggleStudent = (studentId: string) => {
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(18);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('ANSWER KEY - TEACHER COPY', pageWidth / 2, 16, { align: 'center' });
+      pdf.text('SOLUTIONS & ANSWER KEY - TEACHER COPY', pageWidth / 2, 16, { align: 'center' });
       pdf.setTextColor(0);
       akY = 35;
       
@@ -1802,20 +1803,32 @@ const toggleStudent = (studentId: string) => {
             pdf.setFont('helvetica', 'normal');
             
             questions.warmUp.forEach((q, idx) => {
-              if (akY > pageHeight - 20) {
+              if (akY > pageHeight - 30) {
                 pdf.addPage();
                 akY = margin;
               }
               const formattedQuestion = formatPdfText(q.question);
-              // Use safe text width for answer key too
               const akTextWidth = safeTextWidth * 0.9;
               const questionLines = pdf.splitTextToSize(`W${idx + 1}. ${formattedQuestion}`, akTextWidth);
               pdf.setFontSize(8);
+              pdf.setTextColor(80);
               questionLines.slice(0, 2).forEach((line: string) => {
                 pdf.text(line, margin + 2, akY);
                 akY += 3.5;
               });
-              akY += 1;
+              // Print solution
+              if (q.answer) {
+                pdf.setTextColor(0, 100, 0);
+                pdf.setFont('helvetica', 'bold');
+                const solutionLines = pdf.splitTextToSize(`   ✓ ${formatPdfText(q.answer)}`, akTextWidth - 5);
+                solutionLines.slice(0, 4).forEach((line: string) => {
+                  pdf.text(line, margin + 5, akY);
+                  akY += 3.5;
+                });
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(0);
+              }
+              akY += 2;
             });
             akY += 3;
           }
@@ -1829,20 +1842,32 @@ const toggleStudent = (studentId: string) => {
             pdf.setFont('helvetica', 'normal');
             
             questions.main.forEach((q, idx) => {
-              if (akY > pageHeight - 20) {
+              if (akY > pageHeight - 30) {
                 pdf.addPage();
                 akY = margin;
               }
               const formattedQuestion = formatPdfText(q.question);
-              // Use safe text width for answer key too
               const akTextWidth = safeTextWidth * 0.9;
               const questionLines = pdf.splitTextToSize(`${idx + 1}. ${formattedQuestion}`, akTextWidth);
               pdf.setFontSize(8);
+              pdf.setTextColor(80);
               questionLines.slice(0, 2).forEach((line: string) => {
                 pdf.text(line, margin + 2, akY);
                 akY += 3.5;
               });
-              akY += 1;
+              // Print solution
+              if (q.answer) {
+                pdf.setTextColor(0, 100, 0);
+                pdf.setFont('helvetica', 'bold');
+                const solutionLines = pdf.splitTextToSize(`   ✓ ${formatPdfText(q.answer)}`, akTextWidth - 5);
+                solutionLines.slice(0, 6).forEach((line: string) => {
+                  pdf.text(line, margin + 5, akY);
+                  akY += 3.5;
+                });
+                pdf.setFont('helvetica', 'normal');
+                pdf.setTextColor(0);
+              }
+              akY += 2;
             });
           }
           
