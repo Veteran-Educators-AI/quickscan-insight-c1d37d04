@@ -544,21 +544,24 @@ STUDENT HINTS (REQUIRED):
 - The goal is to help students get "unstuck" without doing the problem for them`
       : '';
 
-    // Answer key instruction for teachers
-    const answerKeyInstruction = includeAnswerKey
-      ? `
-TEACHER ANSWER KEY (REQUIRED):
-- Every question MUST include an "answer" field with the complete correct answer
-- For computational problems: Include the final numerical answer AND brief solution steps
-- For conceptual questions: Provide the expected correct response
-- For proofs: Include key steps or approach
-- Format answers clearly and concisely
+    // Answer key instruction - ALWAYS generate full worked solutions for grading accuracy
+    const answerKeyInstruction = `
+TEACHER ANSWER KEY (REQUIRED - ALWAYS INCLUDE):
+- Every question MUST include an "answer" field with a COMPLETE, DETAILED worked solution
+- This is CRITICAL for grading accuracy — the AI grader uses these solutions as reference
+- Format each answer as a FULL step-by-step solution showing ALL work, not just the final answer
+- Requirements:
+  • Start with the approach/formula being used
+  • Show every intermediate calculation step
+  • Circle or bold the final answer
+  • Include units where applicable
+  • For word problems: identify variables, set up equation, solve, interpret
 - Examples:
-  • "answer": "x = 5 (Divide both sides by 3: 3x = 15 → x = 5)"
-  • "answer": "Area = 25π cm² (A = πr² = π(5)² = 25π)"
-  • "answer": "The angle is 60°. Since angles in a triangle sum to 180°, and two angles are 60° each, the third must be 60°."
-- This is for the teacher's reference when grading student work`
-      : '';
+  • "answer": "Step 1: Use the formula A = πr²\nStep 2: Substitute r = 5\nStep 3: A = π(5)² = 25π\nStep 4: A = 25(3.14159) = 78.54\n\n**Final Answer: A ≈ 78.54 cm²**"
+  • "answer": "Step 1: Set up the equation: 3x + 7 = 22\nStep 2: Subtract 7 from both sides: 3x = 15\nStep 3: Divide both sides by 3: x = 5\n\n**Final Answer: x = 5**"
+  • "answer": "Step 1: Identify the triangle type — right triangle with legs 6 and 8\nStep 2: Apply Pythagorean theorem: c² = a² + b²\nStep 3: c² = 6² + 8² = 36 + 64 = 100\nStep 4: c = √100 = 10\n\n**Final Answer: The hypotenuse is 10 units**"
+- Write solutions as if demonstrating the problem to a student — clear, complete, no shortcuts
+- This answer key will be rendered in handwriting font and used as a grading reference`;
 
     // Diagnostic mode instructions for advancement levels
     const diagnosticInstruction = worksheetMode === 'diagnostic' 
@@ -614,7 +617,7 @@ WARM-UP MODE (Confidence Building):
       : '';
 
     const hintExample = includeHints ? ',\n    "hint": "Remember to use the formula for area. What shape is this?"' : '';
-    const answerExample = includeAnswerKey ? ',\n    "answer": "x = 5 (Divide both sides by 3)"' : '';
+    const answerExample = ',\n    "answer": "Step 1: Use formula A = πr²\\nStep 2: A = π(5)² = 25π\\nStep 3: A ≈ 78.54\\n\\n**Final Answer: A ≈ 78.54 cm²**"';
 
     const exampleOutput = worksheetMode === 'diagnostic'
       ? `{

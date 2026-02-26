@@ -87,6 +87,7 @@ import {
 } from "docx";
 import { getFormulasForTopics, type FormulaCategory } from "@/data/formulaReference";
 import { ScrapPaperGenerator } from "@/components/print/ScrapPaperGenerator";
+import { AnswerKeySheet } from "@/components/print/AnswerKeySheet";
 // Shared assignments are now saved directly to database - no need for usePushToSisterApp
 
 export interface WorksheetQuestion {
@@ -436,7 +437,7 @@ export function WorksheetBuilder({
   const useAIImages = false;
   const useNanoBanana = false;
   const imageSize = 200;
-  const [includeAnswerKey, setIncludeAnswerKey] = useState(false); // Include answer key for teachers
+  const [includeAnswerKey, setIncludeAnswerKey] = useState(true); // Always generate answer keys for grading accuracy
   const [marginSize, setMarginSize] = useState<"small" | "medium" | "large">("medium"); // Page margin size
   const [includeScrapPaper, setIncludeScrapPaper] = useState(false); // Bundle scrap paper with worksheet
   const [scrapPaperLayout, setScrapPaperLayout] = useState<"single" | "split-2" | "split-4">("split-2"); // Scrap paper layout
@@ -4364,10 +4365,11 @@ export function WorksheetBuilder({
                     <span className="flex flex-col">
                       <span className="flex items-center gap-1">
                         <ClipboardList className="h-3.5 w-3.5 text-green-600" />
-                        Include answer key (for teacher)
+                        Generate Answer Key (recommended for grading accuracy)
                       </span>
                       <span className="text-xs text-muted-foreground ml-5">
-                        Generates a separate answer key page with solutions
+                        Creates two answer sheets: a scannable filled worksheet in handwriting font + a clean teacher reference. 
+                        Scan the filled sheet first for maximum AI grading accuracy.
                       </span>
                     </span>
                   </Label>
@@ -5629,36 +5631,26 @@ export function WorksheetBuilder({
                         );
                       })()}
 
-                    {/* Answer Key Section in Print Preview */}
+                    {/* Answer Key Sheets — Both Formats */}
                     {includeAnswerKey && compiledQuestions.some((q) => q.answer) && (
-                      <div
-                        className="mt-12 pt-8 border-t-2 border-dashed border-gray-300"
-                        style={{ pageBreakBefore: "always" }}
-                      >
-                        <h2 className="text-xl font-bold text-center mb-2 text-black">ANSWER KEY</h2>
-                        <p className="text-center text-sm text-gray-600 mb-1">{worksheetTitle}</p>
-                        <p className="text-center text-xs text-gray-400 mb-1">
-                          Created: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </p>
-                        <p className="text-center text-xs text-red-600 italic mb-6">FOR TEACHER USE ONLY</p>
-
-                        <div className="space-y-4">
-                          {compiledQuestions
-                            .filter((q) => q.answer)
-                            .map((question) => (
-                              <div key={question.questionNumber} className="pb-3 border-b border-gray-200">
-                                <div className="flex items-baseline gap-2">
-                                  <span className="font-bold text-black">Question {question.questionNumber}:</span>
-                                  <span className="text-xs text-gray-500 italic">{question.topic}</span>
-                                </div>
-                                <p className="mt-1 ml-4 text-sm text-black">
-                                  <span className="font-medium text-green-700">Answer: </span>
-                                  {renderMathText(fixEncodingCorruption(question.answer || ""))}
-                                </p>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
+                      <>
+                        {/* Filled worksheet format (for scanning/grading reference) */}
+                        <AnswerKeySheet
+                          questions={compiledQuestions}
+                          worksheetTitle={worksheetTitle}
+                          teacherName={teacherName}
+                          format="filled"
+                          marginIn={marginIn}
+                        />
+                        {/* Clean teacher reference sheet */}
+                        <AnswerKeySheet
+                          questions={compiledQuestions}
+                          worksheetTitle={worksheetTitle}
+                          teacherName={teacherName}
+                          format="clean"
+                          marginIn={marginIn}
+                        />
+                      </>
                     )}
                     <div className="mt-12 text-center text-xs text-gray-400 print:hidden">
                       Generated with NYCLogic Ai - NYS Regents Aligned
