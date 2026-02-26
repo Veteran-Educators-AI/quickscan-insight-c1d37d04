@@ -6,10 +6,12 @@ const corsHeaders = {
 };
 
 /**
- * Pull practice session completions FROM Scholar's database
- * and create grade_history entries locally.
+ * Pull practice session completions FROM Scholar AI.
  * 
- * Uses SCHOLAR_SUPABASE_SERVICE_ROLE_KEY to bypass RLS on Scholar's side.
+ * Strategy (in priority order):
+ * 1. Call Scholar's API endpoint to request completions (preferred)
+ * 2. Query Scholar's external_students table for cached grade data
+ * 3. Fall back to direct table scanning if API unavailable
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -42,32 +44,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { class_id, since_days = 30 } = body;
 
-    // Get Scholar connection config - USE SERVICE ROLE KEY to bypass RLS
-    const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
-    const scholarServiceRoleKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
-    const scholarAnonKey = Deno.env.get('SCHOLAR_SUPABASE_ANON_KEY');
-    
-    if (!scholarUrl) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Scholar connection not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Try service role key first, then gracefully fall back to anon key
-    const scholarKeysToTry = [
-      { type: 'service_role' as const, key: scholarServiceRoleKey },
-      { type: 'anon' as const, key: scholarAnonKey },
-    ].filter((entry): entry is { type: 'service_role' | 'anon'; key: string } => Boolean(entry.key));
-
-    if (scholarKeysToTry.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Scholar keys not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Get our students (with emails for matching)
+    // Get our students for matching
     let studentQuery = supabase
       .from('students')
       .select('id, first_name, last_name, email, class_id, user_id, classes(name, teacher_id)')
@@ -85,18 +62,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Filter to only students that belong to this teacher's classes
     const teacherStudents = students.filter(s => s.classes && (s.classes as any)?.teacher_id === user.id);
-    console.log(`Found ${teacherStudents.length} students for teacher (from ${students.length} total)`);
+    console.log(`Found ${teacherStudents.length} students for teacher`);
 
     // Build lookup maps
     const emailToStudent = new Map<string, typeof teacherStudents[0]>();
-    const userIdToStudent = new Map<string, typeof teacherStudents[0]>();
+    const nameToStudent = new Map<string, typeof teacherStudents[0]>();
     const idToStudent = new Map<string, typeof teacherStudents[0]>();
     for (const s of teacherStudents) {
       if (s.email) emailToStudent.set(s.email.toLowerCase(), s);
-      if (s.user_id) userIdToStudent.set(s.user_id, s);
+      if (s.user_id) idToStudent.set(s.user_id, s);
       idToStudent.set(s.id, s);
+      const fullName = `${s.first_name} ${s.last_name}`.toLowerCase().trim();
+      nameToStudent.set(fullName, s);
     }
 
     const sinceDate = new Date();
@@ -104,128 +82,201 @@ Deno.serve(async (req) => {
     const sinceISO = sinceDate.toISOString();
 
     let completions: any[] = [];
-    let sourceTable = '';
-    let sourceKeyType: 'service_role' | 'anon' | 'none' = 'none';
-    const tablesChecked: string[] = [];
+    let sourceMethod = '';
+    const diagnostics: string[] = [];
 
-    // Try multiple possible table names on Scholar's side
-    const tablesToTry = [
-      { name: 'practice_sessions', dateCol: 'completed_at' },
-      { name: 'practice_session_results', dateCol: 'completed_at' },
-      { name: 'student_practice_sessions', dateCol: 'completed_at' },
-      { name: 'game_sessions', dateCol: 'completed_at' },
-      { name: 'student_submissions', dateCol: 'submitted_at' },
-      { name: 'assignment_submissions', dateCol: 'submitted_at' },
-      { name: 'student_activity', dateCol: 'created_at' },
-      { name: 'activity_log', dateCol: 'created_at' },
-      { name: 'grade_entries', dateCol: 'created_at' },
-      { name: 'grades', dateCol: 'created_at' },
-      { name: 'student_grades', dateCol: 'created_at' },
-      { name: 'external_students', dateCol: 'updated_at' },
-    ];
+    // ── Strategy 1: Call Scholar's API endpoint ──
+    const scholarApiUrl = Deno.env.get('NYCOLOGIC_API_URL');
+    const sisterAppApiKey = Deno.env.get('SISTER_APP_API_KEY');
+    const scholarAnonKey = Deno.env.get('SCHOLAR_SUPABASE_ANON_KEY');
 
-    for (const { type: keyType, key } of scholarKeysToTry) {
-      if (completions.length > 0) break;
-
-      const scholarClient = createClient(scholarUrl, key);
-      console.log(`Trying Scholar pull with ${keyType} key`);
-
-      for (const table of tablesToTry) {
-        if (completions.length > 0) break;
-
-        try {
-          const { data, error } = await scholarClient
-            .from(table.name)
-            .select('*')
-            .gte(table.dateCol, sinceISO)
-            .order(table.dateCol, { ascending: false })
-            .limit(500);
-
-          tablesChecked.push(`${table.name} (${keyType}): ${error ? error.message : `${data?.length || 0} rows`}`);
-
-          if (!error && data && data.length > 0) {
-            completions = data;
-            sourceTable = table.name;
-            sourceKeyType = keyType;
-            console.log(`✅ Found ${data.length} records from Scholar table: ${table.name} via ${keyType} key`);
-            // Log sample record structure
-            console.log(`Sample record keys: ${Object.keys(data[0]).join(', ')}`);
-            console.log(`Sample record: ${JSON.stringify(data[0]).substring(0, 500)}`);
-          }
-        } catch (e) {
-          tablesChecked.push(`${table.name} (${keyType}): exception`);
-        }
-      }
-    }
-
-    // If we still have nothing, try to discover tables by querying information_schema
-    if (completions.length === 0) {
+    if (scholarApiUrl && sisterAppApiKey) {
       try {
-        const schemaClient = createClient(scholarUrl, scholarKeysToTry[0].key);
+        console.log('Strategy 1: Requesting completions via Scholar API...');
+        
+        // Build student identifiers to send to Scholar
+        const studentIdentifiers = teacherStudents.map(s => ({
+          id: s.id,
+          email: s.email,
+          name: `${s.first_name} ${s.last_name}`,
+          user_id: s.user_id,
+        }));
 
-        // Try RPC call to list tables (may not be available)
-        const { data: schemaData, error: schemaError } = await schemaClient
-          .rpc('get_tables_list')
-          .limit(50);
+        const apiResponse = await fetch(scholarApiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': sisterAppApiKey,
+            ...(scholarAnonKey ? { 'apikey': scholarAnonKey } : {}),
+          },
+          body: JSON.stringify({
+            type: 'pull_completions',
+            data: {
+              source: 'nycologic_ai',
+              since: sinceISO,
+              student_identifiers: studentIdentifiers,
+              class_id: class_id || null,
+            },
+          }),
+        });
 
-        if (!schemaError && schemaData) {
-          console.log('Scholar tables via RPC:', JSON.stringify(schemaData).substring(0, 500));
-          tablesChecked.push(`rpc:get_tables_list: ${JSON.stringify(schemaData).substring(0, 200)}`);
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          console.log(`Scholar API response: ${JSON.stringify(apiData).substring(0, 500)}`);
+          
+          if (apiData.completions && Array.isArray(apiData.completions) && apiData.completions.length > 0) {
+            completions = apiData.completions;
+            sourceMethod = 'scholar_api';
+            diagnostics.push(`scholar_api: ${completions.length} completions returned`);
+          } else if (apiData.students && Array.isArray(apiData.students)) {
+            // Scholar might return student-level data instead
+            for (const student of apiData.students) {
+              if (student.grades && Array.isArray(student.grades)) {
+                for (const grade of student.grades) {
+                  completions.push({
+                    ...grade,
+                    student_email: student.email,
+                    student_name: student.full_name || student.name,
+                    external_id: student.external_id || student.id,
+                  });
+                }
+              }
+            }
+            if (completions.length > 0) {
+              sourceMethod = 'scholar_api_students';
+              diagnostics.push(`scholar_api_students: ${completions.length} grades from ${apiData.students.length} students`);
+            }
+          } else {
+            diagnostics.push(`scholar_api: ok but no completions (keys: ${Object.keys(apiData).join(',')})`);
+          }
+        } else {
+          diagnostics.push(`scholar_api: HTTP ${apiResponse.status}`);
         }
       } catch (e) {
-        // Not available, that's fine
+        diagnostics.push(`scholar_api: ${(e as Error).message}`);
+        console.error('Scholar API pull failed:', e);
+      }
+    } else {
+      diagnostics.push('scholar_api: not configured (missing URL or API key)');
+    }
+
+    // ── Strategy 2: Query Scholar's external_students table ──
+    if (completions.length === 0) {
+      const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
+      
+      if (scholarUrl && scholarAnonKey) {
+        try {
+          console.log('Strategy 2: Querying Scholar external_students...');
+          const scholarClient = createClient(scholarUrl, scholarAnonKey);
+
+          // Query external_students which we know exists on Scholar
+          const { data: extStudents, error: extError } = await scholarClient
+            .from('external_students')
+            .select('*')
+            .gte('updated_at', sinceISO)
+            .limit(500);
+
+          if (!extError && extStudents && extStudents.length > 0) {
+            console.log(`Found ${extStudents.length} external_students records`);
+            
+            // Extract grade data from external_students
+            for (const ext of extStudents) {
+              if (ext.grades && typeof ext.grades === 'object') {
+                const grades = Array.isArray(ext.grades) ? ext.grades : [ext.grades];
+                for (const grade of grades) {
+                  completions.push({
+                    ...grade,
+                    student_email: ext.email,
+                    student_name: ext.full_name || `${ext.first_name || ''} ${ext.last_name || ''}`.trim(),
+                    external_id: ext.external_id,
+                    overall_average: ext.overall_average,
+                  });
+                }
+              }
+              
+              // If no embedded grades but has overall_average, create a summary entry
+              if (ext.overall_average && (!ext.grades || (Array.isArray(ext.grades) && ext.grades.length === 0))) {
+                completions.push({
+                  student_email: ext.email,
+                  student_name: ext.full_name || `${ext.first_name || ''} ${ext.last_name || ''}`.trim(),
+                  external_id: ext.external_id,
+                  score: ext.overall_average,
+                  topic_name: 'Scholar Overall Average',
+                  completed_at: ext.updated_at,
+                });
+              }
+            }
+            
+            if (completions.length > 0) {
+              sourceMethod = 'external_students';
+              diagnostics.push(`external_students: ${completions.length} entries from ${extStudents.length} students`);
+            } else {
+              diagnostics.push(`external_students: ${extStudents.length} records but no grade data embedded`);
+            }
+          } else {
+            diagnostics.push(`external_students: ${extError ? extError.message : '0 rows'}`);
+          }
+
+          // Also try game_sessions which we know exists
+          if (completions.length === 0) {
+            const { data: gameSessions, error: gameError } = await scholarClient
+              .from('game_sessions')
+              .select('*')
+              .gte('completed_at', sinceISO)
+              .order('completed_at', { ascending: false })
+              .limit(500);
+
+            if (!gameError && gameSessions && gameSessions.length > 0) {
+              completions = gameSessions;
+              sourceMethod = 'game_sessions';
+              diagnostics.push(`game_sessions: ${gameSessions.length} rows`);
+              console.log(`Sample game_session: ${JSON.stringify(gameSessions[0]).substring(0, 500)}`);
+            } else {
+              diagnostics.push(`game_sessions: ${gameError ? gameError.message : '0 rows'}`);
+            }
+          }
+        } catch (e) {
+          diagnostics.push(`direct_query: ${(e as Error).message}`);
+        }
+      } else {
+        diagnostics.push('direct_query: Scholar URL or anon key not configured');
       }
     }
 
-    console.log(`Tables checked: ${tablesChecked.join(' | ')}`);
-    console.log(`Total completions found: ${completions.length} from ${sourceTable || 'none'} via ${sourceKeyType} key`);
+    console.log(`Diagnostics: ${diagnostics.join(' | ')}`);
+    console.log(`Total completions: ${completions.length} via ${sourceMethod || 'none'}`);
 
-    // Match completions to our students and create grade_history entries
+    // ── Match completions to local students and create grade_history ──
     let gradesCreated = 0;
-    let matchedStudents = new Set<string>();
+    const matchedStudents = new Set<string>();
     let skippedDuplicates = 0;
     let skippedNoScore = 0;
 
     for (const completion of completions) {
-      // Try to match to a local student by multiple fields
       const email = (completion.student_email || completion.email || completion.user_email || '').toLowerCase();
       const userId = completion.user_id || completion.student_user_id || '';
       const externalId = completion.external_id || completion.student_external_id || completion.nycologic_student_id || '';
-      
-      let matchedStudent = emailToStudent.get(email) 
-        || userIdToStudent.get(userId)
-        || idToStudent.get(externalId);
+      const name = (completion.student_name || completion.full_name || '').toLowerCase().trim();
 
-      // Try matching by name as fallback
-      if (!matchedStudent && (completion.student_name || completion.full_name)) {
-        const name = (completion.student_name || completion.full_name || '').toLowerCase().trim();
-        for (const s of teacherStudents) {
-          const fullName = `${s.first_name} ${s.last_name}`.toLowerCase().trim();
-          if (fullName === name) {
-            matchedStudent = s;
-            break;
-          }
-        }
-      }
+      let matchedStudent = emailToStudent.get(email)
+        || idToStudent.get(userId)
+        || idToStudent.get(externalId)
+        || nameToStudent.get(name);
 
       if (!matchedStudent) continue;
-
       matchedStudents.add(matchedStudent.id);
 
-      // Determine the score and topic from various possible field names
-      const score = completion.score ?? completion.percentage ?? completion.grade 
-        ?? completion.overall_score ?? completion.final_score ?? completion.result_score ?? null;
-      const topicName = completion.topic_name || completion.topic || completion.subject 
+      // Determine score and topic
+      const score = completion.score ?? completion.percentage ?? completion.grade
+        ?? completion.overall_score ?? completion.final_score ?? null;
+      const topicName = completion.topic_name || completion.topic || completion.subject
         || completion.activity_name || completion.game_name || completion.assignment_title
         || completion.title || completion.lesson_name || 'Scholar Practice';
-      const completedAt = completion.completed_at || completion.submitted_at 
+      const completedAt = completion.completed_at || completion.submitted_at
         || completion.created_at || completion.updated_at;
-      const questionsCorrect = completion.questions_correct || completion.correct_count 
-        || completion.correct_answers || 0;
-      const questionsAttempted = completion.questions_attempted || completion.total_questions 
-        || completion.question_count || 0;
+      const questionsCorrect = completion.questions_correct || completion.correct_count || 0;
+      const questionsAttempted = completion.questions_attempted || completion.total_questions || 0;
 
-      // Calculate score from questions if no direct score
       let finalScore = score;
       if (finalScore === null && questionsAttempted > 0 && questionsCorrect >= 0) {
         finalScore = Math.round((questionsCorrect / questionsAttempted) * 100);
@@ -236,7 +287,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Check for duplicates
+      // Duplicate check
       const { data: existing } = await supabase
         .from('grade_history')
         .select('id')
@@ -252,10 +303,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Create grade_history entry
       const justification = questionsAttempted > 0
-        ? `Scholar practice: ${questionsCorrect}/${questionsAttempted} correct (pulled from Scholar - ${sourceTable})`
-        : `Scholar practice session: ${topicName} (pulled from Scholar)`;
+        ? `Scholar practice: ${questionsCorrect}/${questionsAttempted} correct (pulled via ${sourceMethod})`
+        : `Scholar practice: ${topicName} (pulled via ${sourceMethod})`;
 
       const { error: insertError } = await supabase
         .from('grade_history')
@@ -272,18 +322,18 @@ Deno.serve(async (req) => {
       if (!insertError) {
         gradesCreated++;
       } else {
-        console.error(`Failed to insert grade for ${matchedStudent.first_name}:`, insertError);
+        console.error(`Insert failed for ${matchedStudent.first_name}:`, insertError);
       }
     }
 
-    // Log the pull action
+    // Log the pull
     try {
       await supabase.from('sister_app_sync_log').insert({
         teacher_id: user.id,
         action: 'pull_completions',
         data: {
-          source_table: sourceTable,
-          tables_checked: tablesChecked,
+          source_method: sourceMethod,
+          diagnostics,
           completions_found: completions.length,
           students_matched: matchedStudents.size,
           grades_created: gradesCreated,
@@ -291,31 +341,28 @@ Deno.serve(async (req) => {
           skipped_no_score: skippedNoScore,
           since_date: sinceISO,
           class_id: class_id || 'all',
-          source_key_type: sourceKeyType,
-          used_service_role: sourceKeyType === 'service_role',
         },
         processed: true,
         processed_at: new Date().toISOString(),
       });
     } catch (logErr) {
-      console.error('Non-fatal: Failed to log pull action:', logErr);
+      console.error('Non-fatal log error:', logErr);
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        source: sourceTable || 'none',
-        source_key_type: sourceKeyType,
-        tables_checked: tablesChecked,
+        source: sourceMethod || 'none',
+        diagnostics,
         completions_found: completions.length,
         students_matched: matchedStudents.size,
         grades_created: gradesCreated,
         duplicates_skipped: skippedDuplicates,
         message: gradesCreated > 0
-          ? `Pulled ${gradesCreated} new grades from Scholar for ${matchedStudents.size} students`
+          ? `Pulled ${gradesCreated} new grades for ${matchedStudents.size} students`
           : completions.length > 0
             ? `Found ${completions.length} completions but ${skippedDuplicates} were already recorded`
-            : `No completions found in Scholar (checked: ${tablesChecked.map(t => t.split(':')[0]).join(', ')})`,
+            : `No completions found from Scholar (tried: ${diagnostics.map(d => d.split(':')[0]).join(', ')})`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
