@@ -29,6 +29,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface GradeEntry {
   topic_name: string;
@@ -47,6 +48,8 @@ interface MisconceptionEntry {
 
 interface StudentSyncData {
   student_id: string;
+  first_name: string;
+  last_name: string;
   student_name: string;
   student_email: string | null;
   class_id: string;
@@ -66,6 +69,7 @@ interface ScholarSyncDataDetailsProps {
 
 export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps) {
   const { user } = useAuth();
+  const { getDisplayName } = useStudentNames();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -168,7 +172,9 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
         const classData = student.classes as any;
         studentSyncData.push({
           student_id: student.id,
-          student_name: `${student.first_name} ${student.last_name}`,
+          first_name: student.first_name,
+          last_name: student.last_name,
+          student_name: '', // Will be computed via pseudonym at render time
           student_email: student.email,
           class_id: student.class_id,
           class_name: classData?.name || 'Unknown',
@@ -215,12 +221,13 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
     if (!searchTerm.trim()) return data.students;
     
     const term = searchTerm.toLowerCase();
-    return data.students.filter(s => 
-      s.student_name.toLowerCase().includes(term) ||
-      s.class_name.toLowerCase().includes(term) ||
-      s.grades.some(g => g.topic_name.toLowerCase().includes(term))
-    );
-  }, [data?.students, searchTerm]);
+    return data.students.filter(s => {
+      const displayName = getDisplayName(s.student_id, s.first_name, s.last_name);
+      return displayName.toLowerCase().includes(term) ||
+        s.class_name.toLowerCase().includes(term) ||
+        s.grades.some(g => g.topic_name.toLowerCase().includes(term));
+    });
+  }, [data?.students, searchTerm, getDisplayName]);
 
   const toggleStudentSelection = (studentId: string) => {
     const newSelected = new Set(selectedStudents);
@@ -437,7 +444,7 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                               )}
                               <div>
-                                <p className="font-medium">{student.student_name}</p>
+                                <p className="font-medium">{getDisplayName(student.student_id, student.first_name, student.last_name)}</p>
                               <p className="text-xs text-muted-foreground">{student.class_name}</p>
                             </div>
                           </div>
@@ -615,9 +622,10 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 <div>
                   <h4 className="font-medium text-sm">Data Sent to Scholar AI</h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    When you sync, Scholar receives: student names, emails (for linking accounts), grades with topics and standards, 
+                    When you sync, Scholar receives: student identifiers, grades with topics and standards, 
                     misconceptions with severity levels, weak topics needing remediation, and personalized practice recommendations.
                     Scholar uses this to auto-assign targeted practice and award XP/coins for improvement.
+                    Student names and emails are protected by FERPA pseudonyms in this view.
                   </p>
                 </div>
               </div>

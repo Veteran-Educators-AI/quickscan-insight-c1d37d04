@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface InboundEventData {
   activity_type?: string;
@@ -80,6 +81,7 @@ interface InboundScholarDataPanelProps {
 
 export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProps) {
   const { user } = useAuth();
+  const { getDisplayName } = useStudentNames();
   const queryClient = useQueryClient();
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
@@ -104,7 +106,7 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
     enabled: !!user,
   });
 
-  // Fetch student names for display
+  // Fetch student data for pseudonym display (no real names stored in map)
   const { data: studentMap } = useQuery({
     queryKey: ['student-names-map', user?.id],
     queryFn: async () => {
@@ -114,8 +116,8 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
       
       if (error) throw error;
       
-      const map: Record<string, string> = {};
-      data?.forEach(s => { map[s.id] = `${s.first_name} ${s.last_name}`; });
+      const map: Record<string, { first_name: string; last_name: string }> = {};
+      data?.forEach(s => { map[s.id] = { first_name: s.first_name, last_name: s.last_name }; });
       return map;
     },
     enabled: !!user,
@@ -225,7 +227,9 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
       // Pick a random student from the map if available
       const studentIds = Object.keys(studentMap || {});
       const testStudentId = studentIds.length > 0 ? studentIds[0] : null;
-      const testStudentName = testStudentId ? studentMap?.[testStudentId] : 'Test Student';
+      const testStudentName = testStudentId && studentMap?.[testStudentId] 
+        ? getDisplayName(testStudentId, studentMap[testStudentId].first_name, studentMap[testStudentId].last_name)
+        : 'Test Student';
 
       const testScore = Math.floor(Math.random() * 31) + 70; // 70-100
       const testTopicName = 'Test Topic – Auto-Integration Check';
@@ -548,7 +552,11 @@ export function InboundScholarDataPanel({ classId }: InboundScholarDataPanelProp
                                 )}
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                {event.data?.student_name || studentMap?.[event.student_id || ''] || 'Unknown Student'} • {event.data?.topic_name || event.data?.activity_name || event.data?.assignment_title || 'No details'}
+                                {(() => {
+                                  const sid = event.student_id || '';
+                                  const s = studentMap?.[sid];
+                                  return s ? getDisplayName(sid, s.first_name, s.last_name) : 'Unknown Student';
+                                })()} • {event.data?.topic_name || event.data?.activity_name || event.data?.assignment_title || 'No details'}
                                 {event.data?.questions_correct !== undefined && event.data?.questions_attempted !== undefined && (
                                   <span className="ml-1">({event.data.questions_correct}/{event.data.questions_attempted} correct)</span>
                                 )}
