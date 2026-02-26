@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StudentReportDialog } from '@/components/reports/StudentReportDialog';
 import { BatchRemediationEmailDialog } from '@/components/reports/BatchRemediationEmailDialog';
 import { useStrugglingStudents } from '@/hooks/useStrugglingStudents';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import { cn } from '@/lib/utils';
 
 interface StudentsNeedingHelpWidgetProps {
@@ -38,6 +39,7 @@ function scoreToLevel(score: number): string {
 export function StudentsNeedingHelpWidget({ className, limit = 5 }: StudentsNeedingHelpWidgetProps) {
   const [selectedStudent, setSelectedStudent] = useState<{ id: string; name: string } | null>(null);
   const [showBatchEmailDialog, setShowBatchEmailDialog] = useState(false);
+  const { getDisplayName } = useStudentNames();
 
   // Use optimized hook - replaces multiple sequential queries with single RPC call
   const { data: strugglingStudents, isLoading } = useStrugglingStudents(limit);
@@ -127,7 +129,7 @@ export function StudentsNeedingHelpWidget({ className, limit = 5 }: StudentsNeed
                   key={student.id}
                   onClick={() => setSelectedStudent({ 
                     id: student.id, 
-                    name: `${student.firstName} ${student.lastName}` 
+                    name: getDisplayName(student.id, student.firstName, student.lastName)
                   })}
                   className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer group"
                 >
@@ -140,7 +142,7 @@ export function StudentsNeedingHelpWidget({ className, limit = 5 }: StudentsNeed
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-sm truncate">
-                        {student.lastName}, {student.firstName}
+                        {getDisplayName(student.id, student.firstName, student.lastName)}
                       </p>
                       {getTrendIcon(student.trend)}
                     </div>
