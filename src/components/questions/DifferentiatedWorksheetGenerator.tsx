@@ -1198,6 +1198,7 @@ const toggleStudent = (studentId: string) => {
                 formVariation: form,
                 formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
                 includeHints,
+                includeAnswerKey: true,
               },
             });
             warmUpQuestions = warmUpData?.questions || [];
@@ -1227,6 +1228,7 @@ const toggleStudent = (studentId: string) => {
               formVariation: form,
               formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
               includeHints,
+              includeAnswerKey: true,
             },
           });
           
@@ -1968,6 +1970,7 @@ const toggleStudent = (studentId: string) => {
                 formVariation: form,
                 formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
                 includeHints,
+                includeAnswerKey: true,
               },
             });
             warmUpQuestions = warmUpData?.questions || [];
@@ -1995,6 +1998,7 @@ const toggleStudent = (studentId: string) => {
               formVariation: form,
               formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
               includeHints,
+              includeAnswerKey: true,
             },
           });
 
@@ -2074,7 +2078,8 @@ const toggleStudent = (studentId: string) => {
               worksheetMode: 'warmup',
               formVariation: form,
               formSeed: Date.now() + form.charCodeAt(0) * 1000 + level.charCodeAt(0), // New seed for variation
-              includeHints,
+               includeHints,
+               includeAnswerKey: true,
             },
           });
           warmUpQuestions = warmUpData?.questions || [];
@@ -2102,6 +2107,7 @@ const toggleStudent = (studentId: string) => {
             formVariation: form,
             formSeed: Date.now() + form.charCodeAt(0) * 1000 + level.charCodeAt(0), // New seed for variation
             includeHints,
+            includeAnswerKey: true,
           },
         });
 
@@ -2174,6 +2180,7 @@ const toggleStudent = (studentId: string) => {
           formVariation: form,
           formSeed: Date.now(), // New seed for unique question
           includeHints,
+          includeAnswerKey: true,
         },
       });
 
@@ -3920,6 +3927,65 @@ const toggleStudent = (studentId: string) => {
                 }}
               >
                 {previewData.students.map((student, index) => renderStudentPreview(student, index))}
+                
+                {/* Answer Key Preview Section */}
+                <div className="w-full max-w-[8.5in] mx-auto bg-white border-2 border-red-300 rounded-lg shadow-md mt-8 p-6 print-worksheet relative">
+                  <div className="absolute top-2 right-2 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded border border-red-300 uppercase">
+                    🔒 Teacher Only
+                  </div>
+                  <div className="text-center mb-4 pb-3 border-b-2 border-gray-300">
+                    <h2 className="text-xl font-bold">SOLUTIONS & ANSWER KEY</h2>
+                    <p className="text-sm text-muted-foreground">Teacher Reference Copy — Do not distribute to students</p>
+                    <p className="text-xs text-muted-foreground mt-1">Generated: {new Date().toLocaleDateString()}</p>
+                  </div>
+                  
+                  {Object.entries(previewData.questions).map(([cacheKey, questions]) => {
+                    const [form, level] = cacheKey.split('-');
+                    const hasAnyAnswers = [...(questions.warmUp || []), ...(questions.main || [])].some(q => q.answer);
+                    
+                    if (!hasAnyAnswers) return null;
+                    
+                    return (
+                      <div key={`ak-${cacheKey}`} className="mb-6">
+                        <div className="bg-gray-800 text-white px-3 py-1.5 rounded text-sm font-bold mb-3">
+                          Level {level} — {getLevelDescription(level as AdvancementLevel)}
+                          {previewData.students.length > 1 && ` | Form ${form}`}
+                        </div>
+                        
+                        {questions.warmUp && questions.warmUp.length > 0 && questions.warmUp.some(q => q.answer) && (
+                          <div className="mb-3">
+                            <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Warm-Up</p>
+                            {questions.warmUp.map((q, idx) => q.answer && (
+                              <div key={`ak-wu-${idx}`} className="mb-2 pl-3 border-l-3 border-blue-400">
+                                <p className="text-xs text-muted-foreground">W{idx + 1}. {renderMathText(fixEncodingCorruption(q.question)).toString().substring(0, 80)}...</p>
+                                <p className="text-sm text-green-700 font-semibold mt-0.5">✓ {renderMathText(fixEncodingCorruption(q.answer))}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {questions.main && questions.main.length > 0 && questions.main.some(q => q.answer) && (
+                          <div>
+                            <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Practice Questions</p>
+                            {questions.main.map((q, idx) => q.answer && (
+                              <div key={`ak-main-${idx}`} className="mb-2 pl-3 border-l-3 border-emerald-400">
+                                <p className="text-xs text-muted-foreground">{idx + 1}. {renderMathText(fixEncodingCorruption(q.question)).toString().substring(0, 80)}...</p>
+                                <p className="text-sm text-green-700 font-semibold mt-0.5 whitespace-pre-line">✓ {renderMathText(fixEncodingCorruption(q.answer))}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  
+                  {!Object.values(previewData.questions).some(qs => [...(qs.warmUp || []), ...(qs.main || [])].some(q => q.answer)) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">No answer solutions were generated for these questions.</p>
+                      <p className="text-xs mt-1">Solutions will appear in the downloaded PDF when available.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </DialogContent>
