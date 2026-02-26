@@ -54,9 +54,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Prefer service role key for full access, fall back to anon key
-    const scholarKey = scholarServiceRoleKey || scholarAnonKey;
-    if (!scholarKey) {
+    // Try service role key first, then gracefully fall back to anon key
+    const scholarKeysToTry = [
+      { type: 'service_role' as const, key: scholarServiceRoleKey },
+      { type: 'anon' as const, key: scholarAnonKey },
+    ].filter((entry): entry is { type: 'service_role' | 'anon'; key: string } => Boolean(entry.key));
+
+    if (scholarKeysToTry.length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: 'Scholar keys not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -99,11 +103,9 @@ Deno.serve(async (req) => {
     sinceDate.setDate(sinceDate.getDate() - since_days);
     const sinceISO = sinceDate.toISOString();
 
-    // Create Scholar client with service role key for full access
-    const scholarClient = createClient(scholarUrl, scholarKey);
-    
     let completions: any[] = [];
     let sourceTable = '';
+    let sourceKeyType: 'service_role' | 'anon' | 'none' = 'none';
     const tablesChecked: string[] = [];
 
     // Try multiple possible table names on Scholar's side
@@ -122,40 +124,50 @@ Deno.serve(async (req) => {
       { name: 'external_students', dateCol: 'updated_at' },
     ];
 
-    for (const table of tablesToTry) {
+    for (const { type: keyType, key } of scholarKeysToTry) {
       if (completions.length > 0) break;
-      
-      try {
-        const { data, error } = await scholarClient
-          .from(table.name)
-          .select('*')
-          .gte(table.dateCol, sinceISO)
-          .order(table.dateCol, { ascending: false })
-          .limit(500);
-        
-        tablesChecked.push(`${table.name}: ${error ? error.message : `${data?.length || 0} rows`}`);
-        
-        if (!error && data && data.length > 0) {
-          completions = data;
-          sourceTable = table.name;
-          console.log(`✅ Found ${data.length} records from Scholar table: ${table.name}`);
-          // Log sample record structure
-          console.log(`Sample record keys: ${Object.keys(data[0]).join(', ')}`);
-          console.log(`Sample record: ${JSON.stringify(data[0]).substring(0, 500)}`);
+
+      const scholarClient = createClient(scholarUrl, key);
+      console.log(`Trying Scholar pull with ${keyType} key`);
+
+      for (const table of tablesToTry) {
+        if (completions.length > 0) break;
+
+        try {
+          const { data, error } = await scholarClient
+            .from(table.name)
+            .select('*')
+            .gte(table.dateCol, sinceISO)
+            .order(table.dateCol, { ascending: false })
+            .limit(500);
+
+          tablesChecked.push(`${table.name} (${keyType}): ${error ? error.message : `${data?.length || 0} rows`}`);
+
+          if (!error && data && data.length > 0) {
+            completions = data;
+            sourceTable = table.name;
+            sourceKeyType = keyType;
+            console.log(`✅ Found ${data.length} records from Scholar table: ${table.name} via ${keyType} key`);
+            // Log sample record structure
+            console.log(`Sample record keys: ${Object.keys(data[0]).join(', ')}`);
+            console.log(`Sample record: ${JSON.stringify(data[0]).substring(0, 500)}`);
+          }
+        } catch (e) {
+          tablesChecked.push(`${table.name} (${keyType}): exception`);
         }
-      } catch (e) {
-        tablesChecked.push(`${table.name}: exception`);
       }
     }
 
     // If we still have nothing, try to discover tables by querying information_schema
     if (completions.length === 0) {
       try {
+        const schemaClient = createClient(scholarUrl, scholarKeysToTry[0].key);
+
         // Try RPC call to list tables (may not be available)
-        const { data: schemaData, error: schemaError } = await scholarClient
+        const { data: schemaData, error: schemaError } = await schemaClient
           .rpc('get_tables_list')
           .limit(50);
-        
+
         if (!schemaError && schemaData) {
           console.log('Scholar tables via RPC:', JSON.stringify(schemaData).substring(0, 500));
           tablesChecked.push(`rpc:get_tables_list: ${JSON.stringify(schemaData).substring(0, 200)}`);
@@ -166,7 +178,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Tables checked: ${tablesChecked.join(' | ')}`);
-    console.log(`Total completions found: ${completions.length} from ${sourceTable || 'none'}`);
+    console.log(`Total completions found: ${completions.length} from ${sourceTable || 'none'} via ${sourceKeyType} key`);
 
     // Match completions to our students and create grade_history entries
     let gradesCreated = 0;
@@ -279,7 +291,8 @@ Deno.serve(async (req) => {
           skipped_no_score: skippedNoScore,
           since_date: sinceISO,
           class_id: class_id || 'all',
-          used_service_role: !!scholarServiceRoleKey,
+          source_key_type: sourceKeyType,
+          used_service_role: sourceKeyType === 'service_role',
         },
         processed: true,
         processed_at: new Date().toISOString(),
@@ -292,6 +305,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         source: sourceTable || 'none',
+        source_key_type: sourceKeyType,
         tables_checked: tablesChecked,
         completions_found: completions.length,
         students_matched: matchedStudents.size,
