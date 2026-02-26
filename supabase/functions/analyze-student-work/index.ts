@@ -720,78 +720,130 @@ function computeGradeFromBooleans(
     has_meaningful_content,
   } = answers;
 
-  // ─── GATEKEEPER CHECKS → 0% (must pass ALL to get any marks) ───
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NYS REGENTS-ALIGNED GRADING RUBRIC (55-100 scale)
+  //
+  // SCALE PHILOSOPHY (lower end of each interval = minimum requirement):
+  //   55      = Grade floor — no meaningful work, off-topic, or non-academic
+  //   55-64   = Minimal/failing — attempted but fundamentally wrong
+  //   65      = Barely passing — just enough effort to pass
+  //   65-69   = Passing with minimal effort — some relevant work but major gaps
+  //   70-80   = Barely work shown — correct direction but thin on detail
+  //     70    = Lower end: minimal work shown, some relevance
+  //     75    = Mid: some steps shown, developing understanding
+  //     80    = Upper end: work shown but lacks depth/completeness
+  //   80-90   = Strong understanding — detailed work demonstrating concepts
+  //     80    = Lower end: solid approach with some gaps
+  //     85    = Mid: strong conceptual understanding with good detail
+  //     90    = Upper end: thorough work with minor issues only
+  //   90-100  = Total mastery — complete, correct, organized work
+  //     90    = Lower end: correct answer with good work shown
+  //     93    = Mid: correct, complete, well-organized
+  //     95    = High: excellent mastery with thorough steps
+  //     97-100= Perfect: flawless execution, complete mastery
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── GATEKEEPER CHECKS → 0% (non-academic content bypasses floor) ───
   if (!is_academic_assignment) {
-    return { grade: 0, regentsScore: 0, tier: "NOT_ACADEMIC" }; // 0%
+    return { grade: 0, regentsScore: 0, tier: "NOT_ACADEMIC" };
   }
   if (!student_work_present) {
-    return { grade: 0, regentsScore: 0, tier: "NO_RESPONSE" }; // no work → 0%
+    return { grade: 0, regentsScore: 0, tier: "NO_RESPONSE" };
   }
+
+  // ─── FLOOR CHECKS → 55% (grade floor for submitted but useless work) ───
   if (!is_relevant_to_question) {
-    return { grade: 0, regentsScore: 0, tier: "OFF_TOPIC" }; // 0%
+    return { grade: 55, regentsScore: 0, tier: "OFF_TOPIC" };
   }
   if (!has_meaningful_content) {
-    return { grade: 0, regentsScore: 0, tier: "NO_MEANINGFUL_CONTENT" }; // 0%
+    return { grade: 55, regentsScore: 0, tier: "NO_MEANINGFUL_CONTENT" };
   }
 
-  // ─── CORRECT ANSWER (5 tiers: 97, 95, 93, 91, 88) ───
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 5: MASTERY (90-100) — Correct answer, total mastery shown
+  // ═══════════════════════════════════════════════════════════════════════════
   if (is_answer_correct) {
     if (is_work_shown && is_work_complete && is_work_organized) {
-      return { grade: 97, regentsScore: 4, tier: "PERFECT" }; // 97
+      return { grade: 97, regentsScore: 4, tier: "MASTERY_PERFECT" };
+      // 97: Flawless — correct answer, all steps, perfectly organized
     }
     if (is_work_shown && is_work_complete && !is_work_organized) {
-      return { grade: 95, regentsScore: 4, tier: "NEAR_PERFECT" }; // 95
+      return { grade: 95, regentsScore: 4, tier: "MASTERY_COMPLETE" };
+      // 95: Complete mastery — all steps shown, could be neater
     }
     if (is_work_shown && !is_work_complete && is_work_organized) {
-      return { grade: 93, regentsScore: 4, tier: "EXCELLENT" }; // 93
+      return { grade: 93, regentsScore: 4, tier: "MASTERY_STRONG" };
+      // 93: Strong mastery — organized but skipped a minor step
     }
     if (is_work_shown && !is_work_complete && !is_work_organized) {
-      return { grade: 91, regentsScore: 3, tier: "VERY_GOOD" }; // 91
+      return { grade: 90, regentsScore: 4, tier: "MASTERY_BASIC" };
+      // 90: Lower mastery — correct answer, some work, but incomplete/messy
     }
-    // Correct answer but no work shown
-    return { grade: 88, regentsScore: 3, tier: "GOOD" }; // 88
+    // Correct answer but NO work shown at all
+    return { grade: 85, regentsScore: 3, tier: "CORRECT_NO_WORK" };
+    // 85: Strong understanding implied by correct answer, but no evidence of process
   }
 
-  // ─── INCORRECT ANSWER + VALID APPROACH (4 tiers: 83, 80, 78, 75) ───
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 4: STRONG UNDERSTANDING (80-89) — Wrong answer but valid approach + detail
+  // ═══════════════════════════════════════════════════════════════════════════
   if (is_approach_valid) {
-    if (has_computational_errors && is_work_shown) {
-      return { grade: 83, regentsScore: 3, tier: "ADEQUATE" }; // 83
+    if (is_work_shown && is_work_complete && is_work_organized && has_computational_errors) {
+      return { grade: 88, regentsScore: 3, tier: "STRONG_COMPUTATIONAL_ERROR" };
+      // 88: Right method, complete organized work, just a math mistake
     }
-    if (has_computational_errors && !is_work_shown) {
-      return { grade: 80, regentsScore: 2, tier: "FAIR" }; // 80
+    if (is_work_shown && is_work_complete && has_computational_errors) {
+      return { grade: 85, regentsScore: 3, tier: "STRONG_WITH_ERRORS" };
+      // 85: Complete work shown with valid approach, arithmetic errors
     }
-    if (!has_computational_errors && has_conceptual_understanding) {
-      return { grade: 78, regentsScore: 2, tier: "PARTIAL" }; // 78
+    if (is_work_shown && is_work_organized && has_conceptual_understanding) {
+      return { grade: 83, regentsScore: 3, tier: "STRONG_UNDERSTANDING" };
+      // 83: Organized work, valid approach, demonstrates concept knowledge
     }
-    return { grade: 75, regentsScore: 2, tier: "DEVELOPING" }; // 75
+    if (is_work_shown && has_conceptual_understanding) {
+      return { grade: 80, regentsScore: 2, tier: "ADEQUATE_UNDERSTANDING" };
+      // 80: Work shown with valid approach and understanding, but messy/incomplete
+    }
+    // Valid approach but missing detail
+    return { grade: 78, regentsScore: 2, tier: "DEVELOPING_APPROACH" };
+    // 78: Right method started but not enough shown
   }
 
-  // ─── INCORRECT ANSWER + INVALID APPROACH — grade based on effort + understanding ───
-  // Student must show CONCEPTUAL UNDERSTANDING to earn 50%+.
-  // Just attempting with everything wrong = minimal credit only.
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 3: BARELY WORK SHOWN (70-79) — Some effort, wrong approach
+  // ═══════════════════════════════════════════════════════════════════════════
   if (has_conceptual_understanding) {
-    // Shows understanding of the concept, but wrong approach and wrong answer
     if (is_work_shown && is_work_organized) {
-      return { grade: 70, regentsScore: 1, tier: "STRUGGLING" }; // 70 — concept + work + organized
+      return { grade: 75, regentsScore: 2, tier: "PARTIAL_ORGANIZED" };
+      // 75: Shows concept understanding, organized attempt, wrong approach
     }
-    if (is_work_shown && !is_work_organized) {
-      return { grade: 60, regentsScore: 1, tier: "DEVELOPING_CONCEPT" }; // 60 — concept + work shown
+    if (is_work_shown) {
+      return { grade: 72, regentsScore: 1, tier: "PARTIAL_EFFORT" };
+      // 72: Shows some understanding and work, but disorganized/incomplete
     }
-    // Has concept but didn't show work
-    return { grade: 50, regentsScore: 1, tier: "EMERGING" }; // 50 — concept only
+    // Understands concept but didn't show work
+    return { grade: 70, regentsScore: 1, tier: "CONCEPT_ONLY" };
+    // 70: Lower end — grasps the concept but barely any work shown
   }
 
-  // No conceptual understanding — everything wrong, minimal credit for effort only
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 2: BARELY PASSING (65-69) — Just enough effort to pass
+  // ═══════════════════════════════════════════════════════════════════════════
   if (is_work_shown && is_work_organized) {
-    return { grade: 35, regentsScore: 0, tier: "BASIC_EFFORT" }; // 35 — organized work but all wrong
+    return { grade: 67, regentsScore: 1, tier: "MINIMAL_ORGANIZED" };
+    // 67: Organized attempt but no valid approach or understanding
   }
   if (is_work_shown) {
-    return { grade: 25, regentsScore: 0, tier: "ATTEMPTED" }; // 25 — showed work but all wrong
+    return { grade: 65, regentsScore: 1, tier: "BARELY_PASSING" };
+    // 65: Barely passing — showed some work but everything is wrong
   }
 
-  // ─── EVERYTHING WRONG, NO WORK SHOWN → 0% ───
-  return { grade: 0, regentsScore: 0, tier: "MINIMAL" }; // 0%
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TIER 1: FAILING (55-64) — Submitted but fundamentally insufficient
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Meaningful content exists (passed gatekeeper) but no work shown, no understanding
+  return { grade: 55, regentsScore: 0, tier: "FAILING_MINIMAL" };
+  // 55: Grade floor — submitted something relevant but no real attempt
 }
 
 function buildGradingPrompt(opts: {
@@ -837,8 +889,18 @@ function buildGradingPrompt(opts: {
   const system = `You are a calibrated NYS Regents grading engine. You answer FACTUAL QUESTIONS about student work.
 
 Your job is NOT to decide a grade. Your job is to answer 10 specific YES/NO questions about the student's work.
-The grade will be computed automatically from your answers. Focus on ACCURACY of each answer.
-The student MUST get something right to earn ANY marks — do NOT give credit where none is deserved.
+The grade will be computed automatically from your answers using this NYS Regents-aligned rubric (55-100 scale):
+
+  GRADE SCALE (for your awareness — DO NOT output a grade, just answer the boolean questions accurately):
+  • 90-100 (Regents 4) = MASTERY — Correct answer + work shown + organized. Total command of the concept.
+  • 80-89  (Regents 3) = STRONG UNDERSTANDING — Valid approach, detailed work, demonstrates concepts even if answer is wrong.
+  • 70-79  (Regents 2) = BARELY WORK SHOWN — Some relevant work but thin on detail, developing understanding.
+  • 65-69  (Regents 1) = BARELY PASSING — Just enough effort. Work shown but fundamentally wrong, no real understanding.
+  • 55-64  (Regents 0) = FAILING — Submitted but no meaningful attempt, off-topic, or trivial non-answer.
+  • 55 = Grade floor for submitted academic work. Lower scores of each interval = minimum requirement met.
+
+Focus on ACCURACY of each boolean answer. The student MUST demonstrate real effort and understanding to earn higher marks.
+A 65 means "barely doing enough to pass." A 70 means "some work shown but barely." An 80 means "strong start with detail."
 
 PROCEDURE (follow these steps IN ORDER):
 
@@ -941,26 +1003,26 @@ function validateAndNormalizeGrade(
     };
   }
 
-  let grade = Math.max(25, Math.min(100, rawGrade));
+  let grade = Math.max(55, Math.min(100, rawGrade));
 
-  // Correct answer → minimum 88 (anchored at GOOD tier)
+  // Correct answer → minimum 85 (correct answer always implies strong understanding)
   if (isCorrect && !hasMisconceptions) {
-    if (grade < 88) {
+    if (grade < 85) {
       adjusted = true;
-      adjustReason = `Correct answer boosted from ${grade} to 88`;
-      grade = 88;
+      adjustReason = `Correct answer boosted from ${grade} to 85`;
+      grade = 85;
     }
     if (regentsScore < 3) regentsScore = 3;
   }
 
-  // Cross-check: snap grade to nearest valid anchor value
-  const GRADE_ANCHORS = [97, 95, 93, 91, 88, 83, 80, 78, 75, 70, 60, 50, 35, 25].filter((v) => v > 0);
+  // Cross-check: snap grade to nearest valid anchor value (NYS Regents-aligned)
+  const GRADE_ANCHORS = [97, 95, 93, 90, 88, 85, 83, 80, 78, 75, 72, 70, 67, 65, 55];
   const regentsBands: Record<number, [number, number]> = {
-    4: [91, 100], // anchors: 97, 95, 93, 91
-    3: [80, 90], // anchors: 88, 83, 80
-    2: [70, 79], // anchors: 78, 75, 70
-    1: [50, 69], // anchors: 60, 50
-    0: [0, 49], // anchors: 35, 25, 0
+    4: [90, 100],  // Mastery: 97, 95, 93, 90
+    3: [80, 89],   // Strong Understanding: 88, 85, 83, 80
+    2: [70, 79],   // Barely Work Shown: 78, 75, 72, 70
+    1: [65, 69],   // Barely Passing: 67, 65
+    0: [55, 64],   // Failing: 55
   };
 
   // Snap grade to nearest anchor value for consistency
@@ -977,7 +1039,6 @@ function validateAndNormalizeGrade(
   const band = regentsBands[regentsScore];
   if (band) {
     if (grade < band[0] || grade > band[1]) {
-      // Grade outside band — find the nearest anchor WITHIN the band
       const validAnchors = GRADE_ANCHORS.filter((a) => a >= band[0] && a <= band[1]);
       const bestAnchor =
         validAnchors.length > 0
@@ -990,7 +1051,7 @@ function validateAndNormalizeGrade(
   }
 
   // Derive Regents from grade if they're still misaligned
-  const derivedRegents = grade >= 90 ? 4 : grade >= 80 ? 3 : grade >= 70 ? 2 : grade >= gradeFloorWithEffort ? 1 : 0;
+  const derivedRegents = grade >= 90 ? 4 : grade >= 80 ? 3 : grade >= 70 ? 2 : grade >= 65 ? 1 : 0;
   if (derivedRegents !== regentsScore) {
     regentsScore = derivedRegents;
   }
