@@ -801,6 +801,7 @@ function buildGradingPrompt(opts: {
   customRubric?: any;
   promptText?: string;
   answerGuideBase64?: string;
+  referenceAnswer?: string;
   gradingStyleContext: string;
   teacherAnswerSampleContext: string;
   verificationContext: string;
@@ -822,6 +823,10 @@ function buildGradingPrompt(opts: {
 
   const teacherGuideNote = opts.answerGuideBase64
     ? `\nIMPORTANT: A teacher answer guide image is attached. Use it as the PRIMARY grading reference.`
+    : "";
+
+  const referenceAnswerNote = opts.referenceAnswer
+    ? `\nREFERENCE ANSWER (from worksheet answer key — use as PRIMARY grading reference):\n${opts.referenceAnswer}\n\nCompare the student's work step-by-step against this reference. The student does NOT need to match it exactly — any valid approach that reaches the correct answer is acceptable.`
     : "";
 
   const detailLevel =
@@ -893,7 +898,7 @@ EXAMPLES:
 • "x=5" alone (correct, no work) → ALL gates=true, correct=true, shown=false, complete=false, valid=false, comp_errors=false, organized=false, conceptual=false
 • "3x=25, x=8.3" (wrong subtraction) → ALL gates=true, correct=false, shown=true, complete=true, valid=true, comp_errors=true, organized=true, conceptual=true
 • Student writes random numbers everywhere → academic=true, present=true, relevant=false, meaningful=false, ALL grading=false
-${opts.gradingStyleContext}${opts.teacherAnswerSampleContext}${opts.verificationContext}${teacherGuideNote}${standardSection}${customRubricSection}`;
+${opts.gradingStyleContext}${opts.teacherAnswerSampleContext}${opts.verificationContext}${teacherGuideNote}${referenceAnswerNote}${standardSection}${customRubricSection}`;
 
   const user = `Analyze this student's work and answer the 10 grading questions.${opts.promptText ? ` Problem: ${opts.promptText}` : ""}${rubricSection}
 
@@ -1314,6 +1319,7 @@ serve(async (req: Request) => {
       useLearnedStyle,
       blankPageSettings,
       preExtractedOCR,
+      referenceAnswer, // Full worked solution from worksheet answer key
     } = requestBody;
 
     const effectiveTeacherId = teacherId || authenticatedUserId;
@@ -1514,6 +1520,7 @@ serve(async (req: Request) => {
         customRubric,
         promptText,
         answerGuideBase64: answerGuideBase64 ? "yes" : undefined,
+        referenceAnswer,
         gradingStyleContext,
         teacherAnswerSampleContext,
         verificationContext,
@@ -1678,6 +1685,7 @@ serve(async (req: Request) => {
       customRubric,
       promptText,
       answerGuideBase64: answerGuideBase64 ? "yes" : undefined,
+      referenceAnswer,
       gradingStyleContext,
       teacherAnswerSampleContext,
       verificationContext,
