@@ -493,9 +493,10 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                               <div className="border rounded-lg overflow-hidden">
                                 <Table>
                                   <TableHeader>
-                                    <TableRow className="bg-muted/50">
+                                     <TableRow className="bg-muted/50">
                                       <TableHead className="text-xs">Topic</TableHead>
                                       <TableHead className="text-xs">Grade</TableHead>
+                                      <TableHead className="text-xs">Date Submitted</TableHead>
                                       <TableHead className="text-xs">Regents</TableHead>
                                       <TableHead className="text-xs">Standard</TableHead>
                                     </TableRow>
@@ -506,6 +507,12 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                                         <TableCell className="text-xs py-2">{grade.topic_name}</TableCell>
                                         <TableCell className={`text-xs py-2 font-medium ${getGradeColor(grade.grade)}`}>
                                           {grade.grade}%
+                                        </TableCell>
+                                        <TableCell className="text-xs py-2 text-muted-foreground whitespace-nowrap">
+                                          {new Date(grade.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{' '}
+                                          <span className="text-muted-foreground/70">
+                                            {new Date(grade.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                          </span>
                                         </TableCell>
                                         <TableCell className="text-xs py-2">
                                           {grade.regents_score !== null ? `${grade.regents_score}/6` : '-'}
