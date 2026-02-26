@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import {
   User,
   AlertTriangle,
@@ -38,6 +39,8 @@ interface MisconceptionPreview {
 
 interface StudentPreview {
   student_id: string;
+  first_name: string;
+  last_name: string;
   student_name: string;
   student_email: string | null;
   class_name: string;
@@ -61,6 +64,7 @@ export function ScholarSyncPreviewDialog({
   onConfirmSync,
 }: ScholarSyncPreviewDialogProps) {
   const { user } = useAuth();
+  const { getDisplayName } = useStudentNames();
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -168,7 +172,9 @@ export function ScholarSyncPreviewDialog({
         const classData = student.classes as any;
         studentPreviews.push({
           student_id: student.id,
-          student_name: `${student.first_name} ${student.last_name}`,
+          first_name: student.first_name,
+          last_name: student.last_name,
+          student_name: '', // Rendered via pseudonym
           student_email: student.email,
           class_name: classData?.name || 'Unknown',
           overall_average: avgGrade,
@@ -283,7 +289,7 @@ export function ScholarSyncPreviewDialog({
                             <User className="h-4 w-4 text-primary" />
                           </div>
                           <div>
-                            <p className="font-medium">{student.student_name}</p>
+                            <p className="font-medium">{getDisplayName(student.student_id, student.first_name, student.last_name)}</p>
                             <p className="text-xs text-muted-foreground">
                               {student.class_name} • Avg: {student.overall_average}%
                             </p>
