@@ -11,6 +11,7 @@ interface StudentNameContextType {
   toggleRevealNames: () => void;
   getDisplayName: (studentId: string, firstName: string, lastName: string) => string;
   getDisplayInitials: (studentId: string, firstName: string, lastName: string) => string;
+  getDisplayEmail: (studentId: string, email: string | null) => string;
   remainingSeconds: number | null;
 }
 
@@ -131,12 +132,23 @@ export function StudentNameProvider({ children }: { children: ReactNode }) {
     return getPseudonymInitials(pseudonym);
   }, [revealRealNames]);
 
+  const getDisplayEmail = useCallback((studentId: string, email: string | null) => {
+    if (revealRealNames) {
+      return email || 'No email';
+    }
+    // Generate a deterministic masked email from the pseudonym
+    const pseudonym = getStudentPseudonym(studentId);
+    const slug = pseudonym.toLowerCase().replace(/\s+/g, '.');
+    return `${slug}@student.protected`;
+  }, [revealRealNames]);
+
   return (
     <StudentNameContext.Provider value={{ 
       revealRealNames, 
       toggleRevealNames, 
       getDisplayName, 
       getDisplayInitials,
+      getDisplayEmail,
       remainingSeconds
     }}>
       {children}

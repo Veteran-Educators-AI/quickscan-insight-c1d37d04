@@ -203,8 +203,32 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
     const response = log.data?.response;
     const syncResults = log.data?.sync_results;
     
-    // Check both response.success (new format) and sync_results (existing format)
-    const isSuccess = response?.success || (syncResults && syncResults.successful !== undefined && syncResults.failed === 0) || (syncResults && (syncResults.successful || 0) > 0);
+    // Check multiple success indicators:
+    // 1. response.success (new format)
+    // 2. sync_results with successful > 0 and failed === 0
+    // 3. pull_completions: grades_found or students_matched > 0
+    // 4. Data has students/grades (flat or nested format)
+    const hasResponseSuccess = response?.success === true;
+    const hasSyncSuccess = syncResults && (syncResults.successful || 0) > 0;
+    const hasPullData = log.action === 'pull_completions' && (
+      (log.data as any)?.grades_found > 0 || 
+      (log.data as any)?.students_matched > 0 ||
+      (log.data as any)?.grades_created > 0
+    );
+    const hasDataValues = getDataValue(log.data, 'total_students') > 0 || getDataValue(log.data, 'total_grades') > 0;
+    
+    // Only mark as failed if response explicitly says success: false
+    const isExplicitFailure = response?.success === false;
+    const isSuccess = hasResponseSuccess || hasSyncSuccess || hasPullData || hasDataValues;
+    
+    if (isExplicitFailure && !isSuccess) {
+      return (
+        <Badge variant="destructive">
+          <XCircle className="h-3 w-3 mr-1" />
+          Failed
+        </Badge>
+      );
+    }
     
     if (isSuccess) {
       return (
@@ -214,42 +238,72 @@ export function ScholarSyncDashboard({ classId }: ScholarSyncDashboardProps) {
         </Badge>
       );
     }
+    
+    // Default: show as completed (no data to sync isn't a failure)
     return (
-      <Badge variant="destructive">
-        <XCircle className="h-3 w-3 mr-1" />
-        Failed
+      <Badge variant="secondary">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        No Data
       </Badge>
     );
   };
 
   const latestSync = syncLogs?.[0];
   const totalSyncs = syncLogs?.length || 0;
-  const successfulSyncs = syncLogs?.filter(log => {
-    const response = log.data?.response;
-    const syncResults = log.data?.sync_results;
-    return response?.success || (syncResults && (syncResults.successful || 0) > 0);
-  }).length || 0;
 
   // Helper to extract values from nested or flat data structure
   const getDataValue = (data: SyncLogData | undefined, key: 'total_students' | 'total_grades' | 'total_misconceptions' | 'weak_topics_identified'): number => {
     if (!data) return 0;
-    // Try direct access first, then check summary object
+    const anyData = data as any;
+    // Try direct access, summary object, then pull_completions-specific keys
+    if (key === 'total_students') {
+      return data[key] ?? data.summary?.[key] ?? anyData?.students_matched ?? 0;
+    }
+    if (key === 'total_grades') {
+      return data[key] ?? data.summary?.[key] ?? anyData?.grades_found ?? anyData?.grades_created ?? 0;
+    }
     return data[key] ?? data.summary?.[key] ?? 0;
   };
 
-  // Calculate totals from all syncs
-  const totals = syncLogs?.reduce((acc, log) => {
-    const data = log.data;
-    const processed = data?.response?.processed;
-    return {
-      students: acc.students + (processed?.students_processed || processed?.students_synced || getDataValue(data, 'total_students')),
-      grades: acc.grades + (processed?.grades_received || getDataValue(data, 'total_grades')),
-      misconceptions: acc.misconceptions + (processed?.misconceptions_tracked || getDataValue(data, 'total_misconceptions')),
-      remediation: acc.remediation + (processed?.remediation_assigned || processed?.remediations_queued || 0),
-      xp: acc.xp + (processed?.xp_awarded || 0),
-      coins: acc.coins + (processed?.coins_awarded || 0),
-    };
-  }, { students: 0, grades: 0, misconceptions: 0, remediation: 0, xp: 0, coins: 0 }) || { students: 0, grades: 0, misconceptions: 0, remediation: 0, xp: 0, coins: 0 };
+  // Calculate totals - use MAX for students (not cumulative) and SUM for actions
+  const totals = (() => {
+    if (!syncLogs || syncLogs.length === 0) {
+      return { students: 0, grades: 0, misconceptions: 0, remediation: 0, xp: 0, coins: 0 };
+    }
+    
+    let maxStudents = 0;
+    let totalGrades = 0;
+    let totalMisconceptions = 0;
+    let totalRemediation = 0;
+    let totalXp = 0;
+    let totalCoins = 0;
+    
+    for (const log of syncLogs) {
+      const data = log.data;
+      const processed = data?.response?.processed;
+      const studentCount = processed?.students_processed || processed?.students_synced || 
+        (data as any)?.students_matched || getDataValue(data, 'total_students');
+      // Use max for students since it's the same pool being synced repeatedly
+      maxStudents = Math.max(maxStudents, studentCount);
+      totalGrades += processed?.grades_received || (data as any)?.grades_created || getDataValue(data, 'total_grades');
+      totalMisconceptions += processed?.misconceptions_tracked || getDataValue(data, 'total_misconceptions');
+      totalRemediation += processed?.remediation_assigned || processed?.remediations_queued || 0;
+      totalXp += processed?.xp_awarded || 0;
+      totalCoins += processed?.coins_awarded || 0;
+    }
+    
+    return { students: maxStudents, grades: totalGrades, misconceptions: totalMisconceptions, remediation: totalRemediation, xp: totalXp, coins: totalCoins };
+  })();
+
+  const successfulSyncs = syncLogs?.filter(log => {
+    const response = log.data?.response;
+    const syncResults = log.data?.sync_results;
+    const hasPullData = log.action === 'pull_completions' && (
+      (log.data as any)?.grades_found > 0 || (log.data as any)?.students_matched > 0
+    );
+    return response?.success || (syncResults && (syncResults.successful || 0) > 0) || hasPullData ||
+      getDataValue(log.data, 'total_students') > 0;
+  }).length || 0;
 
   if (isLoading) {
     return (

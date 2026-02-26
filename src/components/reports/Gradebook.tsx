@@ -418,7 +418,7 @@ export function Gradebook({ classId }: GradebookProps) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(g => {
         const studentName = g.student 
-          ? `${g.student.first_name} ${g.student.last_name}`.toLowerCase()
+          ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name).toLowerCase()
           : '';
         return (
           studentName.includes(term) ||
@@ -540,7 +540,7 @@ export function Gradebook({ classId }: GradebookProps) {
 
     const headers = ['Student', 'Topic', 'Grade', 'Regents Score', 'Standard', 'Date', 'Justification'];
     const rows = filteredGrades.map(g => [
-      g.student ? `${g.student.first_name} ${g.student.last_name}` : 'Unknown',
+      g.student ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name) : 'Unknown',
       g.topic_name,
       g.grade,
       g.regents_score || '',
