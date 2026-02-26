@@ -2918,6 +2918,7 @@ export type Database = {
         Args: { p_class_id: string; p_user_id: string }
         Returns: boolean
       }
+      is_valid_teacher_id: { Args: { p_teacher_id: string }; Returns: boolean }
       join_class_with_code: {
         Args: { p_join_code: string; p_user_email: string }
         Returns: Json
