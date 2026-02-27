@@ -562,7 +562,7 @@ export function Gradebook({ classId }: GradebookProps) {
 
   const getGradeColor = (grade: number) => {
     if (grade >= 80) return 'text-green-600 dark:text-green-400';
-    if (grade >= 60) return 'text-yellow-600 dark:text-yellow-400';
+    if (grade >= 50) return 'text-yellow-600 dark:text-yellow-400';
     return 'text-red-600 dark:text-red-400';
   };
 

@@ -40,18 +40,17 @@ export function useGradeFloorSettings() {
     // The backend already applies the correct tier (0-97) based on boolean analysis
     // Frontend should NOT inflate grades beyond what the backend computed
     
-    // Maximum grade from calculation is 95 (Regents 4 = Exceeding Standards)
-    // 100 is reserved for teacher overrides / truly exceptional demonstrated mastery
-    const maxCalculatedGrade = 95;
+    // Maximum grade from calculation is 100 (MASTERY tier achievable)
+    const maxCalculatedGrade = 100;
 
     // If regents score is available, use it for conversion
     if (regentsScore !== undefined && regentsScore >= 0) {
       const regentsToGrade: Record<number, number> = {
-        4: 95,  // Exceeding Standards - max without override
-        3: 90,  // Meeting Standards - no errors should be 90+
-        2: 75,  // Approaching Standards
-        1: 60,  // Limited understanding
-        0: 0,   // No understanding - let backend decide actual grade
+        4: 95,  // EXEMPLARY — Correct + complete + organized
+        3: 80,  // PROFICIENT_PLUS — Correct + organized but incomplete
+        2: 65,  // APPROACHING — Valid approach, complete work, wrong answer
+        1: 50,  // ANSWER_ONLY — Correct but no work shown
+        0: 0,   // No understanding
       };
       const convertedGrade = regentsToGrade[regentsScore] ?? 0;
       return Math.min(maxCalculatedGrade, convertedGrade);
