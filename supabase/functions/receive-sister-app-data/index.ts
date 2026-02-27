@@ -43,7 +43,7 @@ const corsHeaders = {
 // data: Flexible object containing event-specific information
 // -----------------------------------------------------------------------------
 interface IncomingData {
-  action: 'grade_completed' | 'activity_completed' | 'reward_earned' | 'level_up' | 'achievement_unlocked' | 'batch_sync' | 'behavior_deduction' | 'live_session_completed' | 'roster_sync' | 'student_created' | 'student_updated' | 'work_submitted';
+  action: 'grade_completed' | 'activity_completed' | 'sync_practice_session' | 'reward_earned' | 'level_up' | 'achievement_unlocked' | 'batch_sync' | 'behavior_deduction' | 'live_session_completed' | 'roster_sync' | 'student_created' | 'student_updated' | 'work_submitted';
   student_id?: string; // Optional for batch_sync and live_session_completed
   data?: {
     activity_type?: string;      // e.g., "quiz", "game", "practice", "live_presentation"

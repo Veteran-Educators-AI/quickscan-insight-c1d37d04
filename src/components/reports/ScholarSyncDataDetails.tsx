@@ -445,7 +445,11 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                               )}
                               <div>
                                 <p className="font-medium">{getDisplayName(student.student_id, student.first_name, student.last_name)}</p>
-                              <p className="text-xs text-muted-foreground">{student.class_name}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                                    {student.class_name}
+                                  </Badge>
+                                </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
