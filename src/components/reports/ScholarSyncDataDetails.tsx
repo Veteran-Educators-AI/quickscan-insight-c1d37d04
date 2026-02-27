@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
   ChevronDown,
@@ -27,6 +28,8 @@ import {
   Target,
   Lightbulb,
   RefreshCw,
+  Clock,
+  CalendarDays,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudentNames } from '@/lib/StudentNameContext';
@@ -75,6 +78,7 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<'today' | 'this-week' | 'all'>('today');
 
   const { data, isLoading } = useQuery({
     queryKey: ['scholar-sync-data-details', user?.id, classId],
@@ -218,16 +222,37 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
 
   const filteredStudents = useMemo(() => {
     if (!data?.students) return [];
-    if (!searchTerm.trim()) return data.students;
+    
+    // Time filter
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    let students = data.students;
+
+    if (timeFilter !== 'all') {
+      const cutoff = timeFilter === 'today' ? todayStart : weekStart;
+      // Filter students who have grades after the cutoff, and only show those grades
+      students = students
+        .map(s => {
+          const recentGrades = s.grades.filter(g => new Date(g.created_at) >= cutoff);
+          if (recentGrades.length === 0) return null;
+          return { ...s, grades: recentGrades };
+        })
+        .filter(Boolean) as StudentSyncData[];
+    }
+
+    if (!searchTerm.trim()) return students;
     
     const term = searchTerm.toLowerCase();
-    return data.students.filter(s => {
+    return students.filter(s => {
       const displayName = getDisplayName(s.student_id, s.first_name, s.last_name);
       return displayName.toLowerCase().includes(term) ||
         s.class_name.toLowerCase().includes(term) ||
         s.grades.some(g => g.topic_name.toLowerCase().includes(term));
     });
-  }, [data?.students, searchTerm, getDisplayName]);
+  }, [data?.students, searchTerm, getDisplayName, timeFilter]);
 
   const toggleStudentSelection = (studentId: string) => {
     const newSelected = new Set(selectedStudents);
@@ -376,6 +401,24 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 <p className="text-xs text-muted-foreground">Weak Topics</p>
               </div>
             </div>
+
+            {/* Time Filter Tabs */}
+            <Tabs value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'today' | 'this-week' | 'all')} className="w-full">
+              <TabsList className="w-full sm:w-auto">
+                <TabsTrigger value="today" className="gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Today
+                </TabsTrigger>
+                <TabsTrigger value="this-week" className="gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  This Week
+                </TabsTrigger>
+                <TabsTrigger value="all" className="gap-1.5">
+                  <Database className="h-3.5 w-3.5" />
+                  All Time
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
             {/* Search and Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
