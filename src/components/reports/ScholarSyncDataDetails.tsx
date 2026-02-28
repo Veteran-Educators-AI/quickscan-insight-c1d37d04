@@ -31,9 +31,11 @@ import {
   RefreshCw,
   Clock,
   CalendarDays,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudentNames } from '@/lib/StudentNameContext';
+import { AdaptiveWorksheetGenerator } from '@/components/questions/AdaptiveWorksheetGenerator';
 
 interface GradeEntry {
   topic_name: string;
@@ -81,6 +83,7 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
   const [isSyncing, setIsSyncing] = useState(false);
   const [timeFilter, setTimeFilter] = useState<'today' | 'this-week' | 'all'>('today');
   const [classFilter, setClassFilter] = useState<string>('all');
+  const [showWorksheetGenerator, setShowWorksheetGenerator] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['scholar-sync-data-details', user?.id, classId],
@@ -494,6 +497,16 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 </Button>
                 <Button
                   size="sm"
+                  variant="secondary"
+                  onClick={() => setShowWorksheetGenerator(true)}
+                  disabled={selectedStudents.size === 0}
+                  className="whitespace-nowrap"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate Worksheet
+                </Button>
+                <Button
+                  size="sm"
                   onClick={handleSyncSelected}
                   disabled={selectedStudents.size === 0 || isSyncing}
                   className="whitespace-nowrap"
@@ -650,10 +663,25 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                           {/* Weak Topics */}
                           {student.weak_topics.length > 0 && (
                             <div>
-                              <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                                <TrendingDown className="h-4 w-4 text-red-600" />
-                                Weak Topics ({student.weak_topics.length})
-                              </h4>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <TrendingDown className="h-4 w-4 text-red-600" />
+                                  Weak Topics ({student.weak_topics.length})
+                                </h4>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedStudents(new Set([student.student_id]));
+                                    setShowWorksheetGenerator(true);
+                                  }}
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Generate Remediation
+                                </Button>
+                              </div>
                               <div className="flex flex-wrap gap-2">
                                 {student.weak_topics.map((wt, idx) => (
                                   <Badge key={idx} variant="secondary" className="text-xs bg-red-500/10 text-red-600 border-red-500/20">
@@ -755,6 +783,11 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
           </CardContent>
         </CollapsibleContent>
       </Card>
+      {/* Adaptive Worksheet Generator Dialog */}
+      <AdaptiveWorksheetGenerator
+        open={showWorksheetGenerator}
+        onOpenChange={setShowWorksheetGenerator}
+      />
     </Collapsible>
   );
 }
