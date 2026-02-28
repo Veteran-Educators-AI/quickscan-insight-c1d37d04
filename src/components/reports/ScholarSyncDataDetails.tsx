@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -79,6 +80,7 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isSyncing, setIsSyncing] = useState(false);
   const [timeFilter, setTimeFilter] = useState<'today' | 'this-week' | 'all'>('today');
+  const [classFilter, setClassFilter] = useState<string>('all');
 
   const { data, isLoading } = useQuery({
     queryKey: ['scholar-sync-data-details', user?.id, classId],
@@ -220,10 +222,19 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
     enabled: !!user,
   });
 
+  // Extract unique classes for the filter
+  const availableClasses = useMemo(() => {
+    if (!data?.students) return [];
+    const classMap = new Map<string, string>();
+    data.students.forEach(s => {
+      if (!classMap.has(s.class_id)) classMap.set(s.class_id, s.class_name);
+    });
+    return Array.from(classMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [data?.students]);
+
   const filteredStudents = useMemo(() => {
     if (!data?.students) return [];
     
-    // Time filter
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(todayStart);
@@ -231,9 +242,12 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
 
     let students = data.students;
 
+    if (classFilter !== 'all') {
+      students = students.filter(s => s.class_id === classFilter);
+    }
+
     if (timeFilter !== 'all') {
       const cutoff = timeFilter === 'today' ? todayStart : weekStart;
-      // Filter students who have grades after the cutoff, and only show those grades
       students = students
         .map(s => {
           const recentGrades = s.grades.filter(g => new Date(g.created_at) >= cutoff);
@@ -252,7 +266,30 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
         s.class_name.toLowerCase().includes(term) ||
         s.grades.some(g => g.topic_name.toLowerCase().includes(term));
     });
-  }, [data?.students, searchTerm, getDisplayName, timeFilter]);
+  }, [data?.students, searchTerm, getDisplayName, timeFilter, classFilter]);
+
+  // Group students by class
+  const groupedByClass = useMemo(() => {
+    const groups: { classId: string; className: string; students: StudentSyncData[]; avgGrade: number; totalGrades: number }[] = [];
+    const classMap = new Map<string, StudentSyncData[]>();
+    
+    filteredStudents.forEach(s => {
+      if (!classMap.has(s.class_id)) classMap.set(s.class_id, []);
+      classMap.get(s.class_id)!.push(s);
+    });
+
+    classMap.forEach((students, classId) => {
+      const className = students[0]?.class_name || 'Unknown';
+      const allGrades = students.flatMap(s => s.grades);
+      const avgGrade = allGrades.length > 0 
+        ? Math.round(allGrades.reduce((sum, g) => sum + g.grade, 0) / allGrades.length) 
+        : 0;
+      groups.push({ classId, className, students, avgGrade, totalGrades: allGrades.length });
+    });
+
+    groups.sort((a, b) => a.className.localeCompare(b.className));
+    return groups;
+  }, [filteredStudents]);
 
   const toggleStudentSelection = (studentId: string) => {
     const newSelected = new Set(selectedStudents);
@@ -402,23 +439,36 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
               </div>
             </div>
 
-            {/* Time Filter Tabs */}
-            <Tabs value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'today' | 'this-week' | 'all')} className="w-full">
-              <TabsList className="w-full sm:w-auto">
-                <TabsTrigger value="today" className="gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  Today
-                </TabsTrigger>
-                <TabsTrigger value="this-week" className="gap-1.5">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  This Week
-                </TabsTrigger>
-                <TabsTrigger value="all" className="gap-1.5">
-                  <Database className="h-3.5 w-3.5" />
-                  All Time
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Time Filter Tabs + Class Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <Tabs value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'today' | 'this-week' | 'all')} className="flex-1">
+                <TabsList className="w-full sm:w-auto">
+                  <TabsTrigger value="today" className="gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Today
+                  </TabsTrigger>
+                  <TabsTrigger value="this-week" className="gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    This Week
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="gap-1.5">
+                    <Database className="h-3.5 w-3.5" />
+                    All Time
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Filter by class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes ({availableClasses.length})</SelectItem>
+                  {availableClasses.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Search and Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
@@ -463,9 +513,24 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 </p>
               </div>
             ) : (
-              <ScrollArea className="h-[500px]">
-                <div className="space-y-2 pr-4">
-                  {filteredStudents.map((student) => (
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-4 pr-4">
+                  {groupedByClass.map((group) => (
+                    <div key={group.classId}>
+                      {/* Class Header */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/60 mb-2 sticky top-0 z-10">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="h-4 w-4 text-primary" />
+                          <span className="font-semibold text-sm">{group.className}</span>
+                          <Badge variant="secondary" className="text-xs">{group.students.length} students</Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className={`font-medium ${getGradeColor(group.avgGrade)}`}>{group.avgGrade}% avg</span>
+                          <span>{group.totalGrades} grades</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                  {group.students.map((student) => (
                     <Collapsible
                       key={student.student_id}
                       open={expandedStudent === student.student_id}
@@ -664,6 +729,9 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
+                  ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
