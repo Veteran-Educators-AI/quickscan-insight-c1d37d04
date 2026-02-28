@@ -19,7 +19,9 @@ import {
   Sparkles,
   FileText,
   Info,
-  Rocket
+  Rocket,
+  Users,
+  BarChart3
 } from 'lucide-react';
 import { PushAssignmentDialog } from './PushAssignmentDialog';
 import { PushStudentPracticeDialog } from './PushStudentPracticeDialog';
@@ -270,6 +272,7 @@ export function Gradebook({ classId }: GradebookProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSyncingToScholar, setIsSyncingToScholar] = useState(false);
   const [pushAssignmentOpen, setPushAssignmentOpen] = useState(false);
+  const [showStudentAverages, setShowStudentAverages] = useState(true);
   const [pushAssignmentTopic, setPushAssignmentTopic] = useState('');
   
   // Scroll to gradebook and expand when URL params change
@@ -591,6 +594,69 @@ export function Gradebook({ classId }: GradebookProps) {
     return { avgGrade, avgRegents, uniqueStudents, uniqueTopics, total: filteredGrades.length };
   }, [filteredGrades]);
 
+  // Per-student overall averages (combines scanned + scholar grades)
+  const studentAverages = useMemo(() => {
+    if (!filteredGrades.length) return [];
+    
+    const studentMap = new Map<string, { 
+      studentId: string; 
+      name: string; 
+      className: string;
+      grades: number[]; 
+      regentsScores: number[];
+      topicCount: number;
+      scanCount: number;
+      scholarCount: number;
+      lastDate: string;
+    }>();
+    
+    filteredGrades.forEach(g => {
+      const existing = studentMap.get(g.student_id);
+      const isScholar = g.grade_justification?.toLowerCase().includes('scholar') || false;
+      
+      if (existing) {
+        existing.grades.push(g.grade);
+        if (g.regents_score) existing.regentsScores.push(g.regents_score);
+        if (isScholar) existing.scholarCount++; else existing.scanCount++;
+        if (g.created_at > existing.lastDate) existing.lastDate = g.created_at;
+      } else {
+        const name = g.student 
+          ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name)
+          : 'Unknown';
+        studentMap.set(g.student_id, {
+          studentId: g.student_id,
+          name,
+          className: g.student?.class?.name || '',
+          grades: [g.grade],
+          regentsScores: g.regents_score ? [g.regents_score] : [],
+          topicCount: 0,
+          scanCount: isScholar ? 0 : 1,
+          scholarCount: isScholar ? 1 : 0,
+          lastDate: g.created_at,
+        });
+      }
+    });
+
+    // Count unique topics per student
+    const studentTopics = new Map<string, Set<string>>();
+    filteredGrades.forEach(g => {
+      if (!studentTopics.has(g.student_id)) studentTopics.set(g.student_id, new Set());
+      studentTopics.get(g.student_id)!.add(g.topic_name);
+    });
+    
+    return Array.from(studentMap.values()).map(s => ({
+      ...s,
+      topicCount: studentTopics.get(s.studentId)?.size || 0,
+      avgGrade: Math.round(s.grades.reduce((a, b) => a + b, 0) / s.grades.length),
+      avgRegents: s.regentsScores.length > 0 
+        ? (s.regentsScores.reduce((a, b) => a + b, 0) / s.regentsScores.length).toFixed(1)
+        : null,
+      totalEntries: s.grades.length,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredGrades, getDisplayName]);
+
+  
+
   // Sync grades to NYCLogic Scholar AI
   const handleSyncToScholar = async () => {
     if (!filteredGrades.length) {
@@ -768,6 +834,91 @@ export function Gradebook({ classId }: GradebookProps) {
                   <p className="text-2xl font-bold">{stats.avgRegents.toFixed(1)}/6</p>
                   <p className="text-xs text-muted-foreground">Avg Regents</p>
                 </div>
+              </div>
+            )}
+
+            {/* Per-Student Overall Averages */}
+            {studentAverages.length > 0 && (
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowStudentAverages(!showStudentAverages)}
+                  className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors w-full"
+                >
+                  <Users className="h-4 w-4 text-primary" />
+                  Student Overall Averages
+                  <Badge variant="secondary" className="ml-1">{studentAverages.length}</Badge>
+                  {showStudentAverages ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
+                </button>
+                {showStudentAverages && (
+                  <ScrollArea className="max-h-[300px] border rounded-lg">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-background">
+                        <TableRow>
+                          <TableHead>Student</TableHead>
+                          <TableHead>Class</TableHead>
+                          <TableHead className="text-center">Overall Avg</TableHead>
+                          <TableHead className="text-center">Avg Regents</TableHead>
+                          <TableHead className="text-center">Entries</TableHead>
+                          <TableHead className="text-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="flex items-center justify-center gap-1">Sources <Info className="h-3 w-3 text-muted-foreground" /></span>
+                                </TooltipTrigger>
+                                <TooltipContent>Scan = graded from scanned work. Scholar = from Scholar app completions.</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="text-center">Topics</TableHead>
+                          <TableHead>Last Activity</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {studentAverages.map(s => (
+                          <TableRow key={s.studentId} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedStudentForReport({ id: s.studentId, name: s.name })}>
+                            <TableCell className="font-medium">{s.name}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{s.className}</TableCell>
+                            <TableCell className="text-center">
+                              <span className={`font-bold text-lg ${getGradeColor(s.avgGrade)}`}>
+                                {s.avgGrade}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {s.avgRegents ? (
+                                <Badge variant="outline" className={getRegentsColor(parseFloat(s.avgRegents))}>
+                                  {s.avgRegents}/6
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center text-muted-foreground">{s.totalEntries}</TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {s.scanCount > 0 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <BarChart3 className="h-3 w-3 mr-1" />
+                                    {s.scanCount}
+                                  </Badge>
+                                )}
+                                {s.scholarCount > 0 && (
+                                  <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400">
+                                    <Sparkles className="h-3 w-3 mr-1" />
+                                    {s.scholarCount}
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center text-muted-foreground">{s.topicCount}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {format(new Date(s.lastDate), 'MMM d, yyyy')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
               </div>
             )}
 
