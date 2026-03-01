@@ -11,7 +11,7 @@ import { parseUnifiedStudentQRCode } from '@/components/print/StudentPageQRCode'
 import { toast } from 'sonner';
 import { compressImage } from '@/lib/imageUtils';
 import { useGradeFloorSettings } from '@/hooks/useGradeFloorSettings';
-// Blank page detection is done inline via alphanumeric character count (<30 chars = blank)
+import { detectBlankPage } from '@/lib/blankPageDetection';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RESILIENT EDGE FUNCTION INVOCATION
@@ -1893,6 +1893,73 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
     });
   }, []);
 
+  /**
+   * Helper: For each continuation page, OCR it individually and run blank detection.
+   * If blank → set grade to 0%. If not blank → inherit the primary's result.
+   */
+  const checkContinuationBlankAndApply = async (
+    primaryItem: BatchItem,
+    primaryResult: AnalysisResult | undefined,
+    allItems: BatchItem[],
+  ) => {
+    if (!primaryItem.continuationPages || primaryItem.continuationPages.length === 0) return;
+
+    for (const contId of primaryItem.continuationPages) {
+      const contItem = allItems.find(it => it.id === contId);
+      if (!contItem || !contItem.imageDataUrl || contItem.imageDataUrl.length < 100) {
+        // No image data — just inherit the primary result
+        setItems(prev => prev.map(it =>
+          it.id === contId ? { ...it, status: 'completed' as const, result: primaryResult } : it
+        ));
+        continue;
+      }
+
+      // OCR this individual continuation page
+      let contOcrText: string | null = null;
+      try {
+        const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-student-work', {
+          body: { imageBase64: contItem.imageDataUrl },
+        });
+        if (!ocrError && ocrData?.success && ocrData?.ocrText) {
+          contOcrText = ocrData.ocrText;
+        }
+      } catch (e: any) {
+        console.warn(`[checkContinuationBlank] OCR failed for ${contId}:`, e.message);
+      }
+
+      // Run blank detection on this page's text only
+      const blankResult = detectBlankPage(contOcrText || '');
+      if (blankResult.isBlank) {
+        console.log(`[checkContinuationBlank] Continuation ${contId} is BLANK (${blankResult.normalizedLength} chars). Assigning 0%.`);
+        setItems(prev => prev.map(it =>
+          it.id === contId ? {
+            ...it,
+            status: 'completed' as const,
+            result: {
+              ocrText: contOcrText || '',
+              problemIdentified: 'Blank or nearly blank page',
+              approachAnalysis: 'No student work detected',
+              strengthsAnalysis: [],
+              areasForImprovement: ['No work submitted'],
+              rubricScores: [],
+              misconceptions: [],
+              totalScore: { earned: 0, possible: 0, percentage: 0 },
+              grade: 0,
+              gradeJustification: 'No student work detected on this page.',
+              feedback: 'No student work detected.',
+              studentWorkPresent: false,
+            } as AnalysisResult,
+          } : it
+        ));
+      } else {
+        // Not blank — inherit primary's result
+        setItems(prev => prev.map(it =>
+          it.id === contId ? { ...it, status: 'completed' as const, result: primaryResult } : it
+        ));
+      }
+    }
+  };
+
   const analyzeItemWithContinuations = async (
     item: BatchItem, 
     allItems: BatchItem[],
@@ -1943,17 +2010,13 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       }
 
       // STEP 1.5: Blank page detection — skip AI grading entirely for empty pages.
-      // Strip all non-alphanumeric chars and check if fewer than 30 remain.
-      // For linked/continuation pages, OCR text is already combined so a blank
-      // second page with a filled first page passes through fine.
+      // Uses the shared detectBlankPage utility which strips boilerplate patterns
+      // (headers, worksheet metadata, printed questions, QR codes) before checking.
       {
         const textToCheck = ocrText || '';
-        // Strip common header/boilerplate words so pages with only "Name:", "Date:" etc. are correctly blank
-        const headerStripped = textToCheck
-          .replace(/name|date|period|class|form|level|page|student|teacher|grade|score|warm.?up|practice|questions?|answer|work.?area|instructions?|show.?work|explain|directions?|side\s*[ab]/gi, '');
-        const alphanumericOnly = headerStripped.replace(/[^a-zA-Z0-9]/g, '');
-        if (alphanumericOnly.length < 30) {
-          console.log(`[BlankPageDetection] Blank page detected (${alphanumericOnly.length} alphanumeric chars). Skipping AI call entirely.`);
+        const blankResult = detectBlankPage(textToCheck);
+        if (blankResult.isBlank) {
+          console.log(`[BlankPageDetection] Blank page detected (normalized: ${blankResult.normalizedLength} chars, reason: ${blankResult.detectionReason}). Skipping AI call entirely.`);
           return {
             ...item,
             status: 'completed' as const,
@@ -2122,11 +2185,9 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           idx === index ? result : it
         ));
 
-        // Update continuation pages with same result
+        // Update continuation pages — check each for blank before inheriting
         if (item.continuationPages && item.continuationPages.length > 0) {
-          setItems(prev => prev.map(it => 
-            item.continuationPages!.includes(it.id) ? { ...it, status: 'completed', result: result.result } : it
-          ));
+          await checkContinuationBlankAndApply(item, result.result, currentItems);
         }
       }
 
@@ -2138,7 +2199,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
 
     setCurrentIndex(-1);
     setIsProcessing(false);
-  }, [items, isProcessing]);
+  }, [items, isProcessing, analyzeItemWithContinuations, checkContinuationBlankAndApply]);
 
   // Calculate confidence score based on grade consistency across multiple analyses
   const calculateConfidence = (grades: number[]): number => {
@@ -2148,8 +2209,9 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
     const range = max - min;
     // If grades are within 5 points, very high confidence
     // If within 10 points, high confidence
-    // If within 20 points, medium confidence
-    // Beyond 20 points, lower confidence
+    // If within 15 points, medium confidence
+    // If within 20 points, lower confidence
+    // Beyond 20 points, very low confidence
     if (range <= 5) return 95;
     if (range <= 10) return 85;
     if (range <= 15) return 70;
@@ -2239,9 +2301,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
         ));
 
         if (item.continuationPages && item.continuationPages.length > 0) {
-          setItems(prev => prev.map(it => 
-            item.continuationPages!.includes(it.id) ? { ...it, status: 'completed', result: curvedResult } : it
-          ));
+          await checkContinuationBlankAndApply(item, curvedResult, currentItems);
         }
       }));
 
@@ -2253,7 +2313,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
 
     setCurrentIndex(-1);
     setIsProcessing(false);
-  }, [items, isProcessing, applyGradeCurve]);
+  }, [items, isProcessing, applyGradeCurve, analyzeItemWithContinuations, checkContinuationBlankAndApply]);
 
   // Override grade for a specific item
   const overrideGrade = useCallback((itemId: string, newGrade: number, justification: string) => {
@@ -2363,7 +2423,54 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             }
           }
 
-          const { data, error } = await invokeWithRetry('analyze-student-work', {
+          // OCR extraction for blank page detection
+          let ocrText: string | null = null;
+          try {
+            const ocrBody: any = { imageBase64: item.imageDataUrl };
+            if (additionalImages.length > 0) {
+              ocrBody.additionalImages = additionalImages;
+            }
+            const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-student-work', {
+              body: ocrBody,
+            });
+            if (!ocrError && ocrData?.success && ocrData?.ocrText) {
+              ocrText = ocrData.ocrText;
+            }
+          } catch (ocrErr: any) {
+            console.warn('[OCR] Teacher-guided batch exception:', ocrErr.message);
+          }
+
+          // Blank page detection — skip AI grading for empty pages
+          const textToCheck = ocrText || '';
+          const blankResult = detectBlankPage(textToCheck);
+          if (blankResult.isBlank) {
+            console.log(`[BlankPageDetection] Teacher-guided: Blank page detected (normalized: ${blankResult.normalizedLength} chars). Skipping AI.`);
+            const blankAnalysis = {
+              ocrText: textToCheck,
+              problemIdentified: 'Blank or nearly blank page',
+              approachAnalysis: 'No student work detected',
+              strengthsAnalysis: [],
+              areasForImprovement: ['No work submitted'],
+              rubricScores: (rubricSteps || []).map(step => ({
+                criterion: step.description,
+                score: 0,
+                maxScore: step.points,
+                feedback: 'No work shown',
+              })),
+              misconceptions: [],
+              totalScore: { earned: 0, possible: rubricSteps?.reduce((s, r) => s + r.points, 0) || 6, percentage: 0 },
+              grade: 0,
+              gradeJustification: 'No student work detected on this page.',
+              feedback: 'No student work detected.',
+              studentWorkPresent: false,
+            };
+            setItems(prev => prev.map((it, idx) => 
+              idx === i ? { ...it, status: 'completed', result: blankAnalysis } : it
+            ));
+            return;
+          }
+
+          const requestBody: any = {
             imageBase64: item.imageDataUrl,
             additionalImages: additionalImages.length > 0 ? additionalImages : undefined,
             answerGuideBase64: answerGuideImage,
@@ -2371,7 +2478,14 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             studentName: item.studentName,
             teacherId: user?.id,
             assessmentMode: 'teacher-guided',
-          }, { maxRetries: 0 });
+          };
+
+          // Send OCR text if available so server can use it
+          if (ocrText && ocrText.trim().length > 0) {
+            requestBody.preExtractedOCR = ocrText;
+          }
+
+          const { data, error } = await invokeWithRetry('analyze-student-work', requestBody, { maxRetries: 0 });
 
           if (error) {
             const errorMsg = handleApiError(error, 'Analysis');
@@ -2390,9 +2504,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           ));
 
           if (item.continuationPages && item.continuationPages.length > 0) {
-            setItems(prev => prev.map(it => 
-              item.continuationPages!.includes(it.id) ? { ...it, status: 'completed', result: curvedAnalysis } : it
-            ));
+            await checkContinuationBlankAndApply(item, curvedAnalysis, currentItems);
           }
         } catch (err) {
           setItems(prev => prev.map((it, idx) => 

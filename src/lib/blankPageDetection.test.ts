@@ -79,6 +79,20 @@ describe('detectBlankPage', () => {
     expect(result.isBlank).toBe(true);
   });
 
+  it('flags a diagnostic worksheet with student name + printed metadata + no student work', () => {
+    const result = detectBlankPage(
+      'Clever Fox\nDiagnostic Worksheet - Level C | Form C | Page 2\nbefore adding them together.\n{"v":1,"s":"abc","q":"q1"}'
+    );
+    expect(result.isBlank).toBe(true);
+  });
+
+  it('flags a page with student name + printed text only', () => {
+    const result = detectBlankPage(
+      'Eldania St Juste\nLevel C | Form C | Page 2\nbefore adding them together.'
+    );
+    expect(result.isBlank).toBe(true);
+  });
+
   // ── Original tests for non-blank pages ──
 
   it('does NOT flag a short but real student response (>= 20 chars)', () => {
