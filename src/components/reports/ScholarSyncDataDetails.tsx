@@ -6,11 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Users,
   ChevronDown,
@@ -27,9 +29,13 @@ import {
   Target,
   Lightbulb,
   RefreshCw,
+  Clock,
+  CalendarDays,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudentNames } from '@/lib/StudentNameContext';
+import { AdaptiveWorksheetGenerator } from '@/components/questions/AdaptiveWorksheetGenerator';
 
 interface GradeEntry {
   topic_name: string;
@@ -75,6 +81,9 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<'today' | 'this-week' | 'all'>('today');
+  const [classFilter, setClassFilter] = useState<string>('all');
+  const [showWorksheetGenerator, setShowWorksheetGenerator] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['scholar-sync-data-details', user?.id, classId],
@@ -216,18 +225,74 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
     enabled: !!user,
   });
 
+  // Extract unique classes for the filter
+  const availableClasses = useMemo(() => {
+    if (!data?.students) return [];
+    const classMap = new Map<string, string>();
+    data.students.forEach(s => {
+      if (!classMap.has(s.class_id)) classMap.set(s.class_id, s.class_name);
+    });
+    return Array.from(classMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [data?.students]);
+
   const filteredStudents = useMemo(() => {
     if (!data?.students) return [];
-    if (!searchTerm.trim()) return data.students;
+    
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+
+    let students = data.students;
+
+    if (classFilter !== 'all') {
+      students = students.filter(s => s.class_id === classFilter);
+    }
+
+    if (timeFilter !== 'all') {
+      const cutoff = timeFilter === 'today' ? todayStart : weekStart;
+      students = students
+        .map(s => {
+          const recentGrades = s.grades.filter(g => new Date(g.created_at) >= cutoff);
+          if (recentGrades.length === 0) return null;
+          return { ...s, grades: recentGrades };
+        })
+        .filter(Boolean) as StudentSyncData[];
+    }
+
+    if (!searchTerm.trim()) return students;
     
     const term = searchTerm.toLowerCase();
-    return data.students.filter(s => {
+    return students.filter(s => {
       const displayName = getDisplayName(s.student_id, s.first_name, s.last_name);
       return displayName.toLowerCase().includes(term) ||
         s.class_name.toLowerCase().includes(term) ||
         s.grades.some(g => g.topic_name.toLowerCase().includes(term));
     });
-  }, [data?.students, searchTerm, getDisplayName]);
+  }, [data?.students, searchTerm, getDisplayName, timeFilter, classFilter]);
+
+  // Group students by class
+  const groupedByClass = useMemo(() => {
+    const groups: { classId: string; className: string; students: StudentSyncData[]; avgGrade: number; totalGrades: number }[] = [];
+    const classMap = new Map<string, StudentSyncData[]>();
+    
+    filteredStudents.forEach(s => {
+      if (!classMap.has(s.class_id)) classMap.set(s.class_id, []);
+      classMap.get(s.class_id)!.push(s);
+    });
+
+    classMap.forEach((students, classId) => {
+      const className = students[0]?.class_name || 'Unknown';
+      const allGrades = students.flatMap(s => s.grades);
+      const avgGrade = allGrades.length > 0 
+        ? Math.round(allGrades.reduce((sum, g) => sum + g.grade, 0) / allGrades.length) 
+        : 0;
+      groups.push({ classId, className, students, avgGrade, totalGrades: allGrades.length });
+    });
+
+    groups.sort((a, b) => a.className.localeCompare(b.className));
+    return groups;
+  }, [filteredStudents]);
 
   const toggleStudentSelection = (studentId: string) => {
     const newSelected = new Set(selectedStudents);
@@ -377,6 +442,37 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
               </div>
             </div>
 
+            {/* Time Filter Tabs + Class Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <Tabs value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'today' | 'this-week' | 'all')} className="flex-1">
+                <TabsList className="w-full sm:w-auto">
+                  <TabsTrigger value="today" className="gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Today
+                  </TabsTrigger>
+                  <TabsTrigger value="this-week" className="gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    This Week
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="gap-1.5">
+                    <Database className="h-3.5 w-3.5" />
+                    All Time
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Filter by class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes ({availableClasses.length})</SelectItem>
+                  {availableClasses.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Search and Actions */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
@@ -401,6 +497,16 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 </Button>
                 <Button
                   size="sm"
+                  variant="secondary"
+                  onClick={() => setShowWorksheetGenerator(true)}
+                  disabled={selectedStudents.size === 0}
+                  className="whitespace-nowrap"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate Worksheet
+                </Button>
+                <Button
+                  size="sm"
                   onClick={handleSyncSelected}
                   disabled={selectedStudents.size === 0 || isSyncing}
                   className="whitespace-nowrap"
@@ -420,9 +526,24 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                 </p>
               </div>
             ) : (
-              <ScrollArea className="h-[500px]">
-                <div className="space-y-2 pr-4">
-                  {filteredStudents.map((student) => (
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-4 pr-4">
+                  {groupedByClass.map((group) => (
+                    <div key={group.classId}>
+                      {/* Class Header */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/60 mb-2 sticky top-0 z-10">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="h-4 w-4 text-primary" />
+                          <span className="font-semibold text-sm">{group.className}</span>
+                          <Badge variant="secondary" className="text-xs">{group.students.length} students</Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className={`font-medium ${getGradeColor(group.avgGrade)}`}>{group.avgGrade}% avg</span>
+                          <span>{group.totalGrades} grades</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                  {group.students.map((student) => (
                     <Collapsible
                       key={student.student_id}
                       open={expandedStudent === student.student_id}
@@ -445,7 +566,11 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                               )}
                               <div>
                                 <p className="font-medium">{getDisplayName(student.student_id, student.first_name, student.last_name)}</p>
-                              <p className="text-xs text-muted-foreground">{student.class_name}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                                    {student.class_name}
+                                  </Badge>
+                                </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
@@ -538,10 +663,25 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                           {/* Weak Topics */}
                           {student.weak_topics.length > 0 && (
                             <div>
-                              <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-                                <TrendingDown className="h-4 w-4 text-red-600" />
-                                Weak Topics ({student.weak_topics.length})
-                              </h4>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-medium flex items-center gap-2">
+                                  <TrendingDown className="h-4 w-4 text-red-600" />
+                                  Weak Topics ({student.weak_topics.length})
+                                </h4>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedStudents(new Set([student.student_id]));
+                                    setShowWorksheetGenerator(true);
+                                  }}
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Generate Remediation
+                                </Button>
+                              </div>
                               <div className="flex flex-wrap gap-2">
                                 {student.weak_topics.map((wt, idx) => (
                                   <Badge key={idx} variant="secondary" className="text-xs bg-red-500/10 text-red-600 border-red-500/20">
@@ -618,6 +758,9 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
                       </CollapsibleContent>
                     </Collapsible>
                   ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </ScrollArea>
             )}
@@ -640,6 +783,11 @@ export function ScholarSyncDataDetails({ classId }: ScholarSyncDataDetailsProps)
           </CardContent>
         </CollapsibleContent>
       </Card>
+      {/* Adaptive Worksheet Generator Dialog */}
+      <AdaptiveWorksheetGenerator
+        open={showWorksheetGenerator}
+        onOpenChange={setShowWorksheetGenerator}
+      />
     </Collapsible>
   );
 }
