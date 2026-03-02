@@ -1,5 +1,5 @@
 import React, { useState, useCallback, Suspense } from 'react';
-import { Download, Users, TrendingUp, AlertTriangle, BarChart3, Eye, GitCompare, LayoutGrid, Send, Loader2, Save, CheckCircle, BookOpen, Link, Unlink, FileStack, Upload, FileText, Cloud, ChevronDown } from 'lucide-react';
+import { Download, Users, TrendingUp, AlertTriangle, BarChart3, Eye, GitCompare, LayoutGrid, Send, Loader2, Save, CheckCircle, BookOpen, Link, Unlink, FileStack, Upload, FileText, Cloud, ChevronDown, Printer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { StudentComparisonView } from './StudentComparisonView';
 import { GradedPapersGallery } from './lazy';
 import { DifferentiationGroupView } from './DifferentiationGroupView';
 import { MissingSubmissionsAlert } from './MissingSubmissionsAlert';
+import { PrintStudentErrorReport } from '@/components/print/PrintStudentErrorReport';
 import { PushToClassroomDialog } from './PushToClassroomDialog';
 import { SaveToDriveDialog } from './SaveToDriveDialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -85,6 +86,7 @@ export function BatchReport({ items, summary, classId, questionId, className, as
   const [showGallery, setShowGallery] = useState(false);
   const [showClassroomPush, setShowClassroomPush] = useState(false);
   const [showSaveToDrive, setShowSaveToDrive] = useState(false);
+  const [showErrorReport, setShowErrorReport] = useState(false);
   const [isPushingAll, setIsPushingAll] = useState(false);
   const [isPushingBasicSkills, setIsPushingBasicSkills] = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
@@ -544,6 +546,10 @@ export function BatchReport({ items, summary, classId, questionId, className, as
             <LayoutGrid className="h-4 w-4 mr-2" />
             View All Papers
           </Button>
+          <Button onClick={() => setShowErrorReport(true)} variant="outline">
+            <Printer className="h-4 w-4 mr-2" />
+            Print Error Reports
+          </Button>
           {canCompare && (
             <Button onClick={() => setShowComparison(true)} variant="secondary">
               <GitCompare className="h-4 w-4 mr-2" />
@@ -958,6 +964,14 @@ export function BatchReport({ items, summary, classId, questionId, className, as
           }}
         />
       )}
+
+      {/* Print Student Error Reports */}
+      <PrintStudentErrorReport
+        open={showErrorReport}
+        onOpenChange={setShowErrorReport}
+        items={items}
+        assignmentName={assignmentName || assignmentTitle || className}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
-import { ZoomIn, ZoomOut, RotateCw, Move, AlertTriangle, MapPin, Check, X, Save, Brain, Loader2, Pencil, PenTool, CheckCircle2, Lightbulb, BookOpen, Target, ThumbsUp } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCw, Move, AlertTriangle, MapPin, Check, X, Save, Brain, Loader2, Pencil, PenTool, CheckCircle2, Lightbulb, BookOpen, Target, ThumbsUp, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -870,7 +870,6 @@ export function BatchImageZoomDialog({
           {!hasMisconceptions && showAnnotations && !isAnnotating && grade !== undefined && (
             <div className="w-80 border-l bg-background flex flex-col">
               <div className="p-3 border-b bg-muted/30">
-                {/* Show appropriate header based on grade */}
                 {grade !== undefined && grade >= 85 ? (
                   <h3 className="text-sm font-medium flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -883,83 +882,54 @@ export function BatchImageZoomDialog({
                   </h3>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">
-                  Review AI findings and train by confirming or dismissing
+                  Do you agree with the AI's grade of <strong>{grade}%</strong>?
                 </p>
               </div>
               
               <ScrollArea className="flex-1">
                 <div className="p-3 space-y-2">
-                  {/* Show different content based on grade - low grade means something was wrong even if no specific errors listed */}
-                  {grade !== undefined && grade < 70 ? (
+                  {/* Grade Agreement Buttons */}
+                  <div className="p-3 rounded-lg border border-muted bg-muted/30">
+                    <p className="text-xs font-medium mb-2">Is this grade correct?</p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={noErrorConfirmed ? 'default' : 'outline'}
+                        size="sm"
+                        className={cn(
+                          "h-7 px-3 text-xs gap-1 flex-1",
+                          noErrorConfirmed && "bg-green-600 hover:bg-green-700 text-white"
+                        )}
+                        onClick={() => setNoErrorConfirmed(true)}
+                      >
+                        <Check className="h-3 w-3" />
+                        Yes, {grade}% is right
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-3 text-xs gap-1 flex-1 border-destructive/50 text-destructive hover:bg-destructive/10"
+                        onClick={() => setNoErrorConfirmed(false)}
+                      >
+                        <Edit2 className="h-3 w-3" />
+                        No, correct it
+                      </Button>
+                    </div>
+
+                    {noErrorConfirmed && (
+                      <p className="text-[10px] text-green-600 mt-2 text-center">
+                        ✓ Grade confirmed — click "Save & Train AI" below
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Low-grade warning */}
+                  {grade !== undefined && grade < 70 && (
                     <div className="p-3 rounded-lg border border-amber-300/50 bg-amber-50/50 dark:bg-amber-950/20">
                       <div className="flex items-start gap-2">
-                        <div className="flex items-center justify-center w-6 h-6 rounded-full shrink-0 bg-amber-100 text-amber-600">
-                          <AlertTriangle className="h-3 w-3" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-                            The AI did not detect specific errors but the work may be incomplete, missing steps, or have an incorrect final answer. Review the paper manually for issues like incomplete work, missing units, or calculation errors.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={cn(
-                      "p-3 rounded-lg border transition-all",
-                      noErrorConfirmed && "border-green-400 bg-green-50/50 dark:bg-green-950/20",
-                      !noErrorConfirmed && "border-green-300/50 bg-green-50/50 dark:bg-green-950/20"
-                    )}>
-                      <div className="flex items-start gap-2">
-                        <div className={cn(
-                          "flex items-center justify-center w-6 h-6 rounded-full shrink-0",
-                          noErrorConfirmed ? "bg-green-500 text-white" : "bg-green-100 text-green-600"
-                        )}>
-                          <Check className="h-3 w-3" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs leading-relaxed text-green-700 dark:text-green-400">
-                            No errors found - the student's work appears to be mathematically correct.
-                          </p>
-                        
-                          <div className="flex items-center gap-2 mt-2">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant={noErrorConfirmed ? 'default' : 'outline'}
-                                    size="sm"
-                                    className={cn(
-                                      "h-6 px-2 text-xs gap-1",
-                                      noErrorConfirmed && "bg-green-600 hover:bg-green-700"
-                                    )}
-                                    onClick={() => setNoErrorConfirmed(!noErrorConfirmed)}
-                                  >
-                                    <Check className="h-3 w-3" />
-                                    {noErrorConfirmed ? 'Confirmed' : 'Confirm'}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>AI correctly identified no errors</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs gap-1"
-                                    onClick={() => setNoErrorConfirmed(false)}
-                                    disabled={!noErrorConfirmed}
-                                  >
-                                    <X className="h-3 w-3" />
-                                    Dismiss
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>AI missed errors in this work</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                        <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+                          The AI gave a low grade but didn't list specific errors. Review the paper and use "No, correct it" above if the grade should be different.
+                        </p>
                       </div>
                     </div>
                   )}
