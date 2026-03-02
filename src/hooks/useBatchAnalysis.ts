@@ -1442,7 +1442,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             })),
             misconceptions: [],
             totalScore: { earned: 0, possible: rubricSteps?.reduce((s, r) => s + r.points, 0) || 6, percentage: 0 },
-            grade: teacherGradeFloor,
+            grade: 0,
             gradeJustification: 'No student work detected on this page.',
             feedback: 'No student work detected.',
             studentWorkPresent: false,
@@ -1989,34 +1989,30 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
         }
       }
 
-      // STEP 1: Extract text via Google Cloud Vision API (fast, ~1-2s)
-      let ocrText: string | null = null;
+      // STEP 1: OCR the PRIMARY page ALONE first for blank detection.
+      // We must NOT combine with continuation images here, because a blank primary
+      // with a non-blank continuation would pass blank detection on the combined text.
+      let primaryOcrText: string | null = null;
       try {
-        const ocrBody: any = { imageBase64: item.imageDataUrl };
-        if (additionalImages.length > 0) {
-          ocrBody.additionalImages = additionalImages;
-        }
         const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-student-work', {
-          body: ocrBody,
+          body: { imageBase64: item.imageDataUrl },
         });
         if (!ocrError && ocrData?.success && ocrData?.ocrText) {
-          ocrText = ocrData.ocrText;
-          console.log(`[OCR] Extracted ${ocrText!.length} chars in ${ocrData.latencyMs}ms`);
+          primaryOcrText = ocrData.ocrText;
+          console.log(`[OCR] Primary page: extracted ${primaryOcrText!.length} chars in ${ocrData.latencyMs}ms`);
         } else {
-          console.warn('[OCR] Failed, falling back to image-based grading:', ocrError?.message || ocrData?.error);
+          console.warn('[OCR] Primary page failed:', ocrError?.message || ocrData?.error);
         }
       } catch (ocrErr: any) {
-        console.warn('[OCR] Exception, falling back:', ocrErr.message);
+        console.warn('[OCR] Primary page exception:', ocrErr.message);
       }
 
-      // STEP 1.5: Blank page detection — skip AI grading entirely for empty pages.
-      // Uses the shared detectBlankPage utility which strips boilerplate patterns
-      // (headers, worksheet metadata, printed questions, QR codes) before checking.
+      // STEP 1.5: Blank page detection on the PRIMARY page only.
       {
-        const textToCheck = ocrText || '';
+        const textToCheck = primaryOcrText || '';
         const blankResult = detectBlankPage(textToCheck);
         if (blankResult.isBlank) {
-          console.log(`[BlankPageDetection] Blank page detected (normalized: ${blankResult.normalizedLength} chars, reason: ${blankResult.detectionReason}). Skipping AI call entirely.`);
+          console.log(`[BlankPageDetection] Primary page BLANK (normalized: ${blankResult.normalizedLength} chars, reason: ${blankResult.detectionReason}). Skipping AI call.`);
           return {
             ...item,
             status: 'completed' as const,
@@ -2036,12 +2032,29 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               })),
               misconceptions: [],
               totalScore: { earned: 0, possible: rubricSteps?.reduce((s, r) => s + r.points, 0) || 6, percentage: 0 },
-              grade: teacherGradeFloor,
+              grade: 0,
               gradeJustification: 'No student work detected on this page.',
               feedback: 'No student work detected.',
               studentWorkPresent: false,
             } as AnalysisResult,
           };
+        }
+      }
+
+      // STEP 1.6: Primary is NOT blank — now combine with continuation pages for full grading.
+      let ocrText = primaryOcrText;
+      if (additionalImages.length > 0) {
+        try {
+          const ocrBody: any = { imageBase64: item.imageDataUrl, additionalImages };
+          const { data: ocrData, error: ocrError } = await supabase.functions.invoke('ocr-student-work', {
+            body: ocrBody,
+          });
+          if (!ocrError && ocrData?.success && ocrData?.ocrText) {
+            ocrText = ocrData.ocrText;
+            console.log(`[OCR] Combined (primary + ${additionalImages.length} continuations): ${ocrText!.length} chars`);
+          }
+        } catch (ocrErr: any) {
+          console.warn('[OCR] Combined extraction failed, using primary-only text:', ocrErr.message);
         }
       }
 
