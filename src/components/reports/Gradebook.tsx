@@ -850,7 +850,7 @@ export function Gradebook({ classId }: GradebookProps) {
                   {showStudentAverages ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
                 </button>
                 {showStudentAverages && (
-                  <ScrollArea className="max-h-[600px] border rounded-lg">
+                  <div className="max-h-[600px] overflow-auto border rounded-lg">
                     <Table>
                       <TableHeader className="sticky top-0 bg-background">
                         <TableRow>
@@ -917,7 +917,7 @@ export function Gradebook({ classId }: GradebookProps) {
                         ))}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                  </div>
                 )}
               </div>
             )}
