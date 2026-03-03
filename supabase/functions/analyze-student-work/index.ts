@@ -732,10 +732,11 @@ const GRADING_SCHEMA = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// BOOLEAN → GRADE COMPUTATION — WORK-FIRST, 16 tiers, 100% deterministic
+// BOOLEAN → GRADE COMPUTATION — WORK-FIRST, 20 tiers, 100% deterministic
+// Grade range: 0% (blank/off-topic) OR 55%–100% (any meaningful work)
 // Primary axis: Work quality (shown → complete → organized)
 // Secondary: Approach validity
-// Tertiary (bonus): Answer correctness
+// Tertiary (bonus): Answer correctness + reasoning
 // ═══════════════════════════════════════════════════════════════════════════════
 interface BooleanAnswers {
   is_academic_assignment: boolean;
@@ -774,6 +775,7 @@ function computeGradeFromBooleans(
   } = answers;
 
   // ─── GATEKEEPER CHECKS → 0% (must pass ALL to get any grade) ───
+  // These are the only cases that score below 55%.
   if (!is_academic_assignment) {
     return { grade: 0, regentsScore: 0, tier: "NOT_ACADEMIC" };
   }
@@ -788,75 +790,103 @@ function computeGradeFromBooleans(
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BAND 1: NO WORK SHOWN (ceiling = 50%)
+  // BAND 1: NO WORK SHOWN (55%–57%)
   // A correct answer without work is unverifiable — could be copied.
+  // Minimum grade floor is 55% for any meaningful attempt.
   // ═══════════════════════════════════════════════════════════════════
   if (!is_work_shown) {
-    if (is_answer_correct) {
-      return { grade: 50, regentsScore: 1, tier: "ANSWER_ONLY" };
+    if (has_partial_answer) {
+      // Partial answer only (no work) — slightly above minimum
+      return { grade: 57, regentsScore: 1, tier: "PARTIAL_ONLY" };
     }
-    return { grade: 10, regentsScore: 0, tier: "MINIMAL" };
+    // Correct answer only OR wrong answer only (no work shown)
+    // Correct-only = 55% because it could be copied; same floor
+    return { grade: 55, regentsScore: 1, tier: "ANSWER_ONLY" };
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BAND 2: WORK SHOWN + INVALID APPROACH (ceiling = 40%)
-  // Wrong method, but we evaluate concept understanding + effort.
+  // BAND 2: WORK SHOWN + INVALID APPROACH (55%–68%)
+  // Wrong method shown — evaluate concept understanding and organization.
+  // Lowest tier: no understanding, no organization → 55% (floor)
   // ═══════════════════════════════════════════════════════════════════
   if (!is_approach_valid) {
     if (has_conceptual_understanding && is_work_organized) {
-      return { grade: 40, regentsScore: 1, tier: "EMERGING_PLUS" };
+      // Wrong method, but organized and shows conceptual grasp
+      return { grade: 68, regentsScore: 1, tier: "EMERGING_PLUS" };
     }
     if (has_conceptual_understanding) {
-      return { grade: 30, regentsScore: 0, tier: "EMERGING" };
+      // Wrong method, shows conceptual understanding but disorganized
+      return { grade: 65, regentsScore: 1, tier: "EMERGING" };
     }
-    return { grade: 20, regentsScore: 0, tier: "ATTEMPTED" };
+    if (is_work_organized) {
+      // Wrong method, no understanding, but neatly organized effort
+      return { grade: 60, regentsScore: 1, tier: "ATTEMPTED" };
+    }
+    // Work shown but wrong method, no understanding, disorganized
+    return { grade: 55, regentsScore: 1, tier: "MINIMAL" };
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // BAND 3: WORK SHOWN + VALID APPROACH + INCOMPLETE WORK
-  // (work shown but NOT both complete AND organized)
-  // Ceiling = 80%
+  // BAND 3: WORK SHOWN + VALID APPROACH + INCOMPLETE/DISORGANIZED
+  // (valid method but NOT both complete AND organized)
+  // Range: 70%–83%
   // ═══════════════════════════════════════════════════════════════════
   if (!(is_work_complete && is_work_organized)) {
     if (is_answer_correct && is_work_organized) {
-      return { grade: 80, regentsScore: 3, tier: "PROFICIENT_PLUS" };
+      // Correct answer, valid approach, organized — but missing some steps
+      return { grade: 83, regentsScore: 3, tier: "PROFICIENT_PLUS" };
     }
     if (is_answer_correct) {
-      return { grade: 75, regentsScore: 3, tier: "PROFICIENT" };
+      // Correct answer, valid approach — but work is incomplete and disorganized
+      return { grade: 80, regentsScore: 3, tier: "PROFICIENT" };
+    }
+    if (has_partial_answer && is_work_organized) {
+      // Partial answer, valid approach, organized work — close but not complete
+      return { grade: 77, regentsScore: 2, tier: "GOOD_EFFORT_PLUS" };
     }
     if (has_partial_answer) {
-      return { grade: 60, regentsScore: 2, tier: "GOOD_EFFORT" };
+      // Partial answer, valid approach — work shown but disorganized/incomplete
+      return { grade: 73, regentsScore: 2, tier: "GOOD_EFFORT" };
     }
     if (is_work_organized) {
-      return { grade: 55, regentsScore: 2, tier: "DEVELOPING" };
+      // Valid approach, organized work, wrong answer — effort recognized
+      return { grade: 70, regentsScore: 2, tier: "DEVELOPING" };
     }
-    return { grade: 45, regentsScore: 1, tier: "BEGINNING" };
+    // Valid approach shown but work is both incomplete and disorganized
+    // Distinct from Band 2 by having a valid method
+    return { grade: 70, regentsScore: 2, tier: "BEGINNING" };
   }
 
   // ═══════════════════════════════════════════════════════════════════
   // BAND 4: WORK SHOWN + VALID APPROACH + COMPLETE + ORGANIZED
-  // The highest quality band. Correct answer is a bonus on top.
-  // Ceiling = 100%
+  // Highest quality band. Correctness and reasoning are the differentiators.
+  // Range: 85%–100%
   // ═══════════════════════════════════════════════════════════════════
   if (is_answer_correct) {
     if (explains_reasoning) {
+      // Perfect: complete, organized, valid, correct, with written reasoning
       return { grade: 100, regentsScore: 4, tier: "MASTERY" };
     }
+    // Complete, organized, valid, correct — no written explanation
     return { grade: 95, regentsScore: 4, tier: "EXEMPLARY" };
   }
 
-  // Complete + organized + valid approach + correct but disorganized
-  // This shouldn't happen (we're in complete+organized band), but handle edge:
-  // Answer is wrong or partial in the highest quality work band
   if (has_partial_answer) {
-    return { grade: 85, regentsScore: 4, tier: "NEARLY_THERE" };
+    if (explains_reasoning) {
+      // Complete, organized, valid, partially correct + explains steps
+      return { grade: 93, regentsScore: 4, tier: "NEARLY_THERE_PLUS" };
+    }
+    // Complete, organized, valid, partially correct — no reasoning written
+    return { grade: 90, regentsScore: 4, tier: "NEARLY_THERE" };
   }
 
-  // Wrong answer but complete, organized, valid approach = strong process
+  // Wrong answer but complete, organized, valid approach
   if (explains_reasoning) {
-    return { grade: 70, regentsScore: 3, tier: "APPROACHING_PLUS" };
+    // Strong process: all steps shown, organized, explains reasoning, just wrong answer
+    return { grade: 88, regentsScore: 3, tier: "APPROACHING_PLUS" };
   }
-  return { grade: 65, regentsScore: 2, tier: "APPROACHING" };
+  // Complete, organized, valid approach — wrong answer, no reasoning written
+  return { grade: 85, regentsScore: 3, tier: "APPROACHING" };
 }
 
 function buildGradingPrompt(opts: {
@@ -1009,16 +1039,18 @@ function validateAndNormalizeGrade(
     };
   }
 
-  let grade = Math.max(10, Math.min(100, rawGrade));
+  // Meaningful work floor is 55%. 0% is handled by gatekeepers above.
+  let grade = Math.max(55, Math.min(100, rawGrade));
 
-  // Cross-check: snap grade to nearest valid anchor value (from 16-tier system)
-  const GRADE_ANCHORS = [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 30, 20, 10];
+  // Cross-check: snap grade to nearest valid anchor value (from 20-tier system, 55%-100% range)
+  // 0% is for blank/off-topic only; all meaningful work is 55%-100%
+  const GRADE_ANCHORS = [100, 95, 93, 90, 88, 85, 83, 80, 77, 73, 70, 68, 65, 60, 57, 55];
   const regentsBands: Record<number, [number, number]> = {
-    4: [85, 100], // MASTERY, EXEMPLARY, EXCELLENT, NEARLY_THERE
-    3: [70, 84],  // PROFICIENT_PLUS, PROFICIENT, APPROACHING_PLUS
-    2: [55, 69],  // APPROACHING, GOOD_EFFORT, DEVELOPING
-    1: [40, 54],  // ANSWER_ONLY, BEGINNING, EMERGING_PLUS
-    0: [0, 39],   // EMERGING, ATTEMPTED, MINIMAL, Gates
+    4: [88, 100],  // APPROACHING_PLUS through MASTERY
+    3: [73, 87],   // DEVELOPING/BEGINNING through PROFICIENT_PLUS
+    2: [60, 72],   // ATTEMPTED through GOOD_EFFORT
+    1: [55, 59],   // ANSWER_ONLY, PARTIAL_ONLY, MINIMAL, EMERGING_PLUS
+    0: [0, 0],     // Blank/off-topic/not-academic only
   };
 
   // Snap grade to nearest anchor value for consistency
@@ -1048,7 +1080,7 @@ function validateAndNormalizeGrade(
   }
 
   // Derive Regents from grade if they're still misaligned
-  const derivedRegents = grade >= 85 ? 4 : grade >= 70 ? 3 : grade >= 55 ? 2 : grade >= 40 ? 1 : 0;
+  const derivedRegents = grade >= 88 ? 4 : grade >= 73 ? 3 : grade >= 60 ? 2 : grade >= 55 ? 1 : 0;
   if (derivedRegents !== regentsScore) {
     regentsScore = derivedRegents;
   }
