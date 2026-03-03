@@ -361,12 +361,14 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
   const [selectedRegenerateKeys, setSelectedRegenerateKeys] = useState<Set<string>>(new Set());
   
-  // Hidden geometry state - kept for compatibility but always disabled
+  // Geometry shape auto-generation state
   const [includeGeometry] = useState(false);
   const [useAIImages] = useState(false);
   const [preferDeterministicSVG] = useState(false);
   const [geometryShapes, setGeometryShapes] = useState<Record<string, string>>({});
   const [regeneratingShapeKey, setRegeneratingShapeKey] = useState<string | null>(null);
+  const pendingShapeCount = useRef(0);
+  const [shapesReady, setShapesReady] = useState(true);
   
   // Placeholder Shapes icon component (hidden feature)
   const Shapes = ({ className }: { className?: string }) => null;
@@ -397,6 +399,55 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
     setShowImageWarning(false);
     setPendingImageOption(null);
   };
+
+  // Auto-generate geometry shapes for questions with imagePrompt when previewData changes
+  useEffect(() => {
+    if (!previewData) return;
+
+    const questionsToGenerate: { text: string; key: string; prompt: string }[] = [];
+
+    Object.entries(previewData.questions).forEach(([cacheKey, qs]) => {
+      qs.warmUp?.forEach((q, idx) => {
+        const key = `${cacheKey}-warmUp-${idx}`;
+        if (q.imagePrompt && !geometryShapes[key]) {
+          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt });
+        }
+      });
+      qs.main?.forEach((q, idx) => {
+        const key = `${cacheKey}-main-${idx}`;
+        if (q.imagePrompt && !geometryShapes[key]) {
+          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt });
+        }
+      });
+    });
+
+    if (questionsToGenerate.length === 0) return;
+
+    setShapesReady(false);
+    pendingShapeCount.current = questionsToGenerate.length;
+
+    // Generate all shapes in parallel
+    const generateAll = async () => {
+      await Promise.all(
+        questionsToGenerate.map(async ({ text, key, prompt }) => {
+          try {
+            await generateGeometryShapeForQuestion(text, key, prompt);
+          } catch (err) {
+            console.error(`Failed to auto-generate shape for ${key}:`, err);
+          } finally {
+            pendingShapeCount.current--;
+            if (pendingShapeCount.current <= 0) {
+              setShapesReady(true);
+            }
+          }
+        })
+      );
+      setShapesReady(true);
+    };
+
+    generateAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewData]);
 
   // Load presets from localStorage on mount
   useEffect(() => {
@@ -658,6 +709,19 @@ const toggleStudent = (studentId: string) => {
         variant: 'destructive',
       });
       return;
+    }
+
+    // Wait for any pending shape generations to complete
+    if (!shapesReady) {
+      setGenerationStatus('Waiting for geometry shapes to finish generating...');
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (pendingShapeCount.current <= 0) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 200);
+      });
     }
 
     setIsGenerating(true);
@@ -1008,6 +1072,34 @@ const toggleStudent = (studentId: string) => {
               }
             }
 
+            // Add geometry shape if available
+            const geoKey = `${cacheKey}-main-${idx}`;
+            const geoShapeUrl = geometryShapes[geoKey];
+            if (geoShapeUrl) {
+              try {
+                const pngDataUrl = await svgToPngDataUrl(geoShapeUrl, 200, 200);
+                const pngResponse = await fetch(pngDataUrl);
+                const pngBuffer = await pngResponse.arrayBuffer();
+                if (pngBuffer) {
+                  children.push(
+                    new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: pngBuffer,
+                          transformation: { width: 180, height: 180 },
+                          type: 'png',
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { before: 100, after: 100 },
+                    })
+                  );
+                }
+              } catch (geoError) {
+                console.error('Error adding geometry shape to Word doc:', geoError);
+              }
+            }
+
             if (q.hint && includeHints) {
               children.push(
                 new Paragraph({
@@ -1132,6 +1224,19 @@ const toggleStudent = (studentId: string) => {
         variant: 'destructive',
       });
       return;
+    }
+
+    // Wait for any pending shape generations to complete
+    if (!shapesReady) {
+      setGenerationStatus('Waiting for geometry shapes to finish generating...');
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (pendingShapeCount.current <= 0) {
+            clearInterval(interval);
+            resolve();
+          }
+        }, 200);
+      });
     }
 
     setIsGenerating(true);
@@ -1590,6 +1695,28 @@ const toggleStudent = (studentId: string) => {
                 } catch (storyboardError) {
                   console.error('Error adding storyboard image to PDF:', storyboardError);
                 }
+              }
+            }
+            // Add geometry shape if available
+            const shapeKey = `${cacheKey}-main-${questionIdx}`;
+            const shapeUrl = geometryShapes[shapeKey];
+            if (shapeUrl) {
+              try {
+                if (yPosition > pageHeight - 65) {
+                  pdf.addPage();
+                  pageCount++;
+                  await addContinuationPageHeader(pageCount);
+                  yPosition = 25;
+                }
+                const pngDataUrl = await svgToPngDataUrl(shapeUrl, 200, 200);
+                const imgWidth = 50;
+                const imgHeight = 50;
+                const imgX = (pageWidth - imgWidth) / 2;
+                yPosition += 3;
+                pdf.addImage(pngDataUrl, 'PNG', imgX, yPosition, imgWidth, imgHeight);
+                yPosition += imgHeight + 5;
+              } catch (shapeError) {
+                console.error('Error adding geometry shape to PDF:', shapeError);
               }
             }
             if (question.hint && includeHints) {
@@ -2582,8 +2709,8 @@ const toggleStudent = (studentId: string) => {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    {/* Show geometry shapes in preview - from question or generated - only for geometry subjects */}
-                    {!isNoShapeSubject && useAIImages && (((q.imageUrl || q.svg) && includeGeometry) || geometryShapes[`${cacheKey}-warmUp-${idx}`]) ? (
+                    {/* Show geometry shapes in preview - auto-generated or from question data */}
+                    {!isNoShapeSubject && (geometryShapes[`${cacheKey}-warmUp-${idx}`] || ((q.imageUrl || q.svg) && (useAIImages || q.imagePrompt))) ? (
                       <div className="mt-2 flex flex-col items-center gap-2">
                         <div className="relative">
                           {geometryShapes[`${cacheKey}-warmUp-${idx}`] ? (
@@ -2740,8 +2867,8 @@ const toggleStudent = (studentId: string) => {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                    {/* Show geometry shapes in preview - from question or generated - only for geometry subjects */}
-                    {!isNoShapeSubject && useAIImages && (((q.imageUrl || q.svg) && includeGeometry) || geometryShapes[`${cacheKey}-main-${idx}`]) ? (
+                    {/* Show geometry shapes in preview - auto-generated or from question data */}
+                    {!isNoShapeSubject && (geometryShapes[`${cacheKey}-main-${idx}`] || ((q.imageUrl || q.svg) && (useAIImages || q.imagePrompt))) ? (
                       <div className="mt-2 flex flex-col items-center gap-2">
                         <div className="relative">
                           {geometryShapes[`${cacheKey}-main-${idx}`] ? (
@@ -2879,8 +3006,8 @@ const toggleStudent = (studentId: string) => {
                     {/* Answer space with Generate Shape button */}
                     <div className="mt-3 border-t pt-2">
                       <div className="h-16 border border-dashed rounded bg-gray-50 relative flex items-center justify-center">
-                        {/* Show Generate Shape button if no shape exists and geometry is enabled - only for geometry subjects */}
-                        {useAIImages && includeGeometry && !isNoShapeSubject && !q.imageUrl && !q.svg && !geometryShapes[`${cacheKey}-main-${idx}`] && (
+                        {/* Show Generate Shape button if no shape exists and question has imagePrompt */}
+                        {!isNoShapeSubject && q.imagePrompt && !q.imageUrl && !q.svg && !geometryShapes[`${cacheKey}-main-${idx}`] && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -3876,6 +4003,12 @@ const toggleStudent = (studentId: string) => {
                   <X className="h-4 w-4 mr-1" />
                   Close
                 </Button>
+                {!shapesReady && (
+                  <Badge variant="secondary" className="gap-1 animate-pulse">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Generating shapes...
+                  </Badge>
+                )}
                 <Button
                   size="sm"
                   onClick={generateWordDocument}
