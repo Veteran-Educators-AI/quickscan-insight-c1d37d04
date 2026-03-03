@@ -51,6 +51,8 @@ export interface SessionQuestion {
   created_at: string;
   activated_at: string | null;
   closed_at: string | null;
+  svg: string | null;
+  image_prompt: string | null;
 }
 
 export interface SessionAnswer {
@@ -150,7 +152,9 @@ export function useLiveSession() {
     options: string[],
     correctAnswer?: string,
     explanation?: string,
-    timeLimitSeconds?: number
+    timeLimitSeconds?: number,
+    svg?: string,
+    imagePrompt?: string
   ) => {
     if (!session) return null;
 
@@ -175,6 +179,8 @@ export function useLiveSession() {
           is_active: true,
           time_limit_seconds: timeLimitSeconds || null,
           activated_at: new Date().toISOString(),
+          svg: svg || null,
+          image_prompt: imagePrompt || null,
         })
         .select()
         .single();
