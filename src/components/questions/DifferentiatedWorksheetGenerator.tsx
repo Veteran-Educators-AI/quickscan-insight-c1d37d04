@@ -80,6 +80,15 @@ interface StudentWithDiagnostic extends Student {
   hasAdaptiveData?: boolean;
 }
 
+interface GeometryMetadataLite {
+  type: string;
+  vertices?: Array<{ label: string; x: number; y: number }>;
+  axes?: { minX: number; maxX: number; minY: number; maxY: number; showGrid?: boolean; showNumbers?: boolean };
+  circle?: { center: { x: number; y: number; label?: string }; radius: number; chordPoints?: Array<{ label: string; x: number; y: number }> };
+  measurements?: Array<{ type: string; value: number; unit: string; label?: string }>;
+  [key: string]: unknown;
+}
+
 interface GeneratedQuestion {
   questionNumber: number;
   topic: string;
@@ -92,7 +101,18 @@ interface GeneratedQuestion {
   svg?: string;
   imageUrl?: string;
   imagePrompt?: string;
+  geometry?: GeometryMetadataLite;
 }
+
+// Placeholder SVG for when shape generation fails
+const PLACEHOLDER_SHAPE_SVG = `data:image/svg+xml;base64,${btoa(`<svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="300" height="200" fill="#f9fafb" stroke="#d1d5db" stroke-width="2" rx="8"/>
+  <text x="150" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">Diagram not available</text>
+  <text x="150" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af">Click ↻ to regenerate</text>
+  <path d="M140 50 L160 50 L150 35 Z" fill="none" stroke="#9ca3af" stroke-width="1.5"/>
+  <rect x="143" y="52" width="14" height="14" fill="none" stroke="#9ca3af" stroke-width="1.5"/>
+  <circle cx="150" cy="50" r="20" fill="none" stroke="#d1d5db" stroke-width="1"/>
+</svg>`)}`;
 
 interface DifferentiatedWorksheetGeneratorProps {
   open: boolean;
@@ -404,19 +424,19 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   useEffect(() => {
     if (!previewData) return;
 
-    const questionsToGenerate: { text: string; key: string; prompt: string }[] = [];
+    const questionsToGenerate: { text: string; key: string; prompt: string; geometry?: GeometryMetadataLite }[] = [];
 
     Object.entries(previewData.questions).forEach(([cacheKey, qs]) => {
       qs.warmUp?.forEach((q, idx) => {
         const key = `${cacheKey}-warmUp-${idx}`;
-        if (q.imagePrompt && !geometryShapes[key]) {
-          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt });
+        if ((q.imagePrompt || q.geometry) && !geometryShapes[key]) {
+          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt || '', geometry: q.geometry });
         }
       });
       qs.main?.forEach((q, idx) => {
         const key = `${cacheKey}-main-${idx}`;
-        if (q.imagePrompt && !geometryShapes[key]) {
-          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt });
+        if ((q.imagePrompt || q.geometry) && !geometryShapes[key]) {
+          questionsToGenerate.push({ text: q.question, key, prompt: q.imagePrompt || '', geometry: q.geometry });
         }
       });
     });
@@ -429,9 +449,9 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
     // Generate all shapes in parallel
     const generateAll = async () => {
       await Promise.all(
-        questionsToGenerate.map(async ({ text, key, prompt }) => {
+        questionsToGenerate.map(async ({ text, key, prompt, geometry }) => {
           try {
-            await generateGeometryShapeForQuestion(text, key, prompt);
+            await generateGeometryShapeForQuestion(text, key, prompt, geometry);
           } catch (err) {
             console.error(`Failed to auto-generate shape for ${key}:`, err);
           } finally {
@@ -2461,9 +2481,12 @@ const toggleStudent = (studentId: string) => {
     questionText: string,
     questionKey: string,
     imagePrompt?: string,
+    geometry?: GeometryMetadataLite,
+    attempt = 1,
   ): Promise<string | null> => {
+    const MAX_ATTEMPTS = 2; // 1 retry per retry-strategy
     try {
-      console.log(`Generating geometry shape for: ${questionKey}`);
+      console.log(`Generating geometry shape for: ${questionKey} (attempt ${attempt}/${MAX_ATTEMPTS})`);
       setRegeneratingShapeKey(questionKey);
       
       // Prefer using the structured imagePrompt from the question when available,
@@ -2492,6 +2515,7 @@ const toggleStudent = (studentId: string) => {
           questions: [{
             questionNumber: 1,
             imagePrompt: basePrompt,
+            ...(geometry ? { geometry } : {}),
           }],
           useNanoBanana: shouldUseAI,
           preferDeterministicSVG: shouldPreferDeterministic,
@@ -2499,8 +2523,16 @@ const toggleStudent = (studentId: string) => {
       });
 
       if (error) {
-        console.error('Geometry shape generation error:', error);
-        return null;
+        console.error(`Geometry shape generation error (attempt ${attempt}):`, error);
+        // Retry once
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`Retrying shape generation for ${questionKey}...`);
+          return generateGeometryShapeForQuestion(questionText, questionKey, imagePrompt, geometry, attempt + 1);
+        }
+        // Final failure: use placeholder
+        console.warn(`Shape generation failed after ${MAX_ATTEMPTS} attempts for ${questionKey}, using placeholder`);
+        setGeometryShapes(prev => ({ ...prev, [questionKey]: PLACEHOLDER_SHAPE_SVG }));
+        return PLACEHOLDER_SHAPE_SVG;
       }
 
       const imageUrl = data?.results?.[0]?.imageUrl;
@@ -2512,25 +2544,41 @@ const toggleStudent = (studentId: string) => {
         return imageUrl;
       }
       
-      return null;
+      // No imageUrl returned - retry once
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(`No imageUrl returned, retrying for ${questionKey}...`);
+        return generateGeometryShapeForQuestion(questionText, questionKey, imagePrompt, geometry, attempt + 1);
+      }
+
+      // Final failure: use placeholder
+      console.warn(`No imageUrl after ${MAX_ATTEMPTS} attempts for ${questionKey}, using placeholder`);
+      setGeometryShapes(prev => ({ ...prev, [questionKey]: PLACEHOLDER_SHAPE_SVG }));
+      return PLACEHOLDER_SHAPE_SVG;
     } catch (error) {
-      console.error('Error generating geometry shape:', error);
-      return null;
+      console.error(`Error generating geometry shape (attempt ${attempt}):`, error);
+      if (attempt < MAX_ATTEMPTS) {
+        return generateGeometryShapeForQuestion(questionText, questionKey, imagePrompt, geometry, attempt + 1);
+      }
+      // Final failure: use placeholder
+      setGeometryShapes(prev => ({ ...prev, [questionKey]: PLACEHOLDER_SHAPE_SVG }));
+      return PLACEHOLDER_SHAPE_SVG;
     } finally {
-      setRegeneratingShapeKey(null);
+      if (attempt >= MAX_ATTEMPTS || attempt === 1) {
+        setRegeneratingShapeKey(null);
+      }
     }
   };
 
   // Regenerate geometry shape for a specific question
-  const regenerateGeometryShape = async (questionText: string, questionKey: string, imagePrompt?: string) => {
+  const regenerateGeometryShape = async (questionText: string, questionKey: string, imagePrompt?: string, geometry?: GeometryMetadataLite) => {
     toast({
       title: 'Generating shape...',
       description: 'Creating a geometry diagram for this question.',
     });
     
-    const imageUrl = await generateGeometryShapeForQuestion(questionText, questionKey, imagePrompt);
+    const imageUrl = await generateGeometryShapeForQuestion(questionText, questionKey, imagePrompt, geometry);
     
-    if (imageUrl) {
+    if (imageUrl && imageUrl !== PLACEHOLDER_SHAPE_SVG) {
       toast({
         title: 'Shape generated',
         description: 'Geometry diagram has been created.',
@@ -2538,7 +2586,7 @@ const toggleStudent = (studentId: string) => {
     } else {
       toast({
         title: 'Generation failed',
-        description: 'Could not generate geometry shape. Please try again.',
+        description: 'Could not generate geometry shape. A placeholder has been added — click ↻ to retry.',
         variant: 'destructive',
       });
     }
@@ -2710,7 +2758,7 @@ const toggleStudent = (studentId: string) => {
                       </TooltipProvider>
                     </div>
                     {/* Show geometry shapes in preview - auto-generated or from question data */}
-                    {!isNoShapeSubject && (geometryShapes[`${cacheKey}-warmUp-${idx}`] || ((q.imageUrl || q.svg) && (useAIImages || q.imagePrompt))) ? (
+                    {!isNoShapeSubject && (geometryShapes[`${cacheKey}-warmUp-${idx}`] || ((q.imageUrl || q.svg || q.geometry) && (useAIImages || q.imagePrompt || q.geometry))) ? (
                       <div className="mt-2 flex flex-col items-center gap-2">
                         <div className="relative">
                           {geometryShapes[`${cacheKey}-warmUp-${idx}`] ? (
@@ -2736,7 +2784,7 @@ const toggleStudent = (studentId: string) => {
                           variant="outline"
                           size="sm"
                           className="text-xs gap-1 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
-                          onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-warmUp-${idx}`, q.imagePrompt)}
+                          onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-warmUp-${idx}`, q.imagePrompt, q.geometry)}
                           disabled={regeneratingShapeKey === `${cacheKey}-warmUp-${idx}`}
                         >
                           {regeneratingShapeKey === `${cacheKey}-warmUp-${idx}` ? (
@@ -2752,7 +2800,7 @@ const toggleStudent = (studentId: string) => {
                         variant="outline"
                         size="sm"
                         className="mt-2 text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 w-full"
-                        onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-warmUp-${idx}`, q.imagePrompt)}
+                        onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-warmUp-${idx}`, q.imagePrompt, q.geometry)}
                         disabled={regeneratingShapeKey === `${cacheKey}-warmUp-${idx}`}
                       >
                         {regeneratingShapeKey === `${cacheKey}-warmUp-${idx}` ? (
@@ -2896,7 +2944,7 @@ const toggleStudent = (studentId: string) => {
                             size="sm"
                             className="text-xs gap-1 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
                             onClick={() =>
-                              regenerateGeometryShape(q.question, `${cacheKey}-main-${idx}`, q.imagePrompt)
+                              regenerateGeometryShape(q.question, `${cacheKey}-main-${idx}`, q.imagePrompt, q.geometry)
                             }
                             disabled={regeneratingShapeKey === `${cacheKey}-main-${idx}`}
                           >
@@ -3007,12 +3055,12 @@ const toggleStudent = (studentId: string) => {
                     <div className="mt-3 border-t pt-2">
                       <div className="h-16 border border-dashed rounded bg-gray-50 relative flex items-center justify-center">
                         {/* Show Generate Shape button if no shape exists and question has imagePrompt */}
-                        {!isNoShapeSubject && q.imagePrompt && !q.imageUrl && !q.svg && !geometryShapes[`${cacheKey}-main-${idx}`] && (
+                        {!isNoShapeSubject && (q.imagePrompt || q.geometry) && !q.imageUrl && !q.svg && !geometryShapes[`${cacheKey}-main-${idx}`] && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="text-xs bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                            onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-main-${idx}`, q.imagePrompt)}
+                            onClick={() => regenerateGeometryShape(q.question, `${cacheKey}-main-${idx}`, q.imagePrompt, q.geometry)}
                             disabled={regeneratingShapeKey === `${cacheKey}-main-${idx}`}
                           >
                             {regeneratingShapeKey === `${cacheKey}-main-${idx}` ? (

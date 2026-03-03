@@ -641,7 +641,12 @@ WARM-UP MODE (Confidence Building):
       "standard": "G.CO.A.1",
       "question": "The full question text here",
       "difficulty": "${allowedDifficulties[0]}"${hintExample}${answerExample},
-      "imagePrompt": "A detailed description of the geometric diagram needed"
+      "imagePrompt": "A detailed description of the geometric diagram needed"${includeGeometry && isGeometrySubject && !isNoImageSubject ? `,
+      "geometry": {
+        "type": "coordinate_polygon",
+        "vertices": [{"label": "A", "x": 1, "y": 1}, {"label": "B", "x": 5, "y": 1}, {"label": "C", "x": 3, "y": 4}],
+        "axes": {"minX": 0, "maxX": 6, "minY": 0, "maxY": 5, "showGrid": true, "showNumbers": true}
+      }` : ''}
     }
   ]
 }`
@@ -652,7 +657,11 @@ WARM-UP MODE (Confidence Building):
       "topic": "Topic Name",
       "standard": "G.CO.A.1",
       "question": "The full question text here",
-      "difficulty": "${allowedDifficulties[0]}"${hintExample}${answerExample}${includeGeometry && isGeometrySubject && !isNoImageSubject ? ',\n      "svg": "<svg width=\\"200\\" height=\\"200\\" viewBox=\\"0 0 200 200\\" xmlns=\\"http://www.w3.org/2000/svg\\">...</svg>"' : ''}
+      "difficulty": "${allowedDifficulties[0]}"${hintExample}${answerExample}${includeGeometry && isGeometrySubject && !isNoImageSubject ? `,
+      "geometry": {
+        "type": "triangle",
+        "vertices": [{"label": "A", "x": 0, "y": 0}, {"label": "B", "x": 4, "y": 0}, {"label": "C", "x": 2, "y": 3}]
+      }` : ''}
     }
   ]
 }`;
@@ -716,6 +725,7 @@ REQUIREMENTS:
 6. ${worksheetMode === 'diagnostic' ? 'Include advancementLevel field (A-F) for each question' : 'Ensure progressive difficulty within the topic'}
 7. Every question MUST include a "bloomLevel" field (one of: remember, understand, apply, analyze, evaluate, create) and a "bloomVerb" field with the specific action verb used
 ${geometryInstruction}
+${(includeGeometry && isGeometrySubject && !isNoImageSubject) ? GEOMETRY_METADATA_INSTRUCTION : ''}
 ${formulasInstruction}
 ${graphPaperInstruction}
 ${coordinateGeometryInstruction}
