@@ -1025,22 +1025,23 @@ function validateAndNormalizeGrade(
 
   const effectiveFloor = Math.max(_gradeFloor, 55);
 
-  // ── NOT_ACADEMIC or BLANK PAGE → apply grade floor (minimum 55) ──
+  // ── NOT_ACADEMIC or BLANK PAGE → grade is already 0, pass through as-is ──
   if (rawGrade <= 0) {
-    console.log(`[GRADE_GUARD] rawGrade=${rawGrade} (NOT_ACADEMIC or blank) → returning floor ${effectiveFloor}`);
-    return { grade: effectiveFloor, regentsScore: 1, adjusted: true, adjustReason: `Not academic or blank → floor ${effectiveFloor}` };
+    console.log(`[GRADE_GUARD] rawGrade=${rawGrade} (NOT_ACADEMIC or blank) → returning 0`);
+    return { grade: 0, regentsScore: 0, adjusted: false, adjustReason: "Not academic or blank → 0" };
   }
 
-  // BLANK PAGE / NO WORK → apply grade floor (minimum 55)
+  // BLANK PAGE / NO WORK → 0%. Do not apply grade floor for missing submissions.
   if (!studentWorkPresent) {
     return {
-      grade: effectiveFloor,
-      regentsScore: 1,
-      adjusted: true,
-      adjustReason: `No student work present → floor ${effectiveFloor}`,
+      grade: 0,
+      regentsScore: 0,
+      adjusted: rawGrade !== 0,
+      adjustReason: "No student work present → 0",
     };
   }
 
+  // Meaningful work floor is 55%. 0% is handled by gatekeepers above.
   let grade = Math.max(effectiveFloor, Math.min(100, rawGrade));
 
   // Cross-check: snap grade to nearest valid anchor value (from 20-tier system, 55%-100% range)
