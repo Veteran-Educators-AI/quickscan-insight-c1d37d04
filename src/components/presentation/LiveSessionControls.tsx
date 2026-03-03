@@ -24,6 +24,8 @@ interface LiveSessionControlsProps {
     options?: string[];
     answer?: string;
     explanation?: string;
+    svg?: string;
+    imagePrompt?: string;
   };
   themeAccentHex?: string;
 }
@@ -85,7 +87,9 @@ export function LiveSessionControls({
       currentSlideQuestion.options || [],
       currentSlideQuestion.answer,
       currentSlideQuestion.explanation,
-      parseInt(timeLimit) || 30
+      parseInt(timeLimit) || 30,
+      currentSlideQuestion.svg,
+      currentSlideQuestion.imagePrompt
     );
   };
 

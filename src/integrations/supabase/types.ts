@@ -1384,11 +1384,13 @@ export type Database = {
           created_at: string
           explanation: string | null
           id: string
+          image_prompt: string | null
           is_active: boolean
           options: Json
           question_prompt: string
           session_id: string
           slide_index: number
+          svg: string | null
           time_limit_seconds: number | null
         }
         Insert: {
@@ -1398,11 +1400,13 @@ export type Database = {
           created_at?: string
           explanation?: string | null
           id?: string
+          image_prompt?: string | null
           is_active?: boolean
           options?: Json
           question_prompt: string
           session_id: string
           slide_index: number
+          svg?: string | null
           time_limit_seconds?: number | null
         }
         Update: {
@@ -1412,11 +1416,13 @@ export type Database = {
           created_at?: string
           explanation?: string | null
           id?: string
+          image_prompt?: string | null
           is_active?: boolean
           options?: Json
           question_prompt?: string
           session_id?: string
           slide_index?: number
+          svg?: string | null
           time_limit_seconds?: number | null
         }
         Relationships: [

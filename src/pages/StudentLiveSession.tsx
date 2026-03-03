@@ -224,6 +224,13 @@ export default function StudentLiveSession() {
               {/* Question card */}
               <Card className="border-white/10 bg-white/5 backdrop-blur-lg mb-4">
                 <CardHeader>
+                  {/* Geometry shape / diagram */}
+                  {(currentQuestion as any).svg && (
+                    <div
+                      className="flex justify-center mb-4 [&_svg]:max-w-full [&_svg]:h-auto [&_svg]:max-h-64"
+                      dangerouslySetInnerHTML={{ __html: (currentQuestion as any).svg }}
+                    />
+                  )}
                   <CardTitle className="text-white text-xl text-center">
                     {currentQuestion.question_prompt}
                   </CardTitle>
