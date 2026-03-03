@@ -1023,24 +1023,30 @@ function validateAndNormalizeGrade(
   let adjusted = false;
   let adjustReason = "";
 
-  // ── NOT_ACADEMIC or BLANK PAGE → grade is already 0, pass through as-is ──
+  const effectiveFloor = Math.max(_gradeFloor, 55);
+
+  // ── NOT_ACADEMIC or BLANK PAGE → apply grade floor (minimum 55) ──
   if (rawGrade <= 0) {
-    console.log(`[GRADE_GUARD] rawGrade=${rawGrade} (NOT_ACADEMIC or blank) → returning 0`);
-    return { grade: 0, regentsScore: 0, adjusted: false, adjustReason: "Not academic or blank → 0" };
+    console.log(`[GRADE_GUARD] rawGrade=${rawGrade} (NOT_ACADEMIC or blank) → returning floor ${effectiveFloor}`);
+    return { grade: effectiveFloor, regentsScore: 1, adjusted: true, adjustReason: `Not academic or blank → floor ${effectiveFloor}` };
   }
 
-  // BLANK PAGE / NO WORK → 0%. Do not apply grade floor for missing submissions.
+  // BLANK PAGE / NO WORK → apply grade floor (minimum 55)
   if (!studentWorkPresent) {
     return {
-      grade: 0,
-      regentsScore: 0,
-      adjusted: rawGrade !== 0,
-      adjustReason: "No student work present → 0",
+      grade: effectiveFloor,
+      regentsScore: 1,
+      adjusted: true,
+      adjustReason: `No student work present → floor ${effectiveFloor}`,
     };
   }
 
+<<<<<<< HEAD
   // Meaningful work floor is 55%. 0% is handled by gatekeepers above.
   let grade = Math.max(55, Math.min(100, rawGrade));
+=======
+  let grade = Math.max(effectiveFloor, Math.min(100, rawGrade));
+>>>>>>> 7b3fe01c986105db2794d4af5d101d1ae1ba20ea
 
   // Cross-check: snap grade to nearest valid anchor value (from 20-tier system, 55%-100% range)
   // 0% is for blank/off-topic only; all meaningful work is 55%-100%
@@ -1085,7 +1091,7 @@ function validateAndNormalizeGrade(
     regentsScore = derivedRegents;
   }
 
-  grade = Math.min(100, Math.max(0, grade));
+  grade = Math.min(100, Math.max(effectiveFloor, grade));
 
   if (adjusted) {
     console.log(`[GRADE_GUARD] ${adjustReason}. Final: grade=${grade}, regents=${regentsScore}`);
@@ -1097,7 +1103,7 @@ function validateAndNormalizeGrade(
 // ═══════════════════════════════════════════════════════════════════════════════
 // PARSE AI RESPONSE — JSON-first with regex fallback
 // ═══════════════════════════════════════════════════════════════════════════════
-function parseAnalysisResult(text: string, rubricSteps?: any[], gradeFloor = 0, gradeFloorWithEffort = 0) {
+function parseAnalysisResult(text: string, rubricSteps?: any[], gradeFloor = 55, gradeFloorWithEffort = 65) {
   // ─── Try JSON parse first (primary path) ───
   let parsed: any = null;
   try {
@@ -1488,8 +1494,8 @@ serve(async (req: Request) => {
 
     // ── Fetch teacher settings ──
     let feedbackVerbosity = "concise";
-    let gradeFloor = customGradeFloor || 0;
-    let gradeFloorWithEffort = customGradeFloorWithEffort || 0;
+    let gradeFloor = customGradeFloor || 55;
+    let gradeFloorWithEffort = customGradeFloorWithEffort || 65;
     let aiTrainingMode = "learning";
     let analysisProvider: AnalysisProvider = "gemini";
 
@@ -1502,8 +1508,8 @@ serve(async (req: Request) => {
           .maybeSingle();
         if (settings) {
           if (!customGradeFloor) {
-            gradeFloor = settings.grade_floor ?? 0;
-            gradeFloorWithEffort = settings.grade_floor_with_effort ?? 0;
+            gradeFloor = settings.grade_floor ?? 55;
+            gradeFloorWithEffort = settings.grade_floor_with_effort ?? 65;
           }
           feedbackVerbosity = settings.ai_feedback_verbosity ?? "concise";
           aiTrainingMode = settings.ai_training_mode ?? "learning";

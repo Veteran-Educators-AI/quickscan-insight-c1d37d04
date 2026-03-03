@@ -26,7 +26,7 @@ interface ReassessmentCriteria {
   gradeAdjustment: number;
 }
 
-const REASSESSMENT_CRITERIA: ReassessmentCriteria[] = [
+const POSITIVE_CRITERIA: ReassessmentCriteria[] = [
   {
     id: 'showed_work',
     label: 'Showed Work',
@@ -65,6 +65,39 @@ const REASSESSMENT_CRITERIA: ReassessmentCriteria[] = [
   },
 ];
 
+const NEGATIVE_CRITERIA: ReassessmentCriteria[] = [
+  {
+    id: 'ai_too_lenient',
+    label: 'AI Too Lenient',
+    description: 'AI gave too much credit for this work',
+    gradeAdjustment: -10,
+  },
+  {
+    id: 'incomplete_work',
+    label: 'Incomplete Work',
+    description: 'Work is missing key steps that AI credited',
+    gradeAdjustment: -8,
+  },
+  {
+    id: 'wrong_method',
+    label: 'Wrong Method Used',
+    description: 'Student used an invalid approach the AI accepted',
+    gradeAdjustment: -12,
+  },
+  {
+    id: 'no_work_shown',
+    label: 'No Work Shown',
+    description: 'Answer only with no supporting work',
+    gradeAdjustment: -15,
+  },
+  {
+    id: 'copied_work',
+    label: 'Copied / Not Original',
+    description: 'Work appears copied or not the student\'s own',
+    gradeAdjustment: -20,
+  },
+];
+
 interface GradeOverrideDialogProps {
   currentGrade: number;
   currentJustification?: string;
@@ -94,6 +127,8 @@ export function GradeOverrideDialog({
   const [isSaving, setIsSaving] = useState(false);
   const { saveCorrection } = useGradingCorrections();
 
+  const allCriteria = [...POSITIVE_CRITERIA, ...NEGATIVE_CRITERIA];
+
   const handleCriteriaToggle = (criteriaId: string) => {
     setSelectedCriteria(prev => {
       const newCriteria = prev.includes(criteriaId)
@@ -102,16 +137,16 @@ export function GradeOverrideDialog({
       
       // Calculate new grade based on selected criteria
       const totalAdjustment = newCriteria.reduce((sum, id) => {
-        const criteria = REASSESSMENT_CRITERIA.find(c => c.id === id);
+        const criteria = allCriteria.find(c => c.id === id);
         return sum + (criteria?.gradeAdjustment || 0);
       }, 0);
       
-      const newGrade = Math.min(100, currentGrade + totalAdjustment);
+      const newGrade = Math.max(0, Math.min(100, currentGrade + totalAdjustment));
       setGrade(newGrade);
       
       // Auto-generate justification based on selected criteria
       const selectedLabels = newCriteria.map(id => 
-        REASSESSMENT_CRITERIA.find(c => c.id === id)?.label
+        allCriteria.find(c => c.id === id)?.label
       ).filter(Boolean);
       
       if (selectedLabels.length > 0) {
@@ -205,10 +240,10 @@ export function GradeOverrideDialog({
           </TabsList>
 
           <TabsContent value="quick" className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Select applicable criteria:</Label>
-              <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto">
-                {REASSESSMENT_CRITERIA.map(criteria => (
+            <div className="space-y-3">
+              <Label>Raise Grade:</Label>
+              <div className="grid grid-cols-1 gap-2 max-h-[130px] overflow-y-auto">
+                {POSITIVE_CRITERIA.map(criteria => (
                   <div
                     key={criteria.id}
                     className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
@@ -237,6 +272,38 @@ export function GradeOverrideDialog({
                   </div>
                 ))}
               </div>
+
+              <Label>Lower Grade:</Label>
+              <div className="grid grid-cols-1 gap-2 max-h-[130px] overflow-y-auto">
+                {NEGATIVE_CRITERIA.map(criteria => (
+                  <div
+                    key={criteria.id}
+                    className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
+                      selectedCriteria.includes(criteria.id)
+                        ? 'bg-destructive/10 border-destructive'
+                        : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => handleCriteriaToggle(criteria.id)}
+                  >
+                    <Checkbox
+                      checked={selectedCriteria.includes(criteria.id)}
+                      onCheckedChange={() => handleCriteriaToggle(criteria.id)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-none">
+                        {criteria.label}
+                        <span className="ml-1 text-xs text-destructive">
+                          {criteria.gradeAdjustment}%
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {criteria.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
@@ -246,8 +313,8 @@ export function GradeOverrideDialog({
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Adjustment</p>
-                <p className="text-lg font-semibold text-green-600">
-                  +{Math.round(grade - currentGrade)}%
+                <p className={`text-lg font-semibold ${grade - currentGrade >= 0 ? 'text-green-600' : 'text-destructive'}`}>
+                  {grade - currentGrade >= 0 ? '+' : ''}{Math.round(grade - currentGrade)}%
                 </p>
               </div>
               <div>
