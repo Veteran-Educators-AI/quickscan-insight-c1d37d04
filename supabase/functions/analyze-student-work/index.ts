@@ -1041,12 +1041,7 @@ function validateAndNormalizeGrade(
     };
   }
 
-<<<<<<< HEAD
-  // Meaningful work floor is 55%. 0% is handled by gatekeepers above.
-  let grade = Math.max(55, Math.min(100, rawGrade));
-=======
   let grade = Math.max(effectiveFloor, Math.min(100, rawGrade));
->>>>>>> 7b3fe01c986105db2794d4af5d101d1ae1ba20ea
 
   // Cross-check: snap grade to nearest valid anchor value (from 20-tier system, 55%-100% range)
   // 0% is for blank/off-topic only; all meaningful work is 55%-100%
