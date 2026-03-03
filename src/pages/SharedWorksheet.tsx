@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Download, Printer, FileText, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ interface GeneratedQuestion {
   question: string;
   difficulty: 'medium' | 'hard' | 'challenging';
   svg?: string;
+  imagePrompt?: string;
 }
 
 interface SharedWorksheetData {
@@ -35,6 +36,8 @@ export default function SharedWorksheet() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingShapes, setGeneratingShapes] = useState<Set<number>>(new Set());
+  const shapeGenTriggered = useRef(false);
 
   useEffect(() => {
     const fetchWorksheet = async () => {
@@ -74,6 +77,67 @@ export default function SharedWorksheet() {
     fetchWorksheet();
   }, [shareCode]);
 
+  // Auto-generate shapes for questions with imagePrompt but no svg
+  useEffect(() => {
+    if (!worksheet || shapeGenTriggered.current) return;
+
+    const questionsNeedingShapes = worksheet.questions.filter(
+      (q) => q.imagePrompt && !q.svg
+    );
+
+    if (questionsNeedingShapes.length === 0) return;
+    shapeGenTriggered.current = true;
+
+    // Mark all as generating
+    setGeneratingShapes(new Set(questionsNeedingShapes.map((q) => q.questionNumber)));
+
+    // Generate in parallel
+    Promise.all(
+      questionsNeedingShapes.map(async (q) => {
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-diagram-images', {
+            body: {
+              questions: [{ questionNumber: q.questionNumber, imagePrompt: q.imagePrompt }],
+              useNanoBanana: false,
+            },
+          });
+
+          if (error) {
+            console.error(`Shape gen error for Q${q.questionNumber}:`, error);
+            return null;
+          }
+
+          const svgResult = data?.results?.[0]?.svg;
+          if (svgResult) {
+            return { questionNumber: q.questionNumber, svg: svgResult };
+          }
+          return null;
+        } catch (err) {
+          console.error(`Shape gen failed for Q${q.questionNumber}:`, err);
+          return null;
+        } finally {
+          setGeneratingShapes((prev) => {
+            const next = new Set(prev);
+            next.delete(q.questionNumber);
+            return next;
+          });
+        }
+      })
+    ).then((results) => {
+      const successful = results.filter(Boolean) as { questionNumber: number; svg: string }[];
+      if (successful.length === 0) return;
+
+      setWorksheet((prev) => {
+        if (!prev) return prev;
+        const updated = prev.questions.map((q) => {
+          const match = successful.find((r) => r.questionNumber === q.questionNumber);
+          return match ? { ...q, svg: match.svg } : q;
+        });
+        return { ...prev, questions: updated };
+      });
+    });
+  }, [worksheet]);
+
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -88,6 +152,21 @@ export default function SharedWorksheet() {
 
   const generatePDF = async () => {
     if (!worksheet) return;
+
+    // Wait for pending shapes
+    if (generatingShapes.size > 0) {
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          setGeneratingShapes((current) => {
+            if (current.size === 0) {
+              clearInterval(interval);
+              resolve();
+            }
+            return current;
+          });
+        }, 300);
+      });
+    }
 
     setIsGenerating(true);
 
@@ -111,7 +190,6 @@ export default function SharedWorksheet() {
         yPosition += 6;
       }
 
-      // Add worksheet creation date
       pdf.setFontSize(10);
       pdf.setTextColor(100);
       pdf.text(`Worksheet Created: ${new Date(worksheet.created_at).toLocaleDateString()}`, pageWidth / 2, yPosition, { align: 'center' });
@@ -144,9 +222,8 @@ export default function SharedWorksheet() {
         pdf.setTextColor(0);
         yPosition += 8;
 
-        pdf.setFontSize(10); // Slightly smaller for better fit
+        pdf.setFontSize(10);
         const sanitizedQuestion = formatWorksheetTextForPdf(question.question);
-        // Use 85% of content width to prevent text overflow
         const lines = pdf.splitTextToSize(sanitizedQuestion, contentWidth * 0.85);
 
         lines.forEach((line: string) => {
@@ -157,7 +234,7 @@ export default function SharedWorksheet() {
           pdf.text(line, margin + 5, yPosition);
           yPosition += 5;
         });
-        pdf.setFontSize(11); // Reset
+        pdf.setFontSize(11);
 
         yPosition += 4;
 
@@ -303,13 +380,20 @@ export default function SharedWorksheet() {
                   <p className="text-sm text-muted-foreground mb-1">
                     {question.topic} ({question.standard})
                   </p>
-                  <p className="text-sm whitespace-pre-line">{formatWorksheetText(question.question)}</p>
+                  {/* Shape: spinner while generating, SVG when ready */}
+                  {generatingShapes.has(question.questionNumber) && (
+                    <div className="flex items-center gap-2 my-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-xs">Generating diagram…</span>
+                    </div>
+                  )}
                   {question.svg && (
                     <div 
-                      className="mt-2 flex justify-center"
+                      className="my-2 flex justify-center"
                       dangerouslySetInnerHTML={{ __html: question.svg }}
                     />
                   )}
+                  <p className="text-sm whitespace-pre-line">{formatWorksheetText(question.question)}</p>
                 </div>
               ))}
             </ScrollArea>
@@ -318,10 +402,19 @@ export default function SharedWorksheet() {
               <Button
                 className="flex-1"
                 onClick={generatePDF}
-                disabled={isGenerating}
+                disabled={isGenerating || generatingShapes.size > 0}
               >
-                <Download className="h-4 w-4 mr-2" />
-                {isGenerating ? 'Generating...' : 'Download PDF'}
+                {generatingShapes.size > 0 ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating shapes…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    {isGenerating ? 'Generating...' : 'Download PDF'}
+                  </>
+                )}
               </Button>
               <Button
                 variant="outline"
