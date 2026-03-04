@@ -2966,7 +2966,12 @@ const toggleStudent = (studentId: string) => {
             </h3>
             <div className="space-y-4">
               {questions.main.map((q, idx) => {
-                const isQuestionRegenerating = regeneratingKey === `${cacheKey}-main-${idx}`;
+                const mainShapeKey = `${cacheKey}-main-${idx}`;
+                const isQuestionRegenerating = regeneratingKey === mainShapeKey;
+                const generatedMainShape = geometryShapes[mainShapeKey];
+                const mainDiagramSource = getQuestionDiagramSource(q, generatedMainShape);
+                const shouldShowMainDiagram = !isNoShapeSubject && Boolean(generatedMainShape || q.imageUrl || q.svg || q.geometry);
+
                 return (
                   <div key={idx} className={`p-3 border rounded relative group ${isQuestionRegenerating ? 'opacity-50' : ''}`}>
                     <div className="flex items-start justify-between gap-2">
@@ -2995,12 +3000,12 @@ const toggleStudent = (studentId: string) => {
                       </TooltipProvider>
                     </div>
                     {/* Show geometry shapes in preview - auto-generated or from question data */}
-                    {!isNoShapeSubject && (geometryShapes[`${cacheKey}-main-${idx}`] || ((q.imageUrl || q.svg) && (useAIImages || q.imagePrompt))) ? (
+                    {shouldShowMainDiagram ? (
                       <div className="mt-2 flex flex-col items-center gap-2">
                         <div className="relative">
-                          {geometryShapes[`${cacheKey}-main-${idx}`] ? (
+                          {generatedMainShape ? (
                             <img 
-                              src={geometryShapes[`${cacheKey}-main-${idx}`]} 
+                              src={generatedMainShape}
                               alt="Geometry diagram" 
                               className="max-w-[180px] max-h-[180px] border rounded"
                             />
@@ -3009,13 +3014,13 @@ const toggleStudent = (studentId: string) => {
                               className="max-w-[180px] max-h-[180px] border rounded overflow-hidden"
                               dangerouslySetInnerHTML={{ __html: q.svg }}
                             />
-                          ) : (
+                          ) : mainDiagramSource ? (
                             <img 
-                              src={q.imageUrl || svgToDataUri(q.svg || '')} 
+                              src={mainDiagramSource}
                               alt="Geometry diagram" 
                               className="max-w-[180px] max-h-[180px] border rounded"
                             />
-                          )}
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-1">
                           <Button
