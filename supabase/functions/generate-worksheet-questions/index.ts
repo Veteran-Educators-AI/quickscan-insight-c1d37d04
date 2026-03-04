@@ -39,6 +39,16 @@ interface GeneratedQuestion {
   hint?: string;
 }
 
+interface AnswerKeyItem {
+  questionNumber: number;
+  final_answer: string;
+  accepted_answers: string[];
+  solution_outline: string[];
+  common_errors: string[];
+  grading_rubric: string[];
+  confidence: number;
+}
+
 async function callLovableAI(prompt: string, modelOrAdvanced: boolean | string = false): Promise<string> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
@@ -168,6 +178,205 @@ Return a JSON OBJECT with a single key "questions" containing the array of gener
       throw error;
     }
     throw new Error(`Failed to communicate with AI service: ${error.message || "Unknown error"}`);
+  }
+}
+
+const ANSWER_KEY_MODEL = 'google/gemini-2.5-flash';
+
+const stripMarkdownCodeFences = (input: string) => input
+  .trim()
+  .replace(/^```json\s*/i, '')
+  .replace(/^```\s*/, '')
+  .replace(/\s*```\s*$/, '')
+  .trim();
+
+const clampConfidence = (value: unknown, fallback = 0.55) => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(1, Math.max(0, numeric));
+};
+
+const extractFinalAnswer = (answer?: string) => {
+  if (!answer) return '';
+
+  const explicitMatch = answer.match(/\*\*Final Answer:\*\*\s*(.+)$/im)
+    ?? answer.match(/Final Answer:\s*(.+)$/im);
+
+  if (explicitMatch?.[1]) {
+    return explicitMatch[1].trim();
+  }
+
+  return answer
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) ?? '';
+};
+
+const buildSolutionOutline = (answer?: string) => {
+  if (!answer) return [];
+
+  return answer
+    .split(/\n+/)
+    .map((line) => line
+      .replace(/^\*\*|\*\*$/g, '')
+      .replace(/^Step\s*\d+:\s*/i, '')
+      .replace(/^\d+[).\s-]*/, '')
+      .trim()
+    )
+    .filter(Boolean)
+    .filter((line) => !/^final answer:/i.test(line))
+    .slice(0, 6);
+};
+
+const buildFallbackAnswerKey = (questions: GeneratedQuestion[]): AnswerKeyItem[] =>
+  questions.map((question) => {
+    const finalAnswer = extractFinalAnswer(question.answer);
+    const solutionOutline = buildSolutionOutline(question.answer);
+
+    return {
+      questionNumber: question.questionNumber,
+      final_answer: finalAnswer || question.answer || '',
+      accepted_answers: [finalAnswer || question.answer || ''].filter(Boolean),
+      solution_outline: solutionOutline.length > 0
+        ? solutionOutline
+        : ['Review the teacher solution for the full worked steps.'],
+      common_errors: [
+        'Incorrect arithmetic or algebraic simplification',
+        'Using the wrong formula or operation',
+      ],
+      grading_rubric: [
+        'Matches the final answer or an equivalent form',
+        'Shows a valid method aligned to the teacher solution',
+      ],
+      confidence: finalAnswer ? 0.58 : 0.4,
+    };
+  });
+
+async function callLovableAIWithCustomSystem(systemPrompt: string, userPrompt: string, model: string = ANSWER_KEY_MODEL): Promise<string> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!apiKey) {
+    throw new Error('LOVABLE_API_KEY not configured');
+  }
+
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 4000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`AI API error: ${response.status} - ${errorText.substring(0, 100)}`);
+  }
+
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('No content in AI response');
+  }
+
+  return content;
+}
+
+async function generateStructuredAnswerKey(questions: GeneratedQuestion[]): Promise<AnswerKeyItem[]> {
+  const fallbackAnswerKey = buildFallbackAnswerKey(questions);
+  const fallbackByQuestionNumber = new Map(fallbackAnswerKey.map((item) => [item.questionNumber, item]));
+
+  if (questions.length === 0) {
+    return fallbackAnswerKey;
+  }
+
+  const systemPrompt = `You convert teacher solutions into structured grading keys for worksheet autograding.
+Return ONLY valid JSON with this exact shape:
+{
+  "answer_key": [
+    {
+      "questionNumber": 1,
+      "final_answer": "...",
+      "accepted_answers": ["..."],
+      "solution_outline": ["step 1", "step 2"],
+      "common_errors": ["error 1", "error 2"],
+      "grading_rubric": ["criterion 1", "criterion 2"],
+      "confidence": 0.84
+    }
+  ]
+}
+Rules:
+- accepted_answers must include the canonical final_answer and equivalent concise variants when appropriate.
+- solution_outline must be short grading-focused steps, not full prose.
+- common_errors must be concrete likely student mistakes.
+- grading_rubric must be concise teacher-facing criteria.
+- confidence must be a number from 0 to 1.
+- Never include markdown, commentary, or omitted fields.`;
+
+  const userPrompt = JSON.stringify({
+    questions: questions.map((question) => ({
+      questionNumber: question.questionNumber,
+      question: question.question,
+      teacher_solution: question.answer || '',
+    })),
+  });
+
+  try {
+    const content = await callLovableAIWithCustomSystem(systemPrompt, userPrompt);
+    const cleanContent = stripMarkdownCodeFences(content);
+    const jsonCandidate = cleanContent.match(/\{[\s\S]*\}/)?.[0] ?? cleanContent;
+    const parsed = JSON.parse(jsonCandidate);
+    const rawAnswerKey = Array.isArray(parsed)
+      ? parsed
+      : parsed?.answer_key ?? parsed?.answerKey ?? [];
+
+    if (!Array.isArray(rawAnswerKey) || rawAnswerKey.length === 0) {
+      throw new Error('Structured answer key payload missing answer_key array');
+    }
+
+    return questions.map((question) => {
+      const fallbackItem = fallbackByQuestionNumber.get(question.questionNumber)!;
+      const matchedItem = rawAnswerKey.find((item) => Number(item?.questionNumber) === question.questionNumber) ?? {};
+
+      const acceptedAnswers = Array.isArray(matchedItem.accepted_answers)
+        ? matchedItem.accepted_answers.map((value: unknown) => String(value).trim()).filter(Boolean)
+        : [];
+      const solutionOutline = Array.isArray(matchedItem.solution_outline)
+        ? matchedItem.solution_outline.map((value: unknown) => String(value).trim()).filter(Boolean)
+        : [];
+      const commonErrors = Array.isArray(matchedItem.common_errors)
+        ? matchedItem.common_errors.map((value: unknown) => String(value).trim()).filter(Boolean)
+        : [];
+      const gradingRubric = Array.isArray(matchedItem.grading_rubric)
+        ? matchedItem.grading_rubric.map((value: unknown) => String(value).trim()).filter(Boolean)
+        : [];
+
+      const finalAnswer = typeof matchedItem.final_answer === 'string' && matchedItem.final_answer.trim()
+        ? matchedItem.final_answer.trim()
+        : fallbackItem.final_answer;
+
+      return {
+        questionNumber: question.questionNumber,
+        final_answer: finalAnswer,
+        accepted_answers: Array.from(new Set([...acceptedAnswers, finalAnswer].filter(Boolean))).slice(0, 8),
+        solution_outline: solutionOutline.length > 0 ? solutionOutline : fallbackItem.solution_outline,
+        common_errors: commonErrors.length > 0 ? commonErrors : fallbackItem.common_errors,
+        grading_rubric: gradingRubric.length > 0 ? gradingRubric : fallbackItem.grading_rubric,
+        confidence: clampConfidence(matchedItem.confidence, fallbackItem.confidence),
+      };
+    });
+  } catch (error) {
+    console.warn('Structured answer key generation failed, using fallback answer key.', error);
+    return fallbackAnswerKey;
   }
 }
 
@@ -1054,7 +1263,10 @@ ${exampleOutput}`;
 
     console.log('Geometry summary:', { valid: geometryValidCount, invalid: geometryInvalidCount, missing: geometryMissingCount });
 
-    return new Response(JSON.stringify({ questions }), {
+    const answer_key = await generateStructuredAnswerKey(questions);
+    console.log('Generated structured answer key items:', answer_key.length);
+
+    return new Response(JSON.stringify({ questions, answer_key }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
