@@ -104,15 +104,23 @@ interface GeneratedQuestion {
   geometry?: GeometryMetadataLite;
 }
 
+// UTF-8 safe SVG -> data URL (prevents btoa Latin1 crashes on symbols like ↻)
+const toSvgDataUrl = (svg: string) => {
+  const utf8Bytes = encodeURIComponent(svg).replace(/%([0-9A-F]{2})/g, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16))
+  );
+  return `data:image/svg+xml;base64,${btoa(utf8Bytes)}`;
+};
+
 // Placeholder SVG for when shape generation fails
-const PLACEHOLDER_SHAPE_SVG = `data:image/svg+xml;base64,${btoa(`<svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+const PLACEHOLDER_SHAPE_SVG = toSvgDataUrl(`<svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
   <rect width="300" height="200" fill="#f9fafb" stroke="#d1d5db" stroke-width="2" rx="8"/>
   <text x="150" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">Diagram not available</text>
   <text x="150" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af">Click ↻ to regenerate</text>
   <path d="M140 50 L160 50 L150 35 Z" fill="none" stroke="#9ca3af" stroke-width="1.5"/>
   <rect x="143" y="52" width="14" height="14" fill="none" stroke="#9ca3af" stroke-width="1.5"/>
   <circle cx="150" cy="50" r="20" fill="none" stroke="#d1d5db" stroke-width="1"/>
-</svg>`)}`;
+</svg>`);
 
 interface DifferentiatedWorksheetGeneratorProps {
   open: boolean;
