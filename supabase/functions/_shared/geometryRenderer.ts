@@ -224,8 +224,18 @@ export function renderGeometryToSVG(geometry: GeometryMetadata): string | null {
       return null;
     }
     
-    // Convert to data URL
-    const base64 = btoa(svgContent);
+    //  Fix UTF-8 encoding in geometry SVG rendering
+   const base64 = (() => {
+  try {
+    // UTF-8 safe encoding for internationalized characters
+    return btoa(unescape(encodeURIComponent(svgContent)));
+  } catch (e) {
+    console.error('[GeometryRenderer] SVG encoding error:', e);
+    // Fallback: sanitize and try again
+    const sanitized = svgContent.replace(/[^\\x00-\\x7F]/g, '?');
+    return btoa(sanitized);
+  }
+})();
     return `data:image/svg+xml;base64,${base64}`;
     
   } catch (error) {
