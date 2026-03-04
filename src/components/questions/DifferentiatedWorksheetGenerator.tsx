@@ -271,6 +271,13 @@ const svgToPngDataUrl = async (svgInput: string, width: number = 200, height: nu
   });
 };
 
+const getQuestionDiagramSource = (question: GeneratedQuestion, generatedShape?: string) => {
+  if (generatedShape) return generatedShape;
+  if (question.imageUrl) return question.imageUrl;
+  if (question.svg) return question.svg;
+  return null;
+};
+
 // Generate QR code as PNG data URL for PDF embedding
 const generateQRCodeDataUrl = async (
   studentId: string,
@@ -1008,6 +1015,33 @@ const toggleStudent = (studentId: string) => {
               );
             }
 
+            const warmUpDiagramSource = getQuestionDiagramSource(
+              q,
+              geometryShapes[`${cacheKey}-warmUp-${warmUpIdx}`]
+            );
+            if (warmUpDiagramSource) {
+              try {
+                const pngDataUrl = await svgToPngDataUrl(warmUpDiagramSource, 180, 180);
+                const pngResponse = await fetch(pngDataUrl);
+                const pngBuffer = await pngResponse.arrayBuffer();
+                children.push(
+                  new Paragraph({
+                    children: [
+                      new ImageRun({
+                        data: pngBuffer,
+                        transformation: { width: 150, height: 150 },
+                        type: 'png',
+                      }),
+                    ],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 100, after: 100 },
+                  })
+                );
+              } catch (geoError) {
+                console.error('Error adding warm-up geometry shape to Word doc:', geoError);
+              }
+            }
+
             // Work area box
             children.push(
               new Paragraph({
@@ -1102,10 +1136,10 @@ const toggleStudent = (studentId: string) => {
 
             // Add geometry shape if available
             const geoKey = `${cacheKey}-main-${idx}`;
-            const geoShapeUrl = geometryShapes[geoKey];
-            if (geoShapeUrl) {
+            const geoShapeSource = getQuestionDiagramSource(q, geometryShapes[geoKey]);
+            if (geoShapeSource) {
               try {
-                const pngDataUrl = await svgToPngDataUrl(geoShapeUrl, 200, 200);
+                const pngDataUrl = await svgToPngDataUrl(geoShapeSource, 200, 200);
                 const pngResponse = await fetch(pngDataUrl);
                 const pngBuffer = await pngResponse.arrayBuffer();
                 if (pngBuffer) {
@@ -1569,6 +1603,29 @@ const toggleStudent = (studentId: string) => {
                 pdf.setFontSize(11);
               }
 
+              const warmUpShapeKey = `${cacheKey}-warmUp-${warmUpIdx}`;
+              const warmUpShapeSource = getQuestionDiagramSource(question, geometryShapes[warmUpShapeKey]);
+              if (warmUpShapeSource) {
+                try {
+                  if (yPosition > pageHeight - 65) {
+                    pdf.addPage();
+                    pageCount++;
+                    await addContinuationPageHeader(pageCount);
+                    yPosition = 25;
+                  }
+
+                  const pngDataUrl = await svgToPngDataUrl(warmUpShapeSource, 200, 200);
+                  const imgWidth = 42;
+                  const imgHeight = 42;
+                  const imgX = (pageWidth - imgWidth) / 2;
+                  yPosition += 3;
+                  pdf.addImage(pngDataUrl, 'PNG', imgX, yPosition, imgWidth, imgHeight);
+                  yPosition += imgHeight + 5;
+                } catch (shapeError) {
+                  console.error('Error adding warm-up geometry shape to PDF:', shapeError);
+                }
+              }
+
               // AI-Optimized Work/Answer Zone for warm-up
               yPosition += 3;
               
@@ -1731,8 +1788,8 @@ const toggleStudent = (studentId: string) => {
             }
             // Add geometry shape if available
             const shapeKey = `${cacheKey}-main-${questionIdx}`;
-            const shapeUrl = geometryShapes[shapeKey];
-            if (shapeUrl) {
+            const shapeSource = getQuestionDiagramSource(question, geometryShapes[shapeKey]);
+            if (shapeSource) {
               try {
                 if (yPosition > pageHeight - 65) {
                   pdf.addPage();
@@ -1740,7 +1797,7 @@ const toggleStudent = (studentId: string) => {
                   await addContinuationPageHeader(pageCount);
                   yPosition = 25;
                 }
-                const pngDataUrl = await svgToPngDataUrl(shapeUrl, 200, 200);
+                const pngDataUrl = await svgToPngDataUrl(shapeSource, 200, 200);
                 const imgWidth = 50;
                 const imgHeight = 50;
                 const imgX = (pageWidth - imgWidth) / 2;
