@@ -382,9 +382,9 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [selectedRegenerateKeys, setSelectedRegenerateKeys] = useState<Set<string>>(new Set());
   
   // Geometry shape auto-generation state
-  const [includeGeometry] = useState(false);
-  const [useAIImages] = useState(false);
-  const [preferDeterministicSVG] = useState(false);
+  const includeGeometry = true;
+  const useAIImages = false;
+  const preferDeterministicSVG = true;
   const [geometryShapes, setGeometryShapes] = useState<Record<string, string>>({});
   const [regeneratingShapeKey, setRegeneratingShapeKey] = useState<string | null>(null);
   const pendingShapeCount = useRef(0);
@@ -1323,6 +1323,8 @@ const toggleStudent = (studentId: string) => {
                 formVariation: form,
                 formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
                 includeHints,
+                includeGeometry,
+                useAIImages,
                 includeAnswerKey: true,
               },
             });
@@ -1353,6 +1355,8 @@ const toggleStudent = (studentId: string) => {
               formVariation: form,
               formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
               includeHints,
+              includeGeometry,
+              useAIImages,
               includeAnswerKey: true,
             },
           });
@@ -2117,6 +2121,8 @@ const toggleStudent = (studentId: string) => {
                 formVariation: form,
                 formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
                 includeHints,
+                includeGeometry,
+                useAIImages,
                 includeAnswerKey: true,
               },
             });
@@ -2145,6 +2151,8 @@ const toggleStudent = (studentId: string) => {
               formVariation: form,
               formSeed: form.charCodeAt(0) * 1000 + level.charCodeAt(0),
               includeHints,
+              includeGeometry,
+              useAIImages,
               includeAnswerKey: true,
             },
           });
@@ -2225,8 +2233,10 @@ const toggleStudent = (studentId: string) => {
               worksheetMode: 'warmup',
               formVariation: form,
               formSeed: Date.now() + form.charCodeAt(0) * 1000 + level.charCodeAt(0), // New seed for variation
-               includeHints,
-               includeAnswerKey: true,
+              includeHints,
+              includeGeometry,
+              useAIImages,
+              includeAnswerKey: true,
             },
           });
           warmUpQuestions = warmUpData?.questions || [];
@@ -2254,6 +2264,8 @@ const toggleStudent = (studentId: string) => {
             formVariation: form,
             formSeed: Date.now() + form.charCodeAt(0) * 1000 + level.charCodeAt(0), // New seed for variation
             includeHints,
+            includeGeometry,
+            useAIImages,
             includeAnswerKey: true,
           },
         });
@@ -2327,6 +2339,8 @@ const toggleStudent = (studentId: string) => {
           formVariation: form,
           formSeed: Date.now(), // New seed for unique question
           includeHints,
+          includeGeometry,
+          useAIImages,
           includeAnswerKey: true,
         },
       });
