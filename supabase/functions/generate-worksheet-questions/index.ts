@@ -346,31 +346,40 @@ VARIATION REQUIREMENT (CRITICAL - ANTI-COPYING MEASURE):
       : ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
     const bloomInstruction = `ONLY generate questions for these Bloom's Taxonomy cognitive levels: ${allowedBloomLevels.join(', ')}. Do NOT include questions from other cognitive levels.`;
 
-    // Detect if this is a geometry/physics subject that actually needs diagrams
-    const geometrySubjects = ['geometry', 'physics', 'algebra1', 'algebra2', 'precalculus'];
-    const isGeometrySubject = topics.some(t => 
-      geometrySubjects.some(gs => 
-        t.subject?.toLowerCase().includes(gs) || 
-        t.category?.toLowerCase().includes('geometry') ||
-        t.category?.toLowerCase().includes('triangle') ||
-        t.category?.toLowerCase().includes('coordinate')
-      )
-    );
+    // Detect if this is a geometry-heavy topic that should automatically get diagrams
+    const geometryTopicKeywords = [
+      'geometry', 'triangle', 'circle', 'radius', 'diameter', 'chord', 'secant', 'tangent',
+      'arc', 'sector', 'angle', 'polygon', 'quadrilateral', 'similar', 'congruent',
+      'coordinate', 'trigonometry', 'trig', 'sine', 'cosine', 'tangent', 'parabola',
+      'ellipse', 'hyperbola', 'dilation', 'reflection', 'translation', 'rotation',
+    ];
+
+    const isGeometrySubject = topics.some((t) => {
+      const subject = t.subject?.toLowerCase() || '';
+      const category = t.category?.toLowerCase() || '';
+      const topicName = t.topicName?.toLowerCase() || '';
+      const standard = t.standard?.toLowerCase() || '';
+      const searchableText = `${subject} ${category} ${topicName} ${standard}`;
+
+      return geometryTopicKeywords.some((keyword) => searchableText.includes(keyword));
+    });
     
     // Financial Math and other non-geometry subjects should NEVER get diagrams
     const noImageSubjects = ['financial', 'finance', 'economics', 'history', 'government', 'english', 'ela'];
     const isNoImageSubject = topics.some(t => 
       noImageSubjects.some(ns => 
         t.subject?.toLowerCase().includes(ns) || 
-        t.category?.toLowerCase().includes(ns)
+        t.category?.toLowerCase().includes(ns) ||
+        t.topicName?.toLowerCase().includes(ns)
       )
     );
 
+    const shouldGenerateDiagrams = includeGeometry && isGeometrySubject && !isNoImageSubject;
+
     // Build optional instructions for geometry and formulas
-    // IMPORTANT: Only generate diagrams if it's a geometry subject AND includeGeometry AND useAIImages are true
-    // If useAIImages is false, do NOT generate SVG diagrams either - this is the "no image generation" mode
+    // IMPORTANT: Geometry worksheets should still return diagram metadata even when AI raster image generation is off.
     let geometryInstruction = '';
-    if (includeGeometry && useAIImages && isGeometrySubject && !isNoImageSubject) {
+    if (shouldGenerateDiagrams) {
       geometryInstruction = `
 8. For geometry-related questions, you MUST include an "imagePrompt" field. Write the prompt using this STRICT format:
 
@@ -447,8 +456,6 @@ DO NOT DO THESE THINGS IN YOUR imagePrompt
 - DO NOT make it overly complex
 - DO NOT forget to specify label positions`;
     }
-    // NOTE: When useAIImages is false, we do NOT generate SVGs even for geometry subjects.
-    // The "no diagrams" mode means the AI must describe all shapes verbally in the question text.
 
     let formulasInstruction = '';
     if (includeFormulas) {
@@ -463,7 +470,7 @@ ${includeGeometry ? '9' : '8'}. Include mathematical formulas and expressions in
     let graphPaperInstruction = '';
     if (includeGraphPaper) {
       const nextNum = (includeGeometry ? 9 : 8) + (includeFormulas ? 1 : 0);
-      if (useAIImages) {
+      if (shouldGenerateDiagrams) {
         graphPaperInstruction = `
 ${nextNum}. Include questions that require graph paper solutions:
    - Problems involving plotting points, lines, and curves on a coordinate plane
@@ -492,7 +499,7 @@ ${nextNum}. Include questions that require graph paper solutions:
     let coordinateGeometryInstruction = '';
     if (includeCoordinateGeometry) {
       const nextNum = (includeGeometry ? 9 : 8) + (includeFormulas ? 1 : 0) + (includeGraphPaper ? 1 : 0);
-      if (useAIImages) {
+      if (shouldGenerateDiagrams) {
         coordinateGeometryInstruction = `
 ${nextNum}. Include coordinate geometry problems with HIGHLY DETAILED imagePrompt fields:
    - Finding distance between points, midpoints, and slopes
@@ -520,8 +527,8 @@ ${nextNum}. Include coordinate geometry problems:
       }
     }
 
-    // Only include imageFieldNote if AI images are enabled AND it's a geometry subject
-    const imageFieldNote = useAIImages && includeGeometry && isGeometrySubject && !isNoImageSubject
+    // Only include imageFieldNote when this worksheet should actually produce diagrams
+    const imageFieldNote = shouldGenerateDiagrams
       ? `
 If the question involves geometry and a diagram would help, include an "imagePrompt" field with a detailed description of the diagram. The imagePrompt field should ONLY be included when a visual diagram is genuinely helpful for the question.`
       : `

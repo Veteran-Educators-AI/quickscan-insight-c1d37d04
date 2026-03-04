@@ -9,6 +9,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF } from '@/lib/mathRenderer';
 import jsPDF from 'jspdf';
 
+interface GeometryMetadataLite {
+  type: string;
+  [key: string]: unknown;
+}
+
 interface GeneratedQuestion {
   questionNumber: number;
   topic: string;
@@ -16,7 +21,9 @@ interface GeneratedQuestion {
   question: string;
   difficulty: 'medium' | 'hard' | 'challenging';
   svg?: string;
+  imageUrl?: string;
   imagePrompt?: string;
+  geometry?: GeometryMetadataLite;
 }
 
 interface SharedWorksheetData {
@@ -77,28 +84,31 @@ export default function SharedWorksheet() {
     fetchWorksheet();
   }, [shareCode]);
 
-  // Auto-generate shapes for questions with imagePrompt but no svg
+  // Auto-generate shapes for questions with imagePrompt or structured geometry but no rendered diagram yet
   useEffect(() => {
     if (!worksheet || shapeGenTriggered.current) return;
 
     const questionsNeedingShapes = worksheet.questions.filter(
-      (q) => q.imagePrompt && !q.svg
+      (q) => (q.imagePrompt || q.geometry) && !q.svg && !q.imageUrl
     );
 
     if (questionsNeedingShapes.length === 0) return;
     shapeGenTriggered.current = true;
 
-    // Mark all as generating
     setGeneratingShapes(new Set(questionsNeedingShapes.map((q) => q.questionNumber)));
 
-    // Generate in parallel
     Promise.all(
       questionsNeedingShapes.map(async (q) => {
         try {
           const { data, error } = await supabase.functions.invoke('generate-diagram-images', {
             body: {
-              questions: [{ questionNumber: q.questionNumber, imagePrompt: q.imagePrompt }],
+              questions: [{
+                questionNumber: q.questionNumber,
+                imagePrompt: q.imagePrompt || `Create a clean black-and-white geometry diagram for: ${q.question}`,
+                ...(q.geometry ? { geometry: q.geometry } : {}),
+              }],
               useNanoBanana: false,
+              preferDeterministicSVG: true,
             },
           });
 
@@ -107,9 +117,9 @@ export default function SharedWorksheet() {
             return null;
           }
 
-          const svgResult = data?.results?.[0]?.svg;
-          if (svgResult) {
-            return { questionNumber: q.questionNumber, svg: svgResult };
+          const imageUrl = data?.results?.[0]?.imageUrl;
+          if (imageUrl) {
+            return { questionNumber: q.questionNumber, imageUrl };
           }
           return null;
         } catch (err) {
@@ -124,14 +134,14 @@ export default function SharedWorksheet() {
         }
       })
     ).then((results) => {
-      const successful = results.filter(Boolean) as { questionNumber: number; svg: string }[];
+      const successful = results.filter(Boolean) as { questionNumber: number; imageUrl: string }[];
       if (successful.length === 0) return;
 
       setWorksheet((prev) => {
         if (!prev) return prev;
         const updated = prev.questions.map((q) => {
           const match = successful.find((r) => r.questionNumber === q.questionNumber);
-          return match ? { ...q, svg: match.svg } : q;
+          return match ? { ...q, imageUrl: match.imageUrl } : q;
         });
         return { ...prev, questions: updated };
       });
@@ -238,17 +248,17 @@ export default function SharedWorksheet() {
 
         yPosition += 4;
 
-        // Render SVG as image if present
-        if (question.svg) {
+        // Render generated diagram as image if present
+        if (question.imageUrl || question.svg) {
           try {
-            const svgBlob = new Blob([question.svg], { type: 'image/svg+xml;charset=utf-8' });
-            const svgUrl = URL.createObjectURL(svgBlob);
-            
+            const imageSource = question.imageUrl || URL.createObjectURL(new Blob([question.svg!], { type: 'image/svg+xml;charset=utf-8' }));
+            const shouldRevokeObjectUrl = !question.imageUrl && Boolean(question.svg);
+
             const img = new Image();
             await new Promise<void>((resolve, reject) => {
               img.onload = () => resolve();
               img.onerror = reject;
-              img.src = svgUrl;
+              img.src = imageSource;
             });
             
             const canvas = document.createElement('canvas');
@@ -273,7 +283,9 @@ export default function SharedWorksheet() {
               yPosition += imgHeight + 5;
             }
             
-            URL.revokeObjectURL(svgUrl);
+            if (shouldRevokeObjectUrl) {
+              URL.revokeObjectURL(imageSource);
+            }
           } catch (svgError) {
             console.error('Error rendering SVG to PDF:', svgError);
           }
@@ -387,7 +399,12 @@ export default function SharedWorksheet() {
                       <span className="text-xs">Generating diagram…</span>
                     </div>
                   )}
-                  {question.svg && (
+                  {question.imageUrl && (
+                    <div className="my-2 flex justify-center">
+                      <img src={question.imageUrl} alt={`Diagram for question ${question.questionNumber}`} className="max-h-48 w-auto" />
+                    </div>
+                  )}
+                  {!question.imageUrl && question.svg && (
                     <div 
                       className="my-2 flex justify-center"
                       dangerouslySetInnerHTML={{ __html: question.svg }}
