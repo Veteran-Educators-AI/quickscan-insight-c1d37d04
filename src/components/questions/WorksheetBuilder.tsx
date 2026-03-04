@@ -121,6 +121,16 @@ interface GeneratedQuestion {
   clipartUrl?: string;
 }
 
+interface AnswerKeyItem {
+  questionNumber: number;
+  final_answer: string;
+  accepted_answers: string[];
+  solution_outline: string[];
+  common_errors: string[];
+  grading_rubric: string[];
+  confidence: number;
+}
+
 // Bloom's Taxonomy level display helpers
 const BLOOM_LEVELS: { level: BloomLevel; label: string; color: string; description: string }[] = [
   { level: "remember", label: "Remember", color: "bg-slate-500", description: "Recall facts and basic concepts" },
@@ -158,6 +168,7 @@ interface SavedWorksheet {
     includeClipart?: boolean;
     worksheetMode?: WorksheetMode;
     includeAnswerKey?: boolean;
+    answer_key?: AnswerKeyItem[];
   };
   created_at: string;
   share_code: string | null;
@@ -443,6 +454,7 @@ export function WorksheetBuilder({
   const [scrapPaperLayout, setScrapPaperLayout] = useState<"single" | "split-2" | "split-4">("split-2"); // Scrap paper layout
   const [isCompiling, setIsCompiling] = useState(false);
   const [compiledQuestions, setCompiledQuestions] = useState<GeneratedQuestion[]>([]);
+  const [compiledAnswerKey, setCompiledAnswerKey] = useState<AnswerKeyItem[]>([]);
   const [isCompiled, setIsCompiled] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -612,6 +624,7 @@ export function WorksheetBuilder({
             includeClipart: clipartGenerated,
             worksheetMode,
             includeAnswerKey,
+            answer_key: compiledAnswerKey,
           }),
         ),
       };
@@ -641,6 +654,7 @@ export function WorksheetBuilder({
     setHasUserEditedTitle(true);
     setTeacherName(worksheet.teacher_name || "");
     setCompiledQuestions(worksheet.questions);
+    setCompiledAnswerKey(worksheet.settings.answer_key ?? []);
     setQuestionCount(worksheet.settings.questionCount);
     setDifficultyFilter(worksheet.settings.difficultyFilter);
     setShowAnswerLines(worksheet.settings.showAnswerLines);
@@ -802,8 +816,9 @@ export function WorksheetBuilder({
             imageUrl: undefined,
           }));
         }
-        
+
         setCompiledQuestions(cleanedQuestions);
+        setCompiledAnswerKey(Array.isArray(data.answer_key) ? (data.answer_key as AnswerKeyItem[]) : []);
         setIsCompiled(true);
 
         // Track worksheet compilation
@@ -846,6 +861,7 @@ export function WorksheetBuilder({
   const resetCompilation = () => {
     setIsCompiled(false);
     setCompiledQuestions([]);
+    setCompiledAnswerKey([]);
     setImagesGenerated(false);
     setImageGenerationProgress(0);
     setImageGenerationStatus("");
