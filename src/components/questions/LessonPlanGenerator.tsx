@@ -92,6 +92,31 @@ export function LessonPlanGenerator({
   presentationTheme,
   existingLessonId
 }: LessonPlanGeneratorProps) {
+  const hasExplicitExitTicket = (slides: LessonSlide[]) =>
+    slides.some((slide) => {
+      const title = slide.title.toLowerCase();
+      const content = slide.content.join(' ').toLowerCase();
+      return title.includes('exit ticket') || content.includes('exit ticket');
+    });
+
+  const buildExitTicketSlide = (plan: LessonPlan): LessonSlide => ({
+    slideNumber: plan.slides.length + 1,
+    title: 'Exit Ticket',
+    slideType: 'summary',
+    content: [
+      `Exit Ticket: Show what you learned about ${plan.topicName}.`,
+      `Solve one final problem aligned to ${plan.standard}.`,
+      'Explain the strategy you used.',
+      'Name one mistake to avoid next time.',
+    ],
+    speakerNotes: 'Give students 3-5 minutes to complete this exit ticket independently, then use responses to gauge mastery and plan follow-up support.',
+  });
+
+  const ensureExitTicketSlide = (plan: LessonPlan): LessonPlan =>
+    hasExplicitExitTicket(plan.slides)
+      ? plan
+      : { ...plan, slides: [...plan.slides, buildExitTicketSlide(plan)] };
+
   const { toast } = useToast();
   const { user } = useAuth();
   const { pushToSisterApp } = usePushToSisterApp();
@@ -405,10 +430,10 @@ export function LessonPlanGenerator({
       if (error) throw error;
 
       if (data.lessonPlan) {
-        const generatedLessonPlan = {
+        const generatedLessonPlan = ensureExitTicketSlide({
           ...data.lessonPlan,
           aim: data.lessonPlan.aim || data.lessonPlan.objective,
-        };
+        });
 
         setLessonPlan(generatedLessonPlan);
         
