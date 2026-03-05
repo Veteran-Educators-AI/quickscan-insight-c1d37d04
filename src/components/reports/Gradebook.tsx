@@ -204,6 +204,10 @@ const COLUMN_INFO = {
     title: 'Topic',
     description: 'The mathematical topic or concept being assessed (e.g., Linear Equations, Quadratic Functions).',
   },
+  source: {
+    title: 'Source',
+    description: 'Shows whether the result came from scanned worksheet grading or a Scholar completion.',
+  },
   grade: {
     title: 'Grade (%)',
     description: 'The percentage score (0-100%) indicating overall performance. Green ≥80%, Yellow ≥60%, Red <60%.',
@@ -254,6 +258,16 @@ interface GradebookProps {
 
 type SortField = 'student' | 'topic' | 'grade' | 'regents' | 'date';
 type SortDirection = 'asc' | 'desc';
+type GradeSource = 'scan' | 'scholar';
+type SourceFilter = 'all' | GradeSource;
+
+const getGradeSource = (grade: Pick<GradeEntry, 'grade_justification'>): GradeSource => {
+  const justification = grade.grade_justification?.toLowerCase() ?? '';
+  return justification.includes('scholar') ? 'scholar' : 'scan';
+};
+
+const getGradeSourceLabel = (source: GradeSource) =>
+  source === 'scholar' ? 'Scholar' : 'Scanned';
 
 export function Gradebook({ classId }: GradebookProps) {
   const { user } = useAuth();
@@ -266,6 +280,7 @@ export function Gradebook({ classId }: GradebookProps) {
   
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [topicFilter, setTopicFilter] = useState<string>(initialTopic);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isExpanded, setIsExpanded] = useState(true);
@@ -414,13 +429,13 @@ export function Gradebook({ classId }: GradebookProps) {
   const filteredGrades = useMemo(() => {
     if (!grades) return [];
 
-    let filtered = grades;
+    let filtered = [...grades];
 
     // Search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(g => {
-        const studentName = g.student 
+        const studentName = g.student
           ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name).toLowerCase()
           : '';
         return (
@@ -445,15 +460,20 @@ export function Gradebook({ classId }: GradebookProps) {
       });
     }
 
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter((grade) => getGradeSource(grade) === sourceFilter);
+    }
+
     // Sort
     filtered.sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
-        case 'student':
+        case 'student': {
           const nameA = a.student ? `${a.student.last_name} ${a.student.first_name}` : '';
           const nameB = b.student ? `${b.student.last_name} ${b.student.first_name}` : '';
           comparison = nameA.localeCompare(nameB);
           break;
+        }
         case 'topic':
           comparison = a.topic_name.localeCompare(b.topic_name);
           break;
@@ -471,7 +491,7 @@ export function Gradebook({ classId }: GradebookProps) {
     });
 
     return filtered;
-  }, [grades, searchTerm, topicFilter, sortField, sortDirection]);
+  }, [grades, searchTerm, topicFilter, sourceFilter, sortField, sortDirection, getDisplayName]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -541,10 +561,11 @@ export function Gradebook({ classId }: GradebookProps) {
   const handleExportCSV = () => {
     if (!filteredGrades.length) return;
 
-    const headers = ['Student', 'Topic', 'Grade', 'Regents Score', 'Standard', 'Date', 'Justification'];
+    const headers = ['Student', 'Topic', 'Source', 'Grade', 'Regents Score', 'Standard', 'Date', 'Justification'];
     const rows = filteredGrades.map(g => [
       g.student ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name) : 'Unknown',
       g.topic_name,
+      getGradeSourceLabel(getGradeSource(g)),
       g.grade,
       g.regents_score || '',
       g.nys_standard || '',
@@ -577,7 +598,7 @@ export function Gradebook({ classId }: GradebookProps) {
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ArrowUpDown className="h-3 w-3 ml-1 opacity-50" />;
-    return sortDirection === 'asc' 
+    return sortDirection === 'asc'
       ? <ChevronUp className="h-3 w-3 ml-1" />
       : <ChevronDown className="h-3 w-3 ml-1" />;
   };
@@ -585,74 +606,106 @@ export function Gradebook({ classId }: GradebookProps) {
   // Summary stats
   const stats = useMemo(() => {
     if (!filteredGrades.length) return null;
-    const avgGrade = filteredGrades.reduce((sum, g) => sum + g.grade, 0) / filteredGrades.length;
-    const avgRegents = filteredGrades.filter(g => g.regents_score).reduce((sum, g) => sum + (g.regents_score || 0), 0) / 
-      filteredGrades.filter(g => g.regents_score).length || 0;
-    const uniqueStudents = new Set(filteredGrades.map(g => g.student_id)).size;
-    const uniqueTopics = new Set(filteredGrades.map(g => g.topic_name)).size;
-    
-    return { avgGrade, avgRegents, uniqueStudents, uniqueTopics, total: filteredGrades.length };
+
+    const summarizeEntries = (entries: GradeEntry[]) => {
+      const regentsEntries = entries.filter((entry) => entry.regents_score !== null);
+      return {
+        total: entries.length,
+        avgGrade: entries.length
+          ? entries.reduce((sum, entry) => sum + entry.grade, 0) / entries.length
+          : 0,
+        avgRegents: regentsEntries.length
+          ? regentsEntries.reduce((sum, entry) => sum + (entry.regents_score || 0), 0) / regentsEntries.length
+          : 0,
+      };
+    };
+
+    const scanEntries = filteredGrades.filter((grade) => getGradeSource(grade) === 'scan');
+    const scholarEntries = filteredGrades.filter((grade) => getGradeSource(grade) === 'scholar');
+
+    return {
+      total: filteredGrades.length,
+      uniqueStudents: new Set(filteredGrades.map(g => g.student_id)).size,
+      uniqueTopics: new Set(filteredGrades.map(g => g.topic_name)).size,
+      scan: summarizeEntries(scanEntries),
+      scholar: summarizeEntries(scholarEntries),
+    };
   }, [filteredGrades]);
 
-  // Per-student overall averages (combines scanned + scholar grades)
+  // Per-student averages split by source
   const studentAverages = useMemo(() => {
     if (!filteredGrades.length) return [];
-    
-    const studentMap = new Map<string, { 
-      studentId: string; 
-      name: string; 
+
+    const studentMap = new Map<string, {
+      studentId: string;
+      name: string;
       className: string;
-      grades: number[]; 
-      regentsScores: number[];
+      scanGrades: number[];
+      scholarGrades: number[];
+      scanRegentsScores: number[];
+      scholarRegentsScores: number[];
       topicCount: number;
-      scanCount: number;
-      scholarCount: number;
       lastDate: string;
     }>();
-    
-    filteredGrades.forEach(g => {
-      const existing = studentMap.get(g.student_id);
-      const isScholar = g.grade_justification?.toLowerCase().includes('scholar') || false;
-      
+
+    filteredGrades.forEach((grade) => {
+      const source = getGradeSource(grade);
+      const existing = studentMap.get(grade.student_id);
+
       if (existing) {
-        existing.grades.push(g.grade);
-        if (g.regents_score) existing.regentsScores.push(g.regents_score);
-        if (isScholar) existing.scholarCount++; else existing.scanCount++;
-        if (g.created_at > existing.lastDate) existing.lastDate = g.created_at;
-      } else {
-        const name = g.student 
-          ? getDisplayName(g.student_id, g.student.first_name, g.student.last_name)
-          : 'Unknown';
-        studentMap.set(g.student_id, {
-          studentId: g.student_id,
-          name,
-          className: g.student?.class?.name || '',
-          grades: [g.grade],
-          regentsScores: g.regents_score ? [g.regents_score] : [],
-          topicCount: 0,
-          scanCount: isScholar ? 0 : 1,
-          scholarCount: isScholar ? 1 : 0,
-          lastDate: g.created_at,
-        });
+        if (source === 'scholar') {
+          existing.scholarGrades.push(grade.grade);
+          if (grade.regents_score !== null) existing.scholarRegentsScores.push(grade.regents_score);
+        } else {
+          existing.scanGrades.push(grade.grade);
+          if (grade.regents_score !== null) existing.scanRegentsScores.push(grade.regents_score);
+        }
+        if (grade.created_at > existing.lastDate) existing.lastDate = grade.created_at;
+        return;
       }
+
+      const name = grade.student
+        ? getDisplayName(grade.student_id, grade.student.first_name, grade.student.last_name)
+        : 'Unknown';
+
+      studentMap.set(grade.student_id, {
+        studentId: grade.student_id,
+        name,
+        className: grade.student?.class?.name || '',
+        scanGrades: source === 'scan' ? [grade.grade] : [],
+        scholarGrades: source === 'scholar' ? [grade.grade] : [],
+        scanRegentsScores: source === 'scan' && grade.regents_score !== null ? [grade.regents_score] : [],
+        scholarRegentsScores: source === 'scholar' && grade.regents_score !== null ? [grade.regents_score] : [],
+        topicCount: 0,
+        lastDate: grade.created_at,
+      });
     });
 
-    // Count unique topics per student
     const studentTopics = new Map<string, Set<string>>();
-    filteredGrades.forEach(g => {
-      if (!studentTopics.has(g.student_id)) studentTopics.set(g.student_id, new Set());
-      studentTopics.get(g.student_id)!.add(g.topic_name);
+    filteredGrades.forEach((grade) => {
+      if (!studentTopics.has(grade.student_id)) studentTopics.set(grade.student_id, new Set());
+      studentTopics.get(grade.student_id)!.add(grade.topic_name);
     });
-    
-    return Array.from(studentMap.values()).map(s => ({
-      ...s,
-      topicCount: studentTopics.get(s.studentId)?.size || 0,
-      avgGrade: Math.round(s.grades.reduce((a, b) => a + b, 0) / s.grades.length),
-      avgRegents: s.regentsScores.length > 0 
-        ? (s.regentsScores.reduce((a, b) => a + b, 0) / s.regentsScores.length).toFixed(1)
-        : null,
-      totalEntries: s.grades.length,
-    })).sort((a, b) => a.name.localeCompare(b.name));
+
+    const averageOrNull = (values: number[]) =>
+      values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+
+    const regentsAverageOrNull = (values: number[]) =>
+      values.length ? (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1) : null;
+
+    return Array.from(studentMap.values())
+      .map((student) => ({
+        ...student,
+        topicCount: studentTopics.get(student.studentId)?.size || 0,
+        scanAverage: averageOrNull(student.scanGrades),
+        scholarAverage: averageOrNull(student.scholarGrades),
+        scanAverageRegents: regentsAverageOrNull(student.scanRegentsScores),
+        scholarAverageRegents: regentsAverageOrNull(student.scholarRegentsScores),
+        scanCount: student.scanGrades.length,
+        scholarCount: student.scholarGrades.length,
+        totalEntries: student.scanGrades.length + student.scholarGrades.length,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredGrades, getDisplayName]);
 
   
@@ -709,7 +762,7 @@ export function Gradebook({ classId }: GradebookProps) {
               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </div>
             <CardDescription>
-              View and manage all saved grade history entries
+              View and manage saved grade history with Scholar and scanned results separated.
             </CardDescription>
           </CardHeader>
         </CollapsibleTrigger>
@@ -769,6 +822,16 @@ export function Gradebook({ classId }: GradebookProps) {
                   )}
                 </SelectContent>
               </Select>
+              <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as SourceFilter)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  <SelectItem value="scan">Scanned Only</SelectItem>
+                  <SelectItem value="scholar">Scholar Only</SelectItem>
+                </SelectContent>
+              </Select>
               <Button variant="outline" onClick={handleExportCSV} disabled={!filteredGrades.length}>
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
@@ -811,7 +874,7 @@ export function Gradebook({ classId }: GradebookProps) {
 
             {/* Summary Stats */}
             {stats && (
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <div className="p-3 rounded-lg bg-muted/50 text-center">
                   <p className="text-2xl font-bold">{stats.total}</p>
                   <p className="text-xs text-muted-foreground">Total Entries</p>
@@ -825,19 +888,30 @@ export function Gradebook({ classId }: GradebookProps) {
                   <p className="text-xs text-muted-foreground">Topics</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50 text-center">
-                  <p className={`text-2xl font-bold ${getGradeColor(stats.avgGrade)}`}>
-                    {Math.round(stats.avgGrade)}%
+                  <p className={`text-2xl font-bold ${stats.scan.total ? getGradeColor(stats.scan.avgGrade) : 'text-muted-foreground'}`}>
+                    {stats.scan.total ? `${Math.round(stats.scan.avgGrade)}%` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">Avg Grade</p>
+                  <p className="text-xs text-muted-foreground">Scanned Avg</p>
+                  <p className="text-[11px] text-muted-foreground">{stats.scan.total} entries</p>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50 text-center">
-                  <p className="text-2xl font-bold">{stats.avgRegents.toFixed(1)}/6</p>
-                  <p className="text-xs text-muted-foreground">Avg Regents</p>
+                  <p className={`text-2xl font-bold ${stats.scholar.total ? getGradeColor(stats.scholar.avgGrade) : 'text-muted-foreground'}`}>
+                    {stats.scholar.total ? `${Math.round(stats.scholar.avgGrade)}%` : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Scholar Avg</p>
+                  <p className="text-[11px] text-muted-foreground">{stats.scholar.total} entries</p>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50 text-center">
+                  <p className="text-2xl font-bold">
+                    {stats.scan.avgRegents ? `${stats.scan.avgRegents.toFixed(1)}/6` : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Scanned Regents</p>
+                  <p className="text-[11px] text-muted-foreground">Scholar kept separate</p>
                 </div>
               </div>
             )}
 
-            {/* Per-Student Overall Averages */}
+            {/* Per-Student Results by Source */}
             {studentAverages.length > 0 && (
               <div className="space-y-2">
                 <button
@@ -845,7 +919,7 @@ export function Gradebook({ classId }: GradebookProps) {
                   className="flex items-center gap-2 text-sm font-semibold hover:text-primary transition-colors w-full"
                 >
                   <Users className="h-4 w-4 text-primary" />
-                  Student Overall Averages
+                  Student Results by Source
                   <Badge variant="secondary" className="ml-1">{studentAverages.length}</Badge>
                   {showStudentAverages ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
                 </button>
@@ -856,62 +930,56 @@ export function Gradebook({ classId }: GradebookProps) {
                         <TableRow>
                           <TableHead>Student</TableHead>
                           <TableHead>Class</TableHead>
-                          <TableHead className="text-center">Overall Avg</TableHead>
-                          <TableHead className="text-center">Avg Regents</TableHead>
-                          <TableHead className="text-center">Entries</TableHead>
-                          <TableHead className="text-center">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="flex items-center justify-center gap-1">Sources <Info className="h-3 w-3 text-muted-foreground" /></span>
-                                </TooltipTrigger>
-                                <TooltipContent>Scan = graded from scanned work. Scholar = from Scholar app completions.</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </TableHead>
+                          <TableHead className="text-center">Scanned Avg</TableHead>
+                          <TableHead className="text-center">Scholar Avg</TableHead>
+                          <TableHead className="text-center">Scanned</TableHead>
+                          <TableHead className="text-center">Scholar</TableHead>
                           <TableHead className="text-center">Topics</TableHead>
                           <TableHead>Last Activity</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {studentAverages.map(s => (
-                          <TableRow key={s.studentId} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedStudentForReport({ id: s.studentId, name: s.name })}>
-                            <TableCell className="font-medium">{s.name}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs">{s.className}</TableCell>
+                        {studentAverages.map((student) => (
+                          <TableRow
+                            key={student.studentId}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setSelectedStudentForReport({ id: student.studentId, name: student.name })}
+                          >
+                            <TableCell className="font-medium">{student.name}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{student.className}</TableCell>
                             <TableCell className="text-center">
-                              <span className={`font-bold text-lg ${getGradeColor(s.avgGrade)}`}>
-                                {s.avgGrade}%
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {s.avgRegents ? (
-                                <Badge variant="outline" className={getRegentsColor(parseFloat(s.avgRegents))}>
-                                  {s.avgRegents}/6
-                                </Badge>
+                              {student.scanAverage !== null ? (
+                                <div className="space-y-1">
+                                  <div className={`font-bold text-lg ${getGradeColor(student.scanAverage)}`}>
+                                    {student.scanAverage}%
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {student.scanAverageRegents ? `${student.scanAverageRegents}/6 regents` : '—'}
+                                  </div>
+                                </div>
                               ) : (
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-center text-muted-foreground">{s.totalEntries}</TableCell>
                             <TableCell className="text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                {s.scanCount > 0 && (
-                                  <Badge variant="outline" className="text-xs">
-                                    <BarChart3 className="h-3 w-3 mr-1" />
-                                    {s.scanCount}
-                                  </Badge>
-                                )}
-                                {s.scholarCount > 0 && (
-                                  <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400">
-                                    <Sparkles className="h-3 w-3 mr-1" />
-                                    {s.scholarCount}
-                                  </Badge>
-                                )}
-                              </div>
+                              {student.scholarAverage !== null ? (
+                                <div className="space-y-1">
+                                  <div className={`font-bold text-lg ${getGradeColor(student.scholarAverage)}`}>
+                                    {student.scholarAverage}%
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {student.scholarAverageRegents ? `${student.scholarAverageRegents}/6 regents` : '—'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">—</span>
+                              )}
                             </TableCell>
-                            <TableCell className="text-center text-muted-foreground">{s.topicCount}</TableCell>
+                            <TableCell className="text-center text-muted-foreground">{student.scanCount}</TableCell>
+                            <TableCell className="text-center text-muted-foreground">{student.scholarCount}</TableCell>
+                            <TableCell className="text-center text-muted-foreground">{student.topicCount}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">
-                              {format(new Date(s.lastDate), 'MMM d, yyyy')}
+                              {format(new Date(student.lastDate), 'MMM d, yyyy')}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -970,6 +1038,21 @@ export function Gradebook({ classId }: GradebookProps) {
                             <TooltipContent side="top" className="max-w-[250px]">
                               <p className="font-semibold">{COLUMN_INFO.topic.title}</p>
                               <p className="text-xs text-muted-foreground">{COLUMN_INFO.topic.description}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="flex items-center gap-1">
+                                Source <Info className="h-3 w-3 text-muted-foreground" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[250px]">
+                              <p className="font-semibold">{COLUMN_INFO.source.title}</p>
+                              <p className="text-xs text-muted-foreground">{COLUMN_INFO.source.description}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -1112,6 +1195,11 @@ export function Gradebook({ classId }: GradebookProps) {
                               </TooltipProvider>
                             );
                           })()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={getGradeSource(grade) === 'scholar' ? 'secondary' : 'outline'}>
+                            {getGradeSourceLabel(getGradeSource(grade))}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-center">
                           <span className={`font-bold ${getGradeColor(grade.grade)}`}>
