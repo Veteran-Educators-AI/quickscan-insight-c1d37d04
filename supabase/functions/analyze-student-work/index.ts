@@ -236,6 +236,54 @@ function isBlankPage(rawText: string | null | undefined, threshold = 20): boolea
   return false;
 }
 
+function normalizeOCRText(rawText: string | null | undefined): string {
+  if (!rawText) return "";
+
+  return rawText
+    .replace(/---\s*PAGE\s*\d+\s*---/gi, "\n")
+    .replace(/---\s*PAGE\s*\d+\s*\(OCR FAILED\)\s*---/gi, "\n")
+    .replace(/\[OCR FAILED[^\]]*\]/gi, " ")
+    .replace(/\uFFFD/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function hasHighNoiseOCR(text: string): boolean {
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, "");
+  if (compact.length < 12) return true;
+
+  const symbolChars = (compact.match(/[^a-zA-Z0-9=+\-*/().,:;\[\]{}√^]/g) || []).length;
+  const symbolRatio = symbolChars / compact.length;
+
+  // Detect repeated OCR artifacts like "²=100-64" copied fragments
+  const repeatedFragments = (text.match(/([\dxyab]\s*[²^]\s*=\s*[\dxyab\-+*/ ]{3,})/gi) || []).length;
+
+  return symbolRatio > 0.35 || repeatedFragments >= 3;
+}
+
+function extractJSONObject(text: string): any | null {
+  if (!text) return null;
+
+  const cleaned = text
+    .replace(/^```(?:json)?\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAGE TYPE DETECTION (kept lean)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1414,7 +1462,17 @@ serve(async (req: Request) => {
     } = requestBody;
 
     const effectiveTeacherId = teacherId || authenticatedUserId;
-    if (!imageBase64 && !preExtractedOCR) throw new Error("Image data or OCR text is required");
+    const normalizedPreExtractedOCR = normalizeOCRText(typeof preExtractedOCR === "string" ? preExtractedOCR : "");
+    const hasUsablePreExtractedOCR =
+      normalizedPreExtractedOCR.length >= 20 && !hasHighNoiseOCR(normalizedPreExtractedOCR);
+
+    if (preExtractedOCR && !hasUsablePreExtractedOCR) {
+      console.warn(
+        `[OCR_QUALITY] Ignoring low-quality OCR payload (len=${normalizedPreExtractedOCR.length}); falling back to image-first grading`,
+      );
+    }
+
+    if (!imageBase64 && !hasUsablePreExtractedOCR) throw new Error("Image data or OCR text is required");
 
     // ── Page type detection ──
     if (detectPageType) {
@@ -1598,10 +1656,10 @@ serve(async (req: Request) => {
       `[CONTEXT_FINGERPRINT] hash=${contextHash} style_len=${gradingStyleContext.length} samples_len=${teacherAnswerSampleContext.length} verif_len=${verificationContext.length}`,
     );
 
-    // ── BLANK PAGE EARLY EXIT — no separate AI call needed ──
-    const textForBlankCheck = preExtractedOCR || "";
-    if (isBlankPage(textForBlankCheck)) {
-      console.log(`[BLANK_PAGE] Detected blank page (text length: ${textForBlankCheck.length}). Skipping AI, returning 0%.`);
+    // ── BLANK PAGE EARLY EXIT — only if OCR is trustworthy ──
+    const textForBlankCheck = hasUsablePreExtractedOCR ? normalizedPreExtractedOCR : "";
+    if (hasUsablePreExtractedOCR && isBlankPage(textForBlankCheck)) {
+      console.log(`[BLANK_PAGE] Detected blank page from trusted OCR (text length: ${textForBlankCheck.length}). Skipping AI.`);
       const blankScore =
         blankPageSettings?.enabled && blankPageSettings?.score != null
           ? blankPageSettings.score
@@ -1640,8 +1698,8 @@ serve(async (req: Request) => {
 
 
     // ── OCR-ASSISTED GRADING (unified through callLovableAI) ──
-    if (preExtractedOCR && typeof preExtractedOCR === "string" && preExtractedOCR.length > 0) {
-      console.log(`[OCR_ASSISTED] Grading from pre-extracted OCR (${preExtractedOCR.length} chars) + image`);
+    if (hasUsablePreExtractedOCR) {
+      console.log(`[OCR_ASSISTED] Grading from pre-extracted OCR (${normalizedPreExtractedOCR.length} chars) + image`);
 
       const { system: sysPrompt, user: usrPrompt } = buildGradingPrompt({
         rubricSteps,
@@ -1659,7 +1717,7 @@ serve(async (req: Request) => {
       });
 
       // Include OCR text in the prompt so AI doesn't need to re-read handwriting
-      const ocrAugmentedPrompt = `${usrPrompt}\n\n--- STUDENT'S EXTRACTED WORK (from OCR) ---\n${preExtractedOCR}\n--- END OF STUDENT WORK ---\nThe student's image is also attached for visual context (diagrams, graphs, formatting). Use the OCR text as the primary source for reading handwriting.`;
+      const ocrAugmentedPrompt = `${usrPrompt}\n\n--- STUDENT'S EXTRACTED WORK (from OCR) ---\n${normalizedPreExtractedOCR}\n--- END OF STUDENT WORK ---\nThe student's image is also attached for visual context (diagrams, graphs, formatting). Use the OCR text as the primary source for reading handwriting.`;
 
       const userContent: any[] = [{ type: "text", text: ocrAugmentedPrompt }];
 
@@ -1699,12 +1757,8 @@ serve(async (req: Request) => {
         if (!roundText) continue;
         const roundResult = parseAnalysisResult(roundText, rubricSteps, gradeFloor, gradeFloorWithEffort);
 
-        let parsed: any = null;
-        try {
-          parsed = JSON.parse(roundText);
-        } catch {
-          /* regex path won't have booleans */
-        }
+        const parsed = extractJSONObject(roundText);
+
 
         const booleans: BooleanAnswers = {
           is_academic_assignment: parsed?.is_academic_assignment === true,
@@ -1769,7 +1823,7 @@ serve(async (req: Request) => {
       const result = ocrChosen.result;
 
       // Override with consensus values
-      result.ocrText = preExtractedOCR;
+      result.ocrText = normalizedPreExtractedOCR;
       result.grade = ocrFinalGrade;
       result.isAnswerCorrect = ocrVotedBooleans.is_answer_correct;
       result.regentsScore = ocrFinalResult.regentsScore;
