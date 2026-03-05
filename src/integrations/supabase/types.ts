@@ -1137,6 +1137,7 @@ export type Database = {
       }
       lesson_plans: {
         Row: {
+          aim: string | null
           class_id: string | null
           created_at: string
           duration: string
@@ -1153,6 +1154,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aim?: string | null
           class_id?: string | null
           created_at?: string
           duration: string
@@ -1169,6 +1171,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aim?: string | null
           class_id?: string | null
           created_at?: string
           duration?: string

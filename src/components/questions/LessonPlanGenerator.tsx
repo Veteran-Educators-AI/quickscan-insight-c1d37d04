@@ -36,6 +36,7 @@ interface LessonPlan {
   title: string;
   standard: string;
   topicName: string;
+  aim: string;
   objective: string;
   duration: string;
   slides: LessonSlide[];
@@ -126,11 +127,13 @@ export function LessonPlanGenerator({
         if (data) {
           const slides = (data.slides as unknown as LessonSlide[]) || [];
           const recommendedWorksheets = (data.recommended_worksheets as unknown as { topicName: string; standard: string; difficulty: string }[]) || [];
+          const savedAim = (data as { aim?: string | null }).aim;
           
           setLessonPlan({
             title: data.title,
             standard: data.standard,
             topicName: data.topic_name,
+            aim: savedAim || data.objective,
             objective: data.objective,
             duration: data.duration,
             slides,
@@ -240,6 +243,11 @@ export function LessonPlanGenerator({
     setLessonPlan({ ...lessonPlan, title: newTitle });
   };
 
+  const updateAim = (newAim: string) => {
+    if (!lessonPlan) return;
+    setLessonPlan({ ...lessonPlan, aim: newAim });
+  };
+
   const updateObjective = (newObjective: string) => {
     if (!lessonPlan) return;
     setLessonPlan({ ...lessonPlan, objective: newObjective });
@@ -336,6 +344,7 @@ export function LessonPlanGenerator({
         standard: lessonPlan.standard,
         topic_name: lessonPlan.topicName,
         subject: topic?.subject || null,
+        aim: lessonPlan.aim,
         objective: lessonPlan.objective,
         duration: lessonPlan.duration,
         slides: lessonPlan.slides as unknown,
@@ -396,19 +405,25 @@ export function LessonPlanGenerator({
       if (error) throw error;
 
       if (data.lessonPlan) {
-        setLessonPlan(data.lessonPlan);
+        const generatedLessonPlan = {
+          ...data.lessonPlan,
+          aim: data.lessonPlan.aim || data.lessonPlan.objective,
+        };
+
+        setLessonPlan(generatedLessonPlan);
         
         // Auto-save the lesson plan to the database
         const insertData = {
           teacher_id: user.id,
-          title: data.lessonPlan.title,
-          standard: data.lessonPlan.standard,
-          topic_name: data.lessonPlan.topicName,
+          title: generatedLessonPlan.title,
+          standard: generatedLessonPlan.standard,
+          topic_name: generatedLessonPlan.topicName,
           subject: topic.subject || null,
-          objective: data.lessonPlan.objective,
-          duration: data.lessonPlan.duration,
-          slides: data.lessonPlan.slides as unknown,
-          recommended_worksheets: data.lessonPlan.recommendedWorksheets as unknown,
+          aim: generatedLessonPlan.aim,
+          objective: generatedLessonPlan.objective,
+          duration: generatedLessonPlan.duration,
+          slides: generatedLessonPlan.slides as unknown,
+          recommended_worksheets: generatedLessonPlan.recommendedWorksheets as unknown,
           class_id: classId || null,
         };
         
@@ -1182,13 +1197,13 @@ export function LessonPlanGenerator({
       fill: { color: themeColors.primary, transparency: 40 },
     });
 
-    // Main title with proper margins
+    // Title slide with standards and aim
     titleSlide.addText(lessonPlan.title, {
       x: slideMargin,
-      y: 1.6,
+      y: 1.35,
       w: contentWidth,
-      h: 1.2,
-      fontSize: 36,
+      h: 1.1,
+      fontSize: 34,
       bold: true,
       color: themeColors.text,
       align: 'center',
@@ -1196,24 +1211,69 @@ export function LessonPlanGenerator({
       wrap: true,
     });
     
-    titleSlide.addText(`Standard: ${lessonPlan.standard}`, {
+    titleSlide.addText(`Standards: ${lessonPlan.standard}`, {
       x: slideMargin,
-      y: 3.0,
+      y: 2.7,
       w: contentWidth,
-      h: 0.5,
+      h: 0.45,
       fontSize: 18,
       color: themeColors.primary,
       align: 'center',
+      wrap: true,
+    });
+
+    titleSlide.addText(lessonPlan.aim, {
+      x: slideMargin + 0.4,
+      y: 3.25,
+      w: contentWidth - 0.8,
+      h: 1,
+      fontSize: 18,
+      bold: true,
+      color: themeColors.text,
+      align: 'center',
+      valign: 'middle',
+      wrap: true,
     });
     
     titleSlide.addText(`Duration: ${lessonPlan.duration}`, {
       x: slideMargin,
-      y: 3.5,
+      y: 4.45,
       w: contentWidth,
-      h: 0.5,
+      h: 0.4,
       fontSize: 16,
       color: '6B7280',
       align: 'center',
+    });
+
+    // Aim and standards slide
+    const aimSlide = pptx.addSlide();
+    const aimColors = slideColors.objective || { bg: '3B82F6', text: 'FFFFFF' };
+    addSlideBackground(aimSlide, aimColors);
+    addSlideDecoration(aimSlide, 'objective', aimColors);
+
+    aimSlide.addText('Aim & Standards', {
+      x: slideMargin,
+      y: 0.5,
+      w: contentWidth,
+      h: 0.8,
+      fontSize: 28,
+      bold: true,
+      color: presentationTheme ? themeColors.text : '1F2937',
+    });
+
+    aimSlide.addText([
+      { text: lessonPlan.aim, options: { bullet: true, indentLevel: 0 } },
+      { text: `Standards: ${lessonPlan.standard}`, options: { bullet: true, indentLevel: 0 } },
+    ], {
+      x: slideMargin,
+      y: 1.5,
+      w: contentWidth,
+      h: 2.4,
+      fontSize: 18,
+      color: presentationTheme ? themeColors.text : '374151',
+      valign: 'top',
+      wrap: true,
+      lineSpacing: 28,
     });
 
     // Objective slide with proper margins
@@ -1462,14 +1522,26 @@ export function LessonPlanGenerator({
                       </Badge>
                     </div>
                     {isEditing ? (
-                      <Textarea
-                        value={lessonPlan.objective}
-                        onChange={(e) => updateObjective(e.target.value)}
-                        className="text-sm mt-1"
-                        rows={2}
-                      />
+                      <div className="mt-1 space-y-2">
+                        <Textarea
+                          value={lessonPlan.aim}
+                          onChange={(e) => updateAim(e.target.value)}
+                          className="text-sm"
+                          rows={2}
+                          placeholder="Aim: Students will..."
+                        />
+                        <Textarea
+                          value={lessonPlan.objective}
+                          onChange={(e) => updateObjective(e.target.value)}
+                          className="text-sm"
+                          rows={2}
+                        />
+                      </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{lessonPlan.objective}</p>
+                      <div className="mt-1 space-y-1">
+                        <p className="text-xs text-muted-foreground line-clamp-2"><span className="font-medium text-foreground">Aim:</span> {lessonPlan.aim}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2"><span className="font-medium text-foreground">Objective:</span> {lessonPlan.objective}</p>
+                      </div>
                     )}
                   </div>
                   <Button

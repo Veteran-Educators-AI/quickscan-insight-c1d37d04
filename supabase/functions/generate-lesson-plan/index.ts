@@ -17,6 +17,7 @@ interface LessonPlan {
   title: string;
   standard: string;
   topicName: string;
+  aim: string;
   objective: string;
   duration: string;
   slides: LessonSlide[];
@@ -171,21 +172,22 @@ Generate a lesson plan with the following structure as a JSON object:
   "title": "Lesson title (engaging and descriptive)",
   "standard": "${standard}",
   "topicName": "${topicName}",
+  "aim": "A concise NYS-aligned aim statement beginning with 'Aim:'",
   "objective": "Clear, measurable learning objective using Bloom's taxonomy verbs",
   "duration": "${lessonDuration}",
   "slides": [
     {
       "slideNumber": 1,
       "title": "Title slide",
-      "content": ["Main topic title", "Standard: ${standard}", "Today's Objective"],
+      "content": ["Main topic title", "Standards: ${standard}", "Aim: ...", "Today's Objective"],
       "speakerNotes": "Welcome students and introduce the topic...",
       "slideType": "title"
     },
     {
       "slideNumber": 2,
       "title": "Learning Objective",
-      "content": ["By the end of this lesson, you will be able to...", "Key vocabulary terms"],
-      "speakerNotes": "Read the objective aloud...",
+      "content": ["Aim: ...", "By the end of this lesson, you will be able to...", "Standards: ${standard}", "Key vocabulary terms"],
+      "speakerNotes": "Read the objective aloud and connect it to the aim and NYS standard...",
       "slideType": "objective"
     },
     // Include 8-12 slides total covering:
@@ -208,12 +210,14 @@ Generate a lesson plan with the following structure as a JSON object:
 }
 
 Requirements:
-1. Include specific mathematical examples with actual numbers and solutions
-2. Use proper mathematical notation (^2 for squared, sqrt() for square roots, etc.)
-3. Include common misconceptions to address
-4. Add engaging "Try This!" practice problems
-5. Speaker notes should include timing suggestions and teaching tips
-6. Recommended worksheets should directly align to the lesson's standard
+1. Adhere tightly to NYS standards and keep every part of the lesson aligned to ${standard}
+2. Include a clear NYS-aligned aim statement and explicitly show standards in the presentation content
+3. Include specific mathematical examples with actual numbers and solutions
+4. Use proper mathematical notation (^2 for squared, sqrt() for square roots, etc.)
+5. Include common misconceptions to address
+6. Add engaging "Try This!" practice problems
+7. Speaker notes should include timing suggestions and teaching tips
+8. Recommended worksheets should directly align to the lesson's standard
 
 Return ONLY the JSON object, no markdown formatting or code blocks.`;
 
@@ -239,6 +243,15 @@ Return ONLY the JSON object, no markdown formatting or code blocks.`;
       console.error("Failed to parse AI response:", cleanedResponse);
       throw new Error("Failed to parse lesson plan from AI response");
     }
+
+    lessonPlan = {
+      ...lessonPlan,
+      standard: lessonPlan.standard || standard,
+      topicName: lessonPlan.topicName || topicName,
+      duration: lessonPlan.duration || lessonDuration,
+      aim: lessonPlan.aim?.trim() || `Aim: Students will master ${topicName} in alignment with NYS standard ${standard}.`,
+      objective: lessonPlan.objective?.trim() || `Students will demonstrate understanding of ${topicName} aligned to ${standard}.`,
+    };
 
     // Ensure recommended worksheets exist
     if (!lessonPlan.recommendedWorksheets || lessonPlan.recommendedWorksheets.length === 0) {
