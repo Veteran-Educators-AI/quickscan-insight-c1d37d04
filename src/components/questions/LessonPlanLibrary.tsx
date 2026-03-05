@@ -35,6 +35,7 @@ interface SavedLessonPlan {
   standard: string;
   topic_name: string;
   subject: string | null;
+  aim: string;
   objective: string;
   duration: string;
   slides: LessonSlide[];
@@ -93,6 +94,7 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
         standard: plan.standard,
         topic_name: plan.topic_name,
         subject: plan.subject,
+        aim: (plan as { aim?: string | null }).aim || plan.objective,
         objective: plan.objective,
         duration: plan.duration,
         slides: (plan.slides as unknown as LessonSlide[]) || [],
@@ -185,16 +187,34 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
     // Title slide
     const titleSlide = pptx.addSlide();
     titleSlide.addText(plan.title, {
-      x: 0.5, y: 2, w: 9, h: 1.5,
-      fontSize: 36, bold: true, color: '1F2937', align: 'center', valign: 'middle',
+      x: 0.5, y: 1.6, w: 9, h: 1,
+      fontSize: 34, bold: true, color: '1F2937', align: 'center', valign: 'middle',
     });
-    titleSlide.addText(`Standard: ${plan.standard}`, {
-      x: 0.5, y: 3.5, w: 9, h: 0.5,
+    titleSlide.addText(`Standards: ${plan.standard}`, {
+      x: 0.5, y: 2.9, w: 9, h: 0.45,
       fontSize: 18, color: '6B7280', align: 'center',
     });
+    titleSlide.addText(plan.aim, {
+      x: 0.8, y: 3.45, w: 8.4, h: 0.9,
+      fontSize: 18, bold: true, color: '1F2937', align: 'center', valign: 'middle',
+    });
     titleSlide.addText(`Duration: ${plan.duration}`, {
-      x: 0.5, y: 4, w: 9, h: 0.5,
+      x: 0.5, y: 4.45, w: 9, h: 0.4,
       fontSize: 16, color: '6B7280', align: 'center',
+    });
+
+    // Aim and standards slide
+    const aimSlide = pptx.addSlide();
+    aimSlide.addText('Aim & Standards', {
+      x: 0.5, y: 0.5, w: 9, h: 0.8,
+      fontSize: 28, bold: true, color: '1F2937',
+    });
+    aimSlide.addText([
+      { text: plan.aim, options: { bullet: true, indentLevel: 0 } },
+      { text: `Standards: ${plan.standard}`, options: { bullet: true, indentLevel: 0 } },
+    ], {
+      x: 0.5, y: 1.5, w: 9, h: 2.5,
+      fontSize: 20, color: '374151', valign: 'top', lineSpacing: 28,
     });
 
     // Objective slide
