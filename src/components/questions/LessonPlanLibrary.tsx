@@ -57,6 +57,31 @@ interface LessonPlanLibraryProps {
 }
 
 export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPlanLibraryProps) {
+  const hasExplicitExitTicket = (slides: LessonSlide[]) =>
+    slides.some((slide) => {
+      const title = slide.title.toLowerCase();
+      const content = slide.content.join(' ').toLowerCase();
+      return title.includes('exit ticket') || content.includes('exit ticket');
+    });
+
+  const buildExitTicketSlide = (plan: SavedLessonPlan): LessonSlide => ({
+    slideNumber: plan.slides.length + 1,
+    title: 'Exit Ticket',
+    slideType: 'summary',
+    content: [
+      `Exit Ticket: Show what you learned about ${plan.topic_name}.`,
+      `Solve one final problem aligned to ${plan.standard}.`,
+      'Explain the strategy you used.',
+      'Name one mistake to avoid next time.',
+    ],
+    speakerNotes: 'Use this exit ticket as a quick mastery check before ending the lesson.',
+  });
+
+  const ensureExitTicketSlide = (plan: SavedLessonPlan): SavedLessonPlan =>
+    hasExplicitExitTicket(plan.slides)
+      ? plan
+      : { ...plan, slides: [...plan.slides, buildExitTicketSlide(plan)] };
+
   const { toast } = useToast();
   const { user } = useAuth();
   const { pushToSisterApp } = usePushToSisterApp();
@@ -88,22 +113,24 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
       if (error) throw error;
       
       // Parse JSONB fields with proper type casting
-      const parsedPlans: SavedLessonPlan[] = (data || []).map(plan => ({
-        id: plan.id,
-        title: plan.title,
-        standard: plan.standard,
-        topic_name: plan.topic_name,
-        subject: plan.subject,
-        aim: (plan as { aim?: string | null }).aim || plan.objective,
-        objective: plan.objective,
-        duration: plan.duration,
-        slides: (plan.slides as unknown as LessonSlide[]) || [],
-        recommended_worksheets: (plan.recommended_worksheets as unknown as { topicName: string; standard: string; difficulty: string }[]) || [],
-        class_id: plan.class_id,
-        is_favorite: plan.is_favorite,
-        created_at: plan.created_at,
-        updated_at: plan.updated_at,
-      }));
+      const parsedPlans: SavedLessonPlan[] = (data || []).map((plan) =>
+        ensureExitTicketSlide({
+          id: plan.id,
+          title: plan.title,
+          standard: plan.standard,
+          topic_name: plan.topic_name,
+          subject: plan.subject,
+          aim: (plan as { aim?: string | null }).aim || plan.objective,
+          objective: plan.objective,
+          duration: plan.duration,
+          slides: (plan.slides as unknown as LessonSlide[]) || [],
+          recommended_worksheets: (plan.recommended_worksheets as unknown as { topicName: string; standard: string; difficulty: string }[]) || [],
+          class_id: plan.class_id,
+          is_favorite: plan.is_favorite,
+          created_at: plan.created_at,
+          updated_at: plan.updated_at,
+        })
+      );
       
       setLessonPlans(parsedPlans);
     } catch (error) {
@@ -170,10 +197,11 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
   };
 
   const downloadAsPowerPoint = (plan: SavedLessonPlan) => {
+    const exportPlan = ensureExitTicketSlide(plan);
     const pptx = new pptxgen();
     pptx.author = 'NYCLogic Ai';
-    pptx.title = plan.title;
-    pptx.subject = `Lesson on ${plan.topic_name}`;
+    pptx.title = exportPlan.title;
+    pptx.subject = `Lesson on ${exportPlan.topic_name}`;
     
     const slideColors: Record<string, { bg: string; text: string }> = {
       title: { bg: '3B82F6', text: 'FFFFFF' },
@@ -186,19 +214,19 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
 
     // Title slide
     const titleSlide = pptx.addSlide();
-    titleSlide.addText(plan.title, {
+    titleSlide.addText(exportPlan.title, {
       x: 0.5, y: 1.6, w: 9, h: 1,
       fontSize: 34, bold: true, color: '1F2937', align: 'center', valign: 'middle',
     });
-    titleSlide.addText(`Standards: ${plan.standard}`, {
+    titleSlide.addText(`Standards: ${exportPlan.standard}`, {
       x: 0.5, y: 2.9, w: 9, h: 0.45,
       fontSize: 18, color: '6B7280', align: 'center',
     });
-    titleSlide.addText(plan.aim, {
+    titleSlide.addText(exportPlan.aim, {
       x: 0.8, y: 3.45, w: 8.4, h: 0.9,
       fontSize: 18, bold: true, color: '1F2937', align: 'center', valign: 'middle',
     });
-    titleSlide.addText(`Duration: ${plan.duration}`, {
+    titleSlide.addText(`Duration: ${exportPlan.duration}`, {
       x: 0.5, y: 4.45, w: 9, h: 0.4,
       fontSize: 16, color: '6B7280', align: 'center',
     });
@@ -210,8 +238,8 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
       fontSize: 28, bold: true, color: '1F2937',
     });
     aimSlide.addText([
-      { text: plan.aim, options: { bullet: true, indentLevel: 0 } },
-      { text: `Standards: ${plan.standard}`, options: { bullet: true, indentLevel: 0 } },
+      { text: exportPlan.aim, options: { bullet: true, indentLevel: 0 } },
+      { text: `Standards: ${exportPlan.standard}`, options: { bullet: true, indentLevel: 0 } },
     ], {
       x: 0.5, y: 1.5, w: 9, h: 2.5,
       fontSize: 20, color: '374151', valign: 'top', lineSpacing: 28,
@@ -223,13 +251,13 @@ export function LessonPlanLibrary({ open, onOpenChange, onSelectPlan }: LessonPl
       x: 0.5, y: 0.5, w: 9, h: 0.8,
       fontSize: 28, bold: true, color: '1F2937',
     });
-    objectiveSlide.addText(plan.objective, {
+    objectiveSlide.addText(exportPlan.objective, {
       x: 0.5, y: 1.5, w: 9, h: 3,
       fontSize: 20, color: '374151', valign: 'top',
     });
 
     // Content slides
-    plan.slides.forEach((slide) => {
+    exportPlan.slides.forEach((slide) => {
       const colors = slideColors[slide.slideType] || { bg: 'E5E7EB', text: '1F2937' };
       const pptSlide = pptx.addSlide();
       

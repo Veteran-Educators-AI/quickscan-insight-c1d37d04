@@ -138,6 +138,29 @@ function isZeroCouponBondTopic(topicName: string): boolean {
          lowerTopic.includes('zerocoupon');
 }
 
+function hasExplicitExitTicket(slides: LessonSlide[]): boolean {
+  return slides.some((slide) => {
+    const title = slide.title?.toLowerCase() || "";
+    const content = slide.content?.join(" ").toLowerCase() || "";
+    return title.includes("exit ticket") || content.includes("exit ticket");
+  });
+}
+
+function buildExitTicketSlide(topicName: string, standard: string, nextSlideNumber: number): LessonSlide {
+  return {
+    slideNumber: nextSlideNumber,
+    title: "Exit Ticket",
+    slideType: "summary",
+    content: [
+      `Exit Ticket: Show what you learned about ${topicName}.`,
+      `1. Solve one problem aligned to ${standard}.`,
+      `2. Explain which strategy or rule you used.`,
+      "3. Write one mistake to avoid next time.",
+    ],
+    speakerNotes: "Use this exit ticket as the final check for mastery. Give students 3-5 minutes to work independently, then collect responses to assess understanding and plan next steps.",
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -197,7 +220,8 @@ Generate a lesson plan with the following structure as a JSON object:
     // - Worked example 2 - slightly harder (1-2 slides)
     // - Guided practice problem (1 slide)
     // - Independent practice preview (1 slide)
-    // - Summary/Exit ticket (1 slide)
+    // - Explicit Exit Ticket slide titled exactly "Exit Ticket" (1 slide)
+    // - Summary/closure (optional)
   ],
   "recommendedWorksheets": [
     {
@@ -212,12 +236,13 @@ Generate a lesson plan with the following structure as a JSON object:
 Requirements:
 1. Adhere tightly to NYS standards and keep every part of the lesson aligned to ${standard}
 2. Include a clear NYS-aligned aim statement and explicitly show standards in the presentation content
-3. Include specific mathematical examples with actual numbers and solutions
-4. Use proper mathematical notation (^2 for squared, sqrt() for square roots, etc.)
-5. Include common misconceptions to address
-6. Add engaging "Try This!" practice problems
-7. Speaker notes should include timing suggestions and teaching tips
-8. Recommended worksheets should directly align to the lesson's standard
+3. Include an explicit final slide titled exactly "Exit Ticket" with 2-4 short student tasks
+4. Include specific mathematical examples with actual numbers and solutions
+5. Use proper mathematical notation (^2 for squared, sqrt() for square roots, etc.)
+6. Include common misconceptions to address
+7. Add engaging "Try This!" practice problems
+8. Speaker notes should include timing suggestions and teaching tips
+9. Recommended worksheets should directly align to the lesson's standard
 
 Return ONLY the JSON object, no markdown formatting or code blocks.`;
 
@@ -257,6 +282,17 @@ Return ONLY the JSON object, no markdown formatting or code blocks.`;
     if (!lessonPlan.recommendedWorksheets || lessonPlan.recommendedWorksheets.length === 0) {
       lessonPlan.recommendedWorksheets = [
         { topicName, standard, difficulty: "Medium" },
+      ];
+    }
+
+    if (!lessonPlan.slides || lessonPlan.slides.length === 0) {
+      throw new Error("Lesson plan did not include any slides");
+    }
+
+    if (!hasExplicitExitTicket(lessonPlan.slides)) {
+      lessonPlan.slides = [
+        ...lessonPlan.slides,
+        buildExitTicketSlide(topicName, standard, lessonPlan.slides.length + 1),
       ];
     }
 
