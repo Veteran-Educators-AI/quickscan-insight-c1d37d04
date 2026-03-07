@@ -1321,6 +1321,16 @@ export default function Scan() {
             onClassroomImport={() => setShowGoogleClassroomImport(true)}
           />
 
+          {/* Create Answer Sheet - prominent first step */}
+          <Button
+            variant={generatedAnswerSheet ? "outline" : "default"}
+            className={`w-full ${!generatedAnswerSheet ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'border-green-500 text-green-700 dark:text-green-400'}`}
+            onClick={() => setShowCreateAnswerSheet(true)}
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            {generatedAnswerSheet ? '✓ Answer Sheet Ready — View / Edit' : '📝 Create Answer Sheet (Recommended First Step)'}
+          </Button>
+
           {/* Train AI and Answer Key Buttons */}
           <div className="flex justify-end gap-2 flex-wrap">
             <Button
