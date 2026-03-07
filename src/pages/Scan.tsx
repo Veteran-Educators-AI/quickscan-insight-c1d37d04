@@ -306,56 +306,94 @@ export default function Scan() {
     });
   }, [scanState, finalImage, singleScanClassId, singleScanStudentId, selectedQuestionIds, gradingMode, resultsSaved, result, teacherGuidedResult, rawAnalysis, answerGuideImage, multiQuestionResults, currentQuestionIndex, saveSession]);
 
+  // ── Helper: fetch worksheet answer key by ID and set it ──
+  const fetchAndSetAnswerKey = useCallback(async (wsId: string, source: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('worksheets')
+        .select('title, settings, questions')
+        .eq('id', wsId)
+        .maybeSingle();
+
+      if (error || !data) {
+        console.warn(`[AutoAnswerKey:${source}] Could not fetch worksheet:`, error?.message);
+        return false;
+      }
+
+      const settings = data.settings as any;
+      const answerKey = settings?.answer_key;
+      if (!answerKey || !Array.isArray(answerKey) || answerKey.length === 0) {
+        console.log(`[AutoAnswerKey:${source}] Worksheet found but has no embedded answer key`);
+        return false;
+      }
+
+      const answerSheet = {
+        worksheet_title: data.title || 'Worksheet',
+        subject: settings?.subject || 'Math',
+        total_questions: answerKey.length,
+        questions: answerKey.map((item: any, idx: number) => ({
+          number: String(idx + 1),
+          question_text: item.question || item.questionText || `Question ${idx + 1}`,
+          final_answer: item.answer || item.correctAnswer || '',
+          solution_steps: item.steps || item.solutionSteps || [],
+          topic: item.topic || '',
+          common_mistakes: [],
+        })),
+      };
+
+      setGeneratedAnswerSheet(answerSheet);
+      toast.success(`Answer key auto-loaded from worksheet "${data.title}"`, { duration: 4000 });
+      console.log(`[AutoAnswerKey:${source}] Loaded ${answerKey.length} answers from worksheet ${wsId}`);
+      return true;
+    } catch (err) {
+      console.error(`[AutoAnswerKey:${source}] Failed:`, err);
+      return false;
+    }
+  }, []);
+
   // ── Auto-load answer key when a worksheet QR code is detected ──
   const lastFetchedWorksheetId = useRef<string | null>(null);
   useEffect(() => {
     const wsId = batch.detectedWorksheetId;
     if (!wsId || wsId === lastFetchedWorksheetId.current || generatedAnswerSheet) return;
     lastFetchedWorksheetId.current = wsId;
+    fetchAndSetAnswerKey(wsId, 'QR');
+  }, [batch.detectedWorksheetId, generatedAnswerSheet, fetchAndSetAnswerKey]);
+
+  // ── Auto-load answer key when a student is identified by name ──
+  const lastLookedUpStudentId = useRef<string | null>(null);
+  useEffect(() => {
+    if (generatedAnswerSheet) return; // Already have an answer sheet
+
+    // Find the first identified student in batch items
+    const identifiedItem = batch.items.find(item => item.studentId && item.autoAssigned);
+    if (!identifiedItem?.studentId) return;
+    if (identifiedItem.studentId === lastLookedUpStudentId.current) return;
+    lastLookedUpStudentId.current = identifiedItem.studentId;
 
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('worksheets')
-          .select('title, settings, questions')
-          .eq('id', wsId)
+        // Look up the most recent worksheet assigned to this student
+        const { data: submission, error } = await supabase
+          .from('worksheet_submissions')
+          .select('worksheet_id')
+          .eq('student_id', identifiedItem.studentId!)
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
-        if (error || !data) {
-          console.warn('[AutoAnswerKey] Could not fetch worksheet:', error?.message);
+        if (error || !submission?.worksheet_id) {
+          console.log('[AutoAnswerKey:Name] No worksheet submission found for student', identifiedItem.studentId);
           return;
         }
 
-        const settings = data.settings as any;
-        const answerKey = settings?.answer_key;
-        if (!answerKey || !Array.isArray(answerKey) || answerKey.length === 0) {
-          console.log('[AutoAnswerKey] Worksheet found but has no embedded answer key');
-          return;
-        }
-
-        // Build an answer sheet in the same format as CreateAnswerSheetDialog produces
-        const answerSheet = {
-          worksheet_title: data.title || 'Worksheet',
-          subject: settings?.subject || 'Math',
-          total_questions: answerKey.length,
-          questions: answerKey.map((item: any, idx: number) => ({
-            number: String(idx + 1),
-            question_text: item.question || item.questionText || `Question ${idx + 1}`,
-            final_answer: item.answer || item.correctAnswer || '',
-            solution_steps: item.steps || item.solutionSteps || [],
-            topic: item.topic || '',
-            common_mistakes: [],
-          })),
-        };
-
-        setGeneratedAnswerSheet(answerSheet);
-        toast.success(`Answer key auto-loaded from worksheet "${data.title}"`, { duration: 4000 });
-        console.log(`[AutoAnswerKey] Loaded ${answerKey.length} answers from worksheet ${wsId}`);
+        console.log('[AutoAnswerKey:Name] Found worksheet', submission.worksheet_id, 'for student', identifiedItem.studentName);
+        await fetchAndSetAnswerKey(submission.worksheet_id, 'Name');
       } catch (err) {
-        console.error('[AutoAnswerKey] Failed:', err);
+        console.error('[AutoAnswerKey:Name] Lookup failed:', err);
       }
     })();
-  }, [batch.detectedWorksheetId, generatedAnswerSheet]);
+  }, [batch.items, generatedAnswerSheet, fetchAndSetAnswerKey]);
 
   const handleCameraCapture = useCallback(async (imageDataUrl: string) => {
     // Compress image on capture to prevent memory issues on mobile
