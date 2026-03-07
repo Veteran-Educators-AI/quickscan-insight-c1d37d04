@@ -365,6 +365,8 @@ interface UseBatchAnalysisReturn {
   currentIndex: number;
   summary: BatchSummary | null;
   generateSummary: () => BatchSummary;
+  /** Worksheet ID detected from QR code on a scanned paper */
+  detectedWorksheetId: string | null;
 }
 
 export function useBatchAnalysis(): UseBatchAnalysisReturn {
@@ -404,6 +406,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  const [detectedWorksheetId, setDetectedWorksheetId] = useState<string | null>(null);
   
   // Load summary from localStorage
   const [summary, setSummary] = useState<BatchSummary | null>(() => {
@@ -1071,7 +1074,16 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
                   return;
                 }
                 
-                // QR found but not a student QR - log for debugging
+                // QR found but not a student QR - check if it's a worksheet QR
+                try {
+                  const wsData = JSON.parse(code.data);
+                  if (wsData.v === 1 && wsData.type === 'worksheet' && wsData.w) {
+                    console.log('[scanQRCodeFromImage] Detected worksheet QR:', wsData.w);
+                    setDetectedWorksheetId(wsData.w);
+                  }
+                } catch {
+                  // Not JSON — ignore
+                }
                 console.log('[scanQRCodeFromImage] QR found but not a student QR code:', code.data.substring(0, 100));
               }
             } catch (e) {
@@ -2722,5 +2734,6 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
     currentIndex,
     summary,
     generateSummary,
+    detectedWorksheetId,
   };
 }
