@@ -610,6 +610,7 @@ export function WorksheetBuilder({
         teacher_id: user.id,
         title: worksheetTitle,
         teacher_name: teacherName || null,
+        class_id: saveClassId || null,
         questions: JSON.parse(JSON.stringify(compiledQuestions)),
         topics: JSON.parse(JSON.stringify(selectedQuestions)),
         settings: JSON.parse(
