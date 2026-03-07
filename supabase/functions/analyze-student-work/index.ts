@@ -758,7 +758,7 @@ const GRADING_SCHEMA = {
           items: { type: "string" },
           description: "Verified conceptual errors only, quoting student writing. Empty array if none.",
         },
-        grade_justification: { type: "string", description: "Evidence-based justification citing student writing" },
+        grade_justification: { type: "string", description: "DETAILED evidence-based justification. MUST include: (1) which specific questions were analyzed, (2) for each question state whether the answer was correct/incorrect and WHY, (3) what mathematical approach the student used, (4) specific errors found with exact quotes from student writing, (5) why the overall grade was earned. Minimum 100 words." },
         feedback: { type: "string", description: "Constructive feedback for the student" },
         confidence: {
           type: "string",
