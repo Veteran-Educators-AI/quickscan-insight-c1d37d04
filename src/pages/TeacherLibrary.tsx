@@ -643,10 +643,38 @@ export default function TeacherLibrary() {
                               <Clock className="h-3 w-3" />
                               Created: {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
                             </CardDescription>
-                            {worksheet.class_id && (
+                            {worksheet.class_id ? (
                               <Badge variant="outline" className="text-xs mt-1">
                                 {classes.find(c => c.id === worksheet.class_id)?.name || 'Class'}
                               </Badge>
+                            ) : (
+                              <Select
+                                value=""
+                                onValueChange={async (classId) => {
+                                  try {
+                                    const { error } = await supabase
+                                      .from('worksheets')
+                                      .update({ class_id: classId })
+                                      .eq('id', worksheet.id);
+                                    if (error) throw error;
+                                    setWorksheets(prev => prev.map(w => w.id === worksheet.id ? { ...w, class_id: classId } : w));
+                                    toast({ title: 'Class assigned', description: `Worksheet moved to ${classes.find(c => c.id === classId)?.name}` });
+                                  } catch (err) {
+                                    console.error(err);
+                                    toast({ title: 'Failed to assign class', variant: 'destructive' });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-6 text-xs mt-1 w-auto border-dashed border-amber-400 text-amber-600">
+                                  <FolderOpen className="h-3 w-3 mr-1" />
+                                  <SelectValue placeholder="Assign to class..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {classes.map(c => (
+                                    <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             )}
                             {worksheet.due_date && (
                               <CardDescription className="flex items-center gap-1 mt-0.5 text-orange-600 dark:text-orange-400">
@@ -744,9 +772,18 @@ export default function TeacherLibrary() {
                         <FileText className="h-8 w-8 text-blue-500" />
                         <div>
                           <h3 className="font-medium">{worksheet.title}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {(worksheet.questions as any[])?.length || 0} questions • {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-muted-foreground">
+                              {(worksheet.questions as any[])?.length || 0} questions • {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
+                            </p>
+                            {worksheet.class_id ? (
+                              <Badge variant="outline" className="text-xs">
+                                {classes.find(c => c.id === worksheet.class_id)?.name || 'Class'}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs border-dashed border-amber-400 text-amber-600">Unassigned</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
