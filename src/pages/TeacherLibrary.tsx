@@ -570,6 +570,21 @@ export default function TeacherLibrary() {
               ))}
             </SelectContent>
           </Select>
+          {classes.length > 0 && (
+            <Select value={filterClass} onValueChange={setFilterClass}>
+              <SelectTrigger className="w-[200px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter by class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {classes.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant={filterFavorites ? 'default' : 'outline'}
             onClick={() => setFilterFavorites(!filterFavorites)}
