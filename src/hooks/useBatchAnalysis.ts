@@ -365,6 +365,8 @@ interface UseBatchAnalysisReturn {
   currentIndex: number;
   summary: BatchSummary | null;
   generateSummary: () => BatchSummary;
+  /** Worksheet ID detected from QR code on a scanned paper */
+  detectedWorksheetId: string | null;
 }
 
 export function useBatchAnalysis(): UseBatchAnalysisReturn {
