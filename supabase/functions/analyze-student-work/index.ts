@@ -1013,7 +1013,8 @@ STEP 2 — DETECT: Is there student handwriting? Printed questions, worksheet ti
 STEP 3 — RELEVANCE CHECK:
   → Is the student's work relevant to the question? (Off-topic, gibberish, random text → is_relevant_to_question = false)
   → Did the student write a meaningful attempt? ("idk", "?", joke answers, single random word → has_meaningful_content = false)
-STEP 4 — IDENTIFY: What problem/question is being answered? What subject area?
+STEP 4 — IDENTIFY: What problem/question is being answered? What subject area? List EVERY question on the page with its number and what it asks. For each question, record: the question text, the student's answer, the correct answer, whether it's correct, and if wrong explain the specific error.
+STEP 4b — PROBLEMS_ANALYZED: Fill in the "problems_analyzed" array with a detailed per-question breakdown. This is CRITICAL — the teacher needs to see exactly which questions were graded and why.
 STEP 5 — ANSWER these 9 grading questions with true/false (EACH IS INDEPENDENT):
 
   Q1. is_answer_correct:            Is the FINAL ANSWER mathematically/factually correct?
