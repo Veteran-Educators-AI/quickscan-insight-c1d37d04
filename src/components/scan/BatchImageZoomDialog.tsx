@@ -447,9 +447,9 @@ export function BatchImageZoomDialog({
             <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleZoomIn} disabled={zoom >= 5}>
               <ZoomIn className="h-3.5 w-3.5" />
             </Button>
-                        <Button varihant="outline" size="icon" className="h-7 w-7" onClick={() => setIsPanning(!isPanning)}>
-                                        <Move className="h-3.5 w-3.5" />
-                        </Button>Button>
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setIsPanning(!isPanning)}>
+              <Move className="h-3.5 w-3.5" />
+            </Button>
             <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleRotate}>
               <RotateCw className="h-3.5 w-3.5" />
             </Button>
