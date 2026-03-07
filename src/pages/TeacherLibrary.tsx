@@ -643,6 +643,11 @@ export default function TeacherLibrary() {
                               <Clock className="h-3 w-3" />
                               Created: {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
                             </CardDescription>
+                            {worksheet.class_id && (
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {classes.find(c => c.id === worksheet.class_id)?.name || 'Class'}
+                              </Badge>
+                            )}
                             {worksheet.due_date && (
                               <CardDescription className="flex items-center gap-1 mt-0.5 text-orange-600 dark:text-orange-400">
                                 <Calendar className="h-3 w-3" />
