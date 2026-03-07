@@ -4931,6 +4931,24 @@ export function WorksheetBuilder({
                 </Button>
               </div>
 
+              {/* Class selector for saving */}
+              {classes.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Save to Class (optional)</Label>
+                  <Select value={saveClassId || "none"} onValueChange={(v) => setSaveClassId(v === "none" ? null : v)}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="No class assigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No class assigned</SelectItem>
+                      {classes.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={saveWorksheet} disabled={isSaving}>
                   {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
