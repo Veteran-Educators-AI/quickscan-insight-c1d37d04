@@ -468,6 +468,8 @@ export function WorksheetBuilder({
   const [showSavedWorksheets, setShowSavedWorksheets] = useState(false);
   const [isLoadingWorksheets, setIsLoadingWorksheets] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [saveClassId, setSaveClassId] = useState<string | null>(null);
+  const [classes, setClasses] = useState<{id: string; name: string}[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Image generation state
