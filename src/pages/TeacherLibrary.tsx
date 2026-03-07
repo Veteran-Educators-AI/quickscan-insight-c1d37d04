@@ -772,9 +772,18 @@ export default function TeacherLibrary() {
                         <FileText className="h-8 w-8 text-blue-500" />
                         <div>
                           <h3 className="font-medium">{worksheet.title}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {(worksheet.questions as any[])?.length || 0} questions • {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-muted-foreground">
+                              {(worksheet.questions as any[])?.length || 0} questions • {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
+                            </p>
+                            {worksheet.class_id ? (
+                              <Badge variant="outline" className="text-xs">
+                                {classes.find(c => c.id === worksheet.class_id)?.name || 'Class'}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs border-dashed border-amber-400 text-amber-600">Unassigned</Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
