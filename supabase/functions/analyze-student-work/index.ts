@@ -7,16 +7,16 @@ const corsHeaders = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AI MODEL CONFIGURATION — DIRECT OPENAI API
+// AI MODEL CONFIGURATION — LOVABLE AI GATEWAY (GPT-5.2)
 // ═══════════════════════════════════════════════════════════════════════════════
 type AnalysisProvider = "gemini" | "gpt4o" | "gpt4o-mini";
 
 function getAnalysisModel(_provider: AnalysisProvider): string {
-  // All providers now route to OpenAI directly
-  return "gpt-4o";
+  // Upgraded: route all grading through GPT-5.2 via Lovable AI gateway
+  return "openai/gpt-5.2";
 }
 
-const LITE_MODEL = "gpt-4o-mini";
+const LITE_MODEL = "openai/gpt-5-mini";
 type AIModelTier = "lite" | "standard";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,8 +80,8 @@ async function callLovableAI(
   analysisProvider: AnalysisProvider = "gpt4o",
   options: AICallOptions = {},
 ) {
-  const openaiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!openaiKey) throw new Error("OPENAI_API_KEY is not configured");
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableKey) throw new Error("LOVABLE_API_KEY is not configured");
 
   const model = options.modelOverride || (modelTier === "standard" ? getAnalysisModel(analysisProvider) : LITE_MODEL);
   const maxTokens = modelTier === "standard" ? 4000 : 2000;
@@ -117,9 +117,9 @@ async function callLovableAI(
       const controller = new AbortController();
       const tid = setTimeout(() => controller.abort(), timeoutMs);
 
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
-        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
         body: requestBody,
         signal: controller.signal,
       });
@@ -129,14 +129,14 @@ async function callLovableAI(
         const errText = await response.text();
         console.error(`AI error (attempt ${attempt + 1}):`, response.status, errText);
         if (response.status === 429)
-          throw { status: 429, message: "OpenAI rate limit exceeded. Please try again shortly." };
-        if (response.status === 402) throw { status: 402, message: "OpenAI billing issue." };
+          throw { status: 429, message: "AI rate limit exceeded. Please try again shortly." };
+        if (response.status === 402) throw { status: 402, message: "AI credits exhausted. Please add funds in Settings → Workspace → Usage." };
         if (response.status === 401 || response.status === 403) throw new Error(`Auth error: ${response.status}`);
         if (response.status >= 500) {
           lastError = new Error(`Server error: ${response.status}`);
           continue;
         }
-        throw new Error(`OpenAI API error: ${response.status}`);
+        throw new Error(`AI API error: ${response.status}`);
       }
 
       const data = await response.json();
