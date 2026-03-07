@@ -128,7 +128,9 @@ export default function TeacherLibrary() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterYear, setFilterYear] = useState<string>('all');
+  const [filterClass, setFilterClass] = useState<string>('all');
   const [filterFavorites, setFilterFavorites] = useState(false);
+  const [classes, setClasses] = useState<{id: string; name: string}[]>([]);
 
   // Data
   const [worksheets, setWorksheets] = useState<SavedWorksheet[]>([]);
@@ -143,6 +145,9 @@ export default function TeacherLibrary() {
   useEffect(() => {
     if (user) {
       loadAllContent();
+      supabase.from('classes').select('id, name').eq('teacher_id', user.id).order('name').then(({ data }) => {
+        if (data) setClasses(data);
+      });
     }
   }, [user]);
 
