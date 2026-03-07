@@ -280,6 +280,12 @@ export default function TeacherLibrary() {
     return items.filter(item => new Date(item.created_at).getFullYear().toString() === filterYear);
   };
 
+  const filterByClass = <T extends { class_id?: string | null }>(items: T[]): T[] => {
+    if (filterClass === 'all') return items;
+    if (filterClass === 'unassigned') return items.filter(item => !item.class_id);
+    return items.filter(item => item.class_id === filterClass);
+  };
+
   const filterBySearch = <T extends { title?: string; topic_name?: string }>(items: T[]): T[] => {
     if (!searchQuery.trim()) return items;
     const query = searchQuery.toLowerCase();
@@ -291,16 +297,16 @@ export default function TeacherLibrary() {
 
   // Filtered content
   const filteredWorksheets = useMemo(() => {
-    return filterBySearch(filterByYear(worksheets));
-  }, [worksheets, searchQuery, filterYear]);
+    return filterBySearch(filterByClass(filterByYear(worksheets)));
+  }, [worksheets, searchQuery, filterYear, filterClass]);
 
   const filteredLessonPlans = useMemo(() => {
-    let filtered = filterByYear(lessonPlans);
+    let filtered = filterByClass(filterByYear(lessonPlans));
     if (filterFavorites) {
       filtered = filtered.filter(l => l.is_favorite);
     }
     return filterBySearch(filtered);
-  }, [lessonPlans, searchQuery, filterYear, filterFavorites]);
+  }, [lessonPlans, searchQuery, filterYear, filterClass, filterFavorites]);
 
   const filteredGradedWork = useMemo(() => {
     return filterBySearch(filterByYear(gradedWork));
