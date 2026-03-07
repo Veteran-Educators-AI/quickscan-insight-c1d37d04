@@ -129,14 +129,14 @@ async function callLovableAI(
         const errText = await response.text();
         console.error(`AI error (attempt ${attempt + 1}):`, response.status, errText);
         if (response.status === 429)
-          throw { status: 429, message: "OpenAI rate limit exceeded. Please try again shortly." };
-        if (response.status === 402) throw { status: 402, message: "OpenAI billing issue." };
+          throw { status: 429, message: "AI rate limit exceeded. Please try again shortly." };
+        if (response.status === 402) throw { status: 402, message: "AI credits exhausted. Please add funds in Settings → Workspace → Usage." };
         if (response.status === 401 || response.status === 403) throw new Error(`Auth error: ${response.status}`);
         if (response.status >= 500) {
           lastError = new Error(`Server error: ${response.status}`);
           continue;
         }
-        throw new Error(`OpenAI API error: ${response.status}`);
+        throw new Error(`AI API error: ${response.status}`);
       }
 
       const data = await response.json();
