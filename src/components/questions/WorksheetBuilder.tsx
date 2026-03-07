@@ -758,6 +758,10 @@ export function WorksheetBuilder({
   useEffect(() => {
     if (user) {
       fetchSavedWorksheets();
+      // Load classes for class selector
+      supabase.from('classes').select('id, name').eq('teacher_id', user.id).is('archived_at', null).order('name').then(({ data }) => {
+        if (data) setClasses(data);
+      });
     }
   }, [user]);
 
