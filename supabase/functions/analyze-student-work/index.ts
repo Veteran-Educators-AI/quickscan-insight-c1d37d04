@@ -678,7 +678,24 @@ const GRADING_SCHEMA = {
         },
         problem_identified: {
           type: "string",
-          description: "What problem is being answered (under 20 words). Use 'NOT_ACADEMIC' if not an assignment.",
+          description: "A DETAILED description of each specific problem/question being analyzed. List EACH question number and what it asks. Example: 'Q1: Calculate simple interest on $800 CD at 3% for 1 year. Q2: Compare CD vs savings account advantages. Q3: Calculate maturity value of $4,500 CD at 4% compounded annually for 3 years.' Use 'NOT_ACADEMIC' if not an assignment.",
+        },
+        problems_analyzed: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              question_number: { type: "string", description: "The question number (e.g., '1', '2a', '3')" },
+              question_text: { type: "string", description: "What the question asks, summarized" },
+              student_answer: { type: "string", description: "What the student wrote as their answer" },
+              correct_answer: { type: "string", description: "The correct answer" },
+              is_correct: { type: "boolean", description: "Whether this specific answer is correct" },
+              error_explanation: { type: "string", description: "If wrong, explain exactly what the student did wrong and what they should have done" },
+            },
+            required: ["question_number", "question_text", "student_answer", "correct_answer", "is_correct", "error_explanation"],
+            additionalProperties: false,
+          },
+          description: "Detailed per-question breakdown of what was analyzed, what the student answered, and whether it was correct",
         },
         nys_standard: { type: "string", description: "NYS standard code and description" },
         // ─── THE 11 BOOLEAN GRADING QUESTIONS (code computes grade from these) ───
@@ -741,7 +758,7 @@ const GRADING_SCHEMA = {
           items: { type: "string" },
           description: "Verified conceptual errors only, quoting student writing. Empty array if none.",
         },
-        grade_justification: { type: "string", description: "Evidence-based justification citing student writing" },
+        grade_justification: { type: "string", description: "DETAILED evidence-based justification. MUST include: (1) which specific questions were analyzed, (2) for each question state whether the answer was correct/incorrect and WHY, (3) what mathematical approach the student used, (4) specific errors found with exact quotes from student writing, (5) why the overall grade was earned. Minimum 100 words." },
         feedback: { type: "string", description: "Constructive feedback for the student" },
         confidence: {
           type: "string",
@@ -755,6 +772,7 @@ const GRADING_SCHEMA = {
         "student_work_present",
         "detected_subject",
         "problem_identified",
+        "problems_analyzed",
         "nys_standard",
         "is_answer_correct",
         "has_partial_answer",
@@ -995,7 +1013,8 @@ STEP 2 — DETECT: Is there student handwriting? Printed questions, worksheet ti
 STEP 3 — RELEVANCE CHECK:
   → Is the student's work relevant to the question? (Off-topic, gibberish, random text → is_relevant_to_question = false)
   → Did the student write a meaningful attempt? ("idk", "?", joke answers, single random word → has_meaningful_content = false)
-STEP 4 — IDENTIFY: What problem/question is being answered? What subject area?
+STEP 4 — IDENTIFY: What problem/question is being answered? What subject area? List EVERY question on the page with its number and what it asks. For each question, record: the question text, the student's answer, the correct answer, whether it's correct, and if wrong explain the specific error.
+STEP 4b — PROBLEMS_ANALYZED: Fill in the "problems_analyzed" array with a detailed per-question breakdown. This is CRITICAL — the teacher needs to see exactly which questions were graded and why.
 STEP 5 — ANSWER these 9 grading questions with true/false (EACH IS INDEPENDENT):
 
   Q1. is_answer_correct:            Is the FINAL ANSWER mathematically/factually correct?

@@ -31,6 +31,7 @@ import { SyncStatusIndicator } from '@/components/scan/SyncStatusIndicator';
 import { AILearningProgress } from '@/components/scan/AILearningProgress';
 import { AITrainingWizard } from '@/components/scan/AITrainingWizard';
 import { TeacherAnswerKeyDialog } from '@/components/scan/TeacherAnswerKeyDialog';
+import { CreateAnswerSheetDialog } from '@/components/scan/CreateAnswerSheetDialog';
 import { useAnalyzeStudentWork } from '@/hooks/useAnalyzeStudentWork';
 import { useBatchAnalysis } from '@/hooks/useBatchAnalysis';
 import { usePendingScans } from '@/hooks/usePendingScans';
@@ -205,6 +206,10 @@ export default function Scan() {
   
   // AI Training wizard
   const [showAITrainingWizard, setShowAITrainingWizard] = useState(false);
+  
+  // Create Answer Sheet dialog
+  const [showCreateAnswerSheet, setShowCreateAnswerSheet] = useState(false);
+  const [generatedAnswerSheet, setGeneratedAnswerSheet] = useState<any>(null);
   
   // Google Classroom import
   const [showGoogleClassroomImport, setShowGoogleClassroomImport] = useState(false);
@@ -1699,6 +1704,16 @@ export default function Scan() {
                           )}
                         </div>
                       )}
+                      {/* Create Answer Sheet - recommended first step */}
+                      <Button
+                        variant="outline"
+                        className="w-full border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                        onClick={() => setShowCreateAnswerSheet(true)}
+                        disabled={batch.isProcessing}
+                      >
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        Create Answer Sheet {generatedAnswerSheet ? '✓' : '(Recommended First)'}
+                      </Button>
                       
                       <div className="flex gap-3">
                         <Button 
@@ -2099,6 +2114,19 @@ export default function Scan() {
           batch.addImage(dataUrl);
           setPreprocessingImage(null);
           toast.success('Enhanced image added to batch');
+        }}
+      />
+
+      {/* Create Answer Sheet Dialog */}
+      <CreateAnswerSheetDialog
+        open={showCreateAnswerSheet}
+        onOpenChange={setShowCreateAnswerSheet}
+        onAnswerSheetCreated={(answerSheet, worksheetImage) => {
+          setGeneratedAnswerSheet(answerSheet);
+          setBatchAnswerGuideImage(worksheetImage);
+          toast.success('Answer sheet created! It will be used as the grading guide for all papers.', {
+            duration: 5000,
+          });
         }}
       />
     </>

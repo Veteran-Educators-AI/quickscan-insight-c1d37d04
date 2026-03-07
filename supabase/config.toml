@@ -126,3 +126,6 @@ verify_jwt = false
 
 [functions.ocr-student-work]
 verify_jwt = false
+
+[functions.generate-answer-sheet]
+verify_jwt = false
