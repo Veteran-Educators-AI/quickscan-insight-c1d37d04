@@ -468,6 +468,8 @@ export function WorksheetBuilder({
   const [showSavedWorksheets, setShowSavedWorksheets] = useState(false);
   const [isLoadingWorksheets, setIsLoadingWorksheets] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [saveClassId, setSaveClassId] = useState<string | null>(null);
+  const [classes, setClasses] = useState<{id: string; name: string}[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Image generation state
@@ -608,6 +610,7 @@ export function WorksheetBuilder({
         teacher_id: user.id,
         title: worksheetTitle,
         teacher_name: teacherName || null,
+        class_id: saveClassId || null,
         questions: JSON.parse(JSON.stringify(compiledQuestions)),
         topics: JSON.parse(JSON.stringify(selectedQuestions)),
         settings: JSON.parse(
@@ -756,6 +759,10 @@ export function WorksheetBuilder({
   useEffect(() => {
     if (user) {
       fetchSavedWorksheets();
+      // Load classes for class selector
+      supabase.from('classes').select('id, name').eq('teacher_id', user.id).is('archived_at', null).order('name').then(({ data }) => {
+        if (data) setClasses(data);
+      });
     }
   }, [user]);
 
@@ -4923,6 +4930,24 @@ export function WorksheetBuilder({
                   Print Scrap Paper (AI-Optimized Work Zones)
                 </Button>
               </div>
+
+              {/* Class selector for saving */}
+              {classes.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Save to Class (optional)</Label>
+                  <Select value={saveClassId || "none"} onValueChange={(v) => setSaveClassId(v === "none" ? null : v)}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="No class assigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No class assigned</SelectItem>
+                      {classes.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={saveWorksheet} disabled={isSaving}>

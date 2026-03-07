@@ -128,7 +128,9 @@ export default function TeacherLibrary() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterYear, setFilterYear] = useState<string>('all');
+  const [filterClass, setFilterClass] = useState<string>('all');
   const [filterFavorites, setFilterFavorites] = useState(false);
+  const [classes, setClasses] = useState<{id: string; name: string}[]>([]);
 
   // Data
   const [worksheets, setWorksheets] = useState<SavedWorksheet[]>([]);
@@ -143,6 +145,9 @@ export default function TeacherLibrary() {
   useEffect(() => {
     if (user) {
       loadAllContent();
+      supabase.from('classes').select('id, name').eq('teacher_id', user.id).order('name').then(({ data }) => {
+        if (data) setClasses(data);
+      });
     }
   }, [user]);
 
@@ -275,6 +280,12 @@ export default function TeacherLibrary() {
     return items.filter(item => new Date(item.created_at).getFullYear().toString() === filterYear);
   };
 
+  const filterByClass = <T extends { class_id?: string | null }>(items: T[]): T[] => {
+    if (filterClass === 'all') return items;
+    if (filterClass === 'unassigned') return items.filter(item => !item.class_id);
+    return items.filter(item => item.class_id === filterClass);
+  };
+
   const filterBySearch = <T extends { title?: string; topic_name?: string }>(items: T[]): T[] => {
     if (!searchQuery.trim()) return items;
     const query = searchQuery.toLowerCase();
@@ -286,16 +297,16 @@ export default function TeacherLibrary() {
 
   // Filtered content
   const filteredWorksheets = useMemo(() => {
-    return filterBySearch(filterByYear(worksheets));
-  }, [worksheets, searchQuery, filterYear]);
+    return filterBySearch(filterByClass(filterByYear(worksheets)));
+  }, [worksheets, searchQuery, filterYear, filterClass]);
 
   const filteredLessonPlans = useMemo(() => {
-    let filtered = filterByYear(lessonPlans);
+    let filtered = filterByClass(filterByYear(lessonPlans));
     if (filterFavorites) {
       filtered = filtered.filter(l => l.is_favorite);
     }
     return filterBySearch(filtered);
-  }, [lessonPlans, searchQuery, filterYear, filterFavorites]);
+  }, [lessonPlans, searchQuery, filterYear, filterClass, filterFavorites]);
 
   const filteredGradedWork = useMemo(() => {
     return filterBySearch(filterByYear(gradedWork));
@@ -559,6 +570,21 @@ export default function TeacherLibrary() {
               ))}
             </SelectContent>
           </Select>
+          {classes.length > 0 && (
+            <Select value={filterClass} onValueChange={setFilterClass}>
+              <SelectTrigger className="w-[200px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filter by class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {classes.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant={filterFavorites ? 'default' : 'outline'}
             onClick={() => setFilterFavorites(!filterFavorites)}
@@ -617,6 +643,11 @@ export default function TeacherLibrary() {
                               <Clock className="h-3 w-3" />
                               Created: {format(new Date(worksheet.created_at), 'MMM d, yyyy')}
                             </CardDescription>
+                            {worksheet.class_id && (
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {classes.find(c => c.id === worksheet.class_id)?.name || 'Class'}
+                              </Badge>
+                            )}
                             {worksheet.due_date && (
                               <CardDescription className="flex items-center gap-1 mt-0.5 text-orange-600 dark:text-orange-400">
                                 <Calendar className="h-3 w-3" />
