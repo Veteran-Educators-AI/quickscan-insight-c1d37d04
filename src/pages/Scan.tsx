@@ -2116,6 +2116,19 @@ export default function Scan() {
           toast.success('Enhanced image added to batch');
         }}
       />
+
+      {/* Create Answer Sheet Dialog */}
+      <CreateAnswerSheetDialog
+        open={showCreateAnswerSheet}
+        onOpenChange={setShowCreateAnswerSheet}
+        onAnswerSheetCreated={(answerSheet, worksheetImage) => {
+          setGeneratedAnswerSheet(answerSheet);
+          setBatchAnswerGuideImage(worksheetImage);
+          toast.success('Answer sheet created! It will be used as the grading guide for all papers.', {
+            duration: 5000,
+          });
+        }}
+      />
     </>
   );
 }
