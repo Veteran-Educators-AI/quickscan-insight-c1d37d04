@@ -448,7 +448,7 @@ export function WorksheetBuilder({
   const useAIImages = false;
   const useNanoBanana = false;
   const imageSize = 200;
-  const [includeAnswerKey, setIncludeAnswerKey] = useState(true); // Always generate answer keys for grading accuracy
+  const includeAnswerKey = true; // ALWAYS generate answer keys — required for grading accuracy
   const [marginSize, setMarginSize] = useState<"small" | "medium" | "large">("medium"); // Page margin size
   const [includeScrapPaper, setIncludeScrapPaper] = useState(false); // Bundle scrap paper with worksheet
   const [scrapPaperLayout, setScrapPaperLayout] = useState<"single" | "split-2" | "split-4">("split-2"); // Scrap paper layout
@@ -668,7 +668,7 @@ export function WorksheetBuilder({
     // AI images disabled - skip loading these settings
     // setUseAIImages(worksheet.settings.useAIImages ?? worksheet.settings.includeGeometry ?? false);
     // setImageSize(worksheet.settings.imageSize ?? 200);
-    setIncludeAnswerKey(worksheet.settings.includeAnswerKey ?? false);
+    // includeAnswerKey is always true — no need to load from settings
     setIsCompiled(true);
     setShowSavedWorksheets(false);
     toast({
@@ -825,7 +825,25 @@ export function WorksheetBuilder({
         }
 
         setCompiledQuestions(cleanedQuestions);
-        setCompiledAnswerKey(Array.isArray(data.answer_key) ? (data.answer_key as AnswerKeyItem[]) : []);
+        // Always build answer key — use AI-returned key or fall back to question answers
+        const aiKey = Array.isArray(data.answer_key) ? (data.answer_key as AnswerKeyItem[]) : [];
+        if (aiKey.length > 0) {
+          setCompiledAnswerKey(aiKey);
+        } else {
+          // Auto-build from question answers so answer key is never empty
+          const fallbackKey: AnswerKeyItem[] = cleanedQuestions
+            .filter((q: GeneratedQuestion) => q.answer)
+            .map((q: GeneratedQuestion) => ({
+              questionNumber: q.questionNumber,
+              final_answer: q.answer || '',
+              accepted_answers: [q.answer || ''],
+              solution_outline: q.answer ? q.answer.split('\n').filter((l: string) => l.trim()) : [],
+              common_errors: [],
+              grading_rubric: [],
+              confidence: 0.9,
+            }));
+          setCompiledAnswerKey(fallbackKey);
+        }
         setIsCompiled(true);
 
         // Track worksheet compilation
@@ -4375,27 +4393,15 @@ export function WorksheetBuilder({
                 </div>
                 {/* AI Images/Geometry Shapes - DISABLED */}
 
-                {/* Answer Key Option */}
+                {/* Answer Key — Always Included */}
                 <div className="flex items-center gap-2 pt-2 border-t border-dashed">
-                  <input
-                    type="checkbox"
-                    id="includeAnswerKey"
-                    checked={includeAnswerKey}
-                    onChange={(e) => setIncludeAnswerKey(e.target.checked)}
-                    className="rounded border-input"
-                  />
-                  <Label htmlFor="includeAnswerKey" className="text-sm cursor-pointer">
-                    <span className="flex flex-col">
-                      <span className="flex items-center gap-1">
-                        <ClipboardList className="h-3.5 w-3.5 text-green-600" />
-                        Generate Answer Key (recommended for grading accuracy)
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-5">
-                        Creates two answer sheets: a scannable filled worksheet in handwriting font + a clean teacher reference. 
-                        Scan the filled sheet first for maximum AI grading accuracy.
-                      </span>
-                    </span>
-                  </Label>
+                  <div className="flex items-center gap-1.5 rounded-md bg-green-50 dark:bg-green-950/30 px-3 py-2 border border-green-200 dark:border-green-800">
+                    <Check className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800 dark:text-green-300">Answer Key Always Included</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Handwritten-style answer sheets are auto-generated & saved with every worksheet for grading accuracy.
+                  </span>
                 </div>
 
                 {/* Page Margin Size */}
