@@ -668,7 +668,7 @@ export function WorksheetBuilder({
     // AI images disabled - skip loading these settings
     // setUseAIImages(worksheet.settings.useAIImages ?? worksheet.settings.includeGeometry ?? false);
     // setImageSize(worksheet.settings.imageSize ?? 200);
-    setIncludeAnswerKey(worksheet.settings.includeAnswerKey ?? false);
+    // includeAnswerKey is always true — no need to load from settings
     setIsCompiled(true);
     setShowSavedWorksheets(false);
     toast({
