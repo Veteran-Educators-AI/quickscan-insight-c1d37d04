@@ -835,10 +835,12 @@ export function WorksheetBuilder({
             .filter((q: GeneratedQuestion) => q.answer)
             .map((q: GeneratedQuestion) => ({
               questionNumber: q.questionNumber,
-              topic: q.topic,
-              standard: q.standard,
-              solution: q.answer || '',
-              keySteps: q.answer ? q.answer.split('\n').filter((l: string) => l.trim()) : [],
+              final_answer: q.answer || '',
+              accepted_answers: [q.answer || ''],
+              solution_outline: q.answer ? q.answer.split('\n').filter((l: string) => l.trim()) : [],
+              common_errors: [],
+              grading_rubric: [],
+              confidence: 0.9,
             }));
           setCompiledAnswerKey(fallbackKey);
         }
