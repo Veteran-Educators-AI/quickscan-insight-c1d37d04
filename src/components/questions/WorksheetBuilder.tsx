@@ -448,7 +448,7 @@ export function WorksheetBuilder({
   const useAIImages = false;
   const useNanoBanana = false;
   const imageSize = 200;
-  const [includeAnswerKey, setIncludeAnswerKey] = useState(true); // Always generate answer keys for grading accuracy
+  const includeAnswerKey = true; // ALWAYS generate answer keys — required for grading accuracy
   const [marginSize, setMarginSize] = useState<"small" | "medium" | "large">("medium"); // Page margin size
   const [includeScrapPaper, setIncludeScrapPaper] = useState(false); // Bundle scrap paper with worksheet
   const [scrapPaperLayout, setScrapPaperLayout] = useState<"single" | "split-2" | "split-4">("split-2"); // Scrap paper layout
