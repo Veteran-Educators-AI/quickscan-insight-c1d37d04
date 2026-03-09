@@ -825,7 +825,23 @@ export function WorksheetBuilder({
         }
 
         setCompiledQuestions(cleanedQuestions);
-        setCompiledAnswerKey(Array.isArray(data.answer_key) ? (data.answer_key as AnswerKeyItem[]) : []);
+        // Always build answer key — use AI-returned key or fall back to question answers
+        const aiKey = Array.isArray(data.answer_key) ? (data.answer_key as AnswerKeyItem[]) : [];
+        if (aiKey.length > 0) {
+          setCompiledAnswerKey(aiKey);
+        } else {
+          // Auto-build from question answers so answer key is never empty
+          const fallbackKey: AnswerKeyItem[] = cleanedQuestions
+            .filter((q: GeneratedQuestion) => q.answer)
+            .map((q: GeneratedQuestion) => ({
+              questionNumber: q.questionNumber,
+              topic: q.topic,
+              standard: q.standard,
+              solution: q.answer || '',
+              keySteps: q.answer ? q.answer.split('\n').filter((l: string) => l.trim()) : [],
+            }));
+          setCompiledAnswerKey(fallbackKey);
+        }
         setIsCompiled(true);
 
         // Track worksheet compilation
