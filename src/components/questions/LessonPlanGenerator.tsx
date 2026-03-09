@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -1444,7 +1444,7 @@ export function LessonPlanGenerator({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
+      <DialogContent className="max-w-4xl h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Presentation className="h-5 w-5" />
@@ -1455,7 +1455,7 @@ export function LessonPlanGenerator({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2">
           <div className="space-y-3">
             {!lessonPlan ? (
               <div className="space-y-3">
@@ -1922,7 +1922,7 @@ export function LessonPlanGenerator({
             </div>
           )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Student Handout Customization Dialog */}
         {lessonPlan && (
