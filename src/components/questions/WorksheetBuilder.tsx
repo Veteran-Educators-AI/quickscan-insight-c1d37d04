@@ -4375,27 +4375,15 @@ export function WorksheetBuilder({
                 </div>
                 {/* AI Images/Geometry Shapes - DISABLED */}
 
-                {/* Answer Key Option */}
+                {/* Answer Key — Always Included */}
                 <div className="flex items-center gap-2 pt-2 border-t border-dashed">
-                  <input
-                    type="checkbox"
-                    id="includeAnswerKey"
-                    checked={includeAnswerKey}
-                    onChange={(e) => setIncludeAnswerKey(e.target.checked)}
-                    className="rounded border-input"
-                  />
-                  <Label htmlFor="includeAnswerKey" className="text-sm cursor-pointer">
-                    <span className="flex flex-col">
-                      <span className="flex items-center gap-1">
-                        <ClipboardList className="h-3.5 w-3.5 text-green-600" />
-                        Generate Answer Key (recommended for grading accuracy)
-                      </span>
-                      <span className="text-xs text-muted-foreground ml-5">
-                        Creates two answer sheets: a scannable filled worksheet in handwriting font + a clean teacher reference. 
-                        Scan the filled sheet first for maximum AI grading accuracy.
-                      </span>
-                    </span>
-                  </Label>
+                  <div className="flex items-center gap-1.5 rounded-md bg-green-50 dark:bg-green-950/30 px-3 py-2 border border-green-200 dark:border-green-800">
+                    <Check className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800 dark:text-green-300">Answer Key Always Included</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Handwritten-style answer sheets are auto-generated & saved with every worksheet for grading accuracy.
+                  </span>
                 </div>
 
                 {/* Page Margin Size */}
