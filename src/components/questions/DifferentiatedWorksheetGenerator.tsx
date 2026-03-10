@@ -1302,7 +1302,7 @@ const toggleStudent = (studentId: string) => {
           new Paragraph({
             children: [
               new TextRun({
-                text: `Level ${level} — ${getLevelDescription(level)}${numForms > 1 ? ` | Form ${assignedForm}` : ''}`,
+                text: `Level ${level} — ${getLevelDescription(level as AdvancementLevel)}${numForms > 1 ? ` | Form ${assignedForm}` : ''}`,
                 bold: true,
                 size: 26,
                 font: 'Georgia',
