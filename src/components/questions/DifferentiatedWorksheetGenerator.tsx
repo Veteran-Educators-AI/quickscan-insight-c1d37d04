@@ -1242,6 +1242,177 @@ const toggleStudent = (studentId: string) => {
         processedStudents++;
         setGenerationProgress((processedStudents / totalStudents) * 100);
       }
+      // === ANSWER KEY SECTION (handwriting font style) ===
+      // Collect all unique form/level combos and their questions
+      const answeredForms = new Set<string>();
+      const answerKeyChildren: any[] = [];
+
+      // Header
+      answerKeyChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: '🔒 SOLUTIONS & ANSWER KEY', bold: true, size: 36, font: 'Georgia' }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+          shading: { fill: 'FEE2E2' },
+          border: {
+            bottom: { style: BorderStyle.SINGLE, size: 6, color: 'DC2626' },
+          },
+        })
+      );
+      answerKeyChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Teacher Reference Copy — Do Not Distribute to Students', italics: true, size: 20, color: 'DC2626', font: 'Georgia' }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 50 },
+        })
+      );
+      answerKeyChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${topicsLabel} | Generated: ${new Date().toLocaleDateString()}`, size: 16, color: '6B7280' }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 300 },
+        })
+      );
+
+      // Iterate each form/level combo
+      for (const student of studentsToGenerate) {
+        const level = student.recommendedLevel || 'C';
+        const assignedForm = studentFormAssignments[student.id] || '1';
+        const cacheKey = `${assignedForm}-${level}`;
+
+        if (answeredForms.has(cacheKey)) continue;
+        answeredForms.add(cacheKey);
+
+        const cachedQs = formQuestionCache[cacheKey];
+        if (!cachedQs) continue;
+
+        const allQs = [...(cachedQs.warmUp || []), ...(cachedQs.main || [])];
+
+        // Level/Form sub-header
+        answerKeyChildren.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Level ${level} — ${getLevelDescription(level)}${numForms > 1 ? ` | Form ${assignedForm}` : ''}`,
+                bold: true,
+                size: 26,
+                font: 'Georgia',
+              }),
+            ],
+            shading: { fill: 'F3F4F6' },
+            spacing: { before: 300, after: 150 },
+            border: {
+              left: { style: BorderStyle.SINGLE, size: 12, color: '3B82F6' },
+            },
+          })
+        );
+
+        for (let qi = 0; qi < allQs.length; qi++) {
+          const q = allQs[qi];
+          const isWarmUp = qi < (cachedQs.warmUp?.length || 0);
+          const label = isWarmUp ? `Warm-Up ${qi + 1}` : `Q${qi - (cachedQs.warmUp?.length || 0) + 1}`;
+
+          // Question number + topic
+          answerKeyChildren.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `${label}`, bold: true, size: 22, font: 'Georgia' }),
+                new TextRun({ text: `  (${q.topic || ''} • ${q.standard || ''})`, italics: true, size: 16, color: '6B7280' }),
+              ],
+              spacing: { before: 200, after: 50 },
+            })
+          );
+
+          // Parse answer into steps
+          const answerText = q.answer || '';
+          const lines = answerText.split('\n').filter((l: string) => l.trim());
+          let steps: string[] = [];
+          let finalAnswer = '';
+          for (const line of lines) {
+            if (line.includes('Final Answer') || line.includes('**Final Answer')) {
+              finalAnswer = line.replace(/\*\*/g, '').replace('Final Answer:', '').trim();
+            } else {
+              steps.push(line.replace(/\*\*/g, ''));
+            }
+          }
+          if (!finalAnswer && steps.length > 0) {
+            finalAnswer = steps.pop() || '';
+          }
+
+          // Solution steps in handwriting-style font (Caveat / cursive)
+          for (const step of steps) {
+            answerKeyChildren.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: step, size: 24, font: 'Segoe Script', color: '1E3A5F' }),
+                ],
+                spacing: { before: 30, after: 30 },
+                indent: { left: convertInchesToTwip(0.5) },
+                border: {
+                  bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E1' },
+                },
+              })
+            );
+          }
+
+          // Final answer highlight
+          if (finalAnswer) {
+            answerKeyChildren.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: '✅ ', size: 24 }),
+                  new TextRun({ text: finalAnswer, bold: true, size: 26, font: 'Segoe Script', color: '065F46' }),
+                ],
+                shading: { fill: 'D1FAE5' },
+                spacing: { before: 80, after: 150 },
+                indent: { left: convertInchesToTwip(0.5) },
+                border: {
+                  top: { style: BorderStyle.SINGLE, size: 4, color: '10B981' },
+                },
+              })
+            );
+          }
+        }
+      }
+
+      // Footer
+      answerKeyChildren.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: 'Answer Key — For Teacher Use Only | Generated by NYCLogic Ai', size: 14, color: '9CA3AF' }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 400 },
+          border: {
+            top: { style: BorderStyle.SINGLE, size: 2, color: 'E5E7EB' },
+          },
+        })
+      );
+
+      sections.push({
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(0.75),
+              right: convertInchesToTwip(0.75),
+              bottom: convertInchesToTwip(0.75),
+              left: convertInchesToTwip(0.75),
+            },
+            size: {
+              orientation: PageOrientation.PORTRAIT,
+              width: convertInchesToTwip(8.5),
+              height: convertInchesToTwip(11),
+            },
+          },
+        },
+        children: answerKeyChildren,
+      });
 
       // Create the document
       const doc = new Document({
