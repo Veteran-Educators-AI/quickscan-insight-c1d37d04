@@ -1270,26 +1270,29 @@ const toggleStudent = (studentId: string) => {
           spacing: { after: 50 },
         })
       );
+      const akTopicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Math Practice';
       answerKeyChildren.push(
         new Paragraph({
           children: [
-            new TextRun({ text: `${topicsLabel} | Generated: ${new Date().toLocaleDateString()}`, size: 16, color: '6B7280' }),
+            new TextRun({ text: `${akTopicsLabel} | Generated: ${new Date().toLocaleDateString()}`, size: 16, color: '6B7280' }),
           ],
           alignment: AlignmentType.CENTER,
           spacing: { after: 300 },
         })
       );
 
-      // Iterate each form/level combo
-      for (const student of studentsToGenerate) {
+      // Iterate each form/level combo using previewData
+      for (const student of previewData.students) {
+        const studentIdx = previewData.students.filter(s => s.recommendedLevel === student.recommendedLevel).indexOf(student);
+        const formIndex = studentIdx % numForms;
+        const assignedForm = FORM_LETTERS[formIndex] || 'A';
         const level = student.recommendedLevel || 'C';
-        const assignedForm = studentFormAssignments[student.id] || '1';
         const cacheKey = `${assignedForm}-${level}`;
 
         if (answeredForms.has(cacheKey)) continue;
         answeredForms.add(cacheKey);
 
-        const cachedQs = formQuestionCache[cacheKey];
+        const cachedQs = previewData.questions[cacheKey];
         if (!cachedQs) continue;
 
         const allQs = [...(cachedQs.warmUp || []), ...(cachedQs.main || [])];
