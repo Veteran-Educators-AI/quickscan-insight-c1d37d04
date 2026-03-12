@@ -918,9 +918,10 @@ export function sanitizeForPDF(text: string): string {
   result = result.replace(/\^\s*\^/g, '^');
   result = result.replace(/_\s*_/g, '_');
   
-  // Final cleanup: Remove any remaining problematic characters
-  // Keep only ASCII printable characters (0x20-0x7E)
-  result = result.replace(/[^\x20-\x7E]/g, '');
+  // Final cleanup: Remove problematic characters but KEEP Windows-1252 compatible ones
+  // Windows-1252 includes: ¹²³ (superscripts), °±×÷· (math), ½¼¾ (fractions), and Latin accented chars
+  // Range: ASCII printable (0x20-0x7E) + Windows-1252 extended (0xA0-0xFF)
+  result = result.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '');
   
   // Clean up multiple spaces and trim
   result = result.replace(/\s+/g, ' ').trim();
