@@ -781,16 +781,17 @@ export function sanitizeForPDF(text: string): string {
     [/τ/g, 'tau'],
     
     // Math operators and relations
+    // KEEP Windows-1252 supported: ± (U+00B1), × (U+00D7), ÷ (U+00F7), · (U+00B7), ° (U+00B0)
     [/≤/g, '<='],
     [/≥/g, '>='],
     [/≠/g, '!='],
     [/≈/g, '~='],
     [/≡/g, '==='],
-    [/±/g, '+/-'],
+    // ± intentionally NOT converted - renders in Helvetica
     [/∓/g, '-/+'],
-    [/×/g, 'x'],
-    [/÷/g, '/'],
-    [/·/g, '*'],
+    // × intentionally NOT converted - renders in Helvetica
+    // ÷ intentionally NOT converted - renders in Helvetica
+    // · intentionally NOT converted - renders in Helvetica
     [/√\(([^)]+)\)/g, 'sqrt($1)'], // √(expression) -> sqrt(expression)
     [/√(\d+)/g, 'sqrt($1)'], // √7 -> sqrt(7)
     [/√/g, 'sqrt'], // Remaining standalone √
