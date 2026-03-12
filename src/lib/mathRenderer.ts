@@ -837,11 +837,10 @@ export function sanitizeForPDF(text: string): string {
     [/′/g, "'"],
     [/″/g, "''"],
     
-    // Superscript numbers - convert to ^n format
+    // Superscript numbers - KEEP ¹²³ (Windows-1252 supported), convert others to ^n
+    // ¹ (U+00B9), ² (U+00B2), ³ (U+00B3) are in Latin-1 Supplement and render in Helvetica
     [/⁰/g, '^0'],
-    [/¹/g, '^1'],
-    [/²/g, '^2'],
-    [/³/g, '^3'],
+    // ¹, ², ³ intentionally NOT converted - they render correctly in jsPDF Helvetica
     [/⁴/g, '^4'],
     [/⁵/g, '^5'],
     [/⁶/g, '^6'],
