@@ -697,16 +697,16 @@ export function sanitizeForPDF(text: string): string {
     [/πÂ/g, 'pi'],
     
     // Fix corrupted degree, superscripts, fractions with Â prefix
-    [/Â°/g, ' degrees'],
-    [/°Â/g, ' degrees'],
-    [/Â²/g, '^2'],
-    [/Â³/g, '^3'],
-    [/Â¹/g, '^1'],
-    [/Â½/g, '1/2'],
-    [/Â¼/g, '1/4'],
-    [/Â¾/g, '3/4'],
-    [/Â±/g, '+/-'],
-    [/Â·/g, '*'],
+    [/Â°/g, '°'],
+    [/°Â/g, '°'],
+    [/Â²/g, '²'],
+    [/Â³/g, '³'],
+    [/Â¹/g, '¹'],
+    [/Â½/g, '½'],
+    [/Â¼/g, '¼'],
+    [/Â¾/g, '¾'],
+    [/Â±/g, '±'],
+    [/Â·/g, '·'],
     
     // Greek letters mojibake - convert to text
     [/Ï€/g, 'pi'],
