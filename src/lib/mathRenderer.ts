@@ -911,9 +911,8 @@ export function sanitizeForPDF(text: string): string {
   result = result.replace(/(\d)(pi|theta|alpha|beta|gamma|delta|sigma|omega|phi|lambda|mu|rho|tau)(?=\s|$|[^a-zA-Z])/gi, '$1 $2');
   result = result.replace(/(pi|theta|alpha|beta|gamma|delta|sigma|omega|phi|lambda|mu|rho|tau)([a-zA-Z])/gi, '$1 $2');
   
-  // Fix spacing around "degrees" and other units
-  result = result.replace(/(\d)\s*degrees/gi, '$1 degrees');
-  result = result.replace(/degrees([a-zA-Z])/gi, 'degrees $1');
+  // Fix spacing around ° symbol
+  result = result.replace(/(\d)°([a-zA-Z])/g, '$1° $2');
   
   // Clean consecutive operators and fix spacing
   result = result.replace(/\^\s*\^/g, '^');
