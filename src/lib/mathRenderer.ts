@@ -810,7 +810,7 @@ export function sanitizeForPDF(text: string): string {
     [/⊥/g, 'perp'],
     [/∥/g, '||'],
     [/≅/g, '~='],
-    [/°/g, ' degrees'],
+    // ° intentionally NOT converted - renders in Helvetica
     
     // Set theory
     [/∈/g, 'in'],
