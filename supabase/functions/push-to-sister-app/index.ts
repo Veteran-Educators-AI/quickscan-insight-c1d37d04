@@ -361,50 +361,9 @@ serve(async (req) => {
       }
     }
 
-    // --- Build and send Scholar payload ---
-    const payload = buildScholarPayload(requestData);
-    let result = await postToScholar(payload);
-    console.log("Scholar result:", JSON.stringify(result).substring(0, 500));
-
-    // --- Retry logic for 404 "Student not found" on assignment_push ---
-    if (!result.success && requestData.type === "assignment_push" && result.error?.includes("Student not found")) {
-      console.log("Student not found in Scholar, syncing student first...");
-      
-      // Sync the student to Scholar first
-      const syncPayload = buildScholarPayload({
-        ...requestData,
-        type: "student_created",
-      });
-      const syncResult = await postToScholar(syncPayload);
-      console.log("Student sync result:", JSON.stringify(syncResult).substring(0, 500));
-
-      if (syncResult.success) {
-        // Prefer linked_user_id, fallback to external_student_id when account linking isn't complete yet
-        const linkedUserId = syncResult.data?.linked_user_id || syncResult.data?.user_id;
-        const externalStudentId = syncResult.data?.external_student_id;
-        const fallbackStudentId = linkedUserId || externalStudentId;
-
-        if (fallbackStudentId) {
-          console.log(
-            `Using ${linkedUserId ? "linked_user_id" : "external_student_id"} from Scholar:`,
-            fallbackStudentId,
-          );
-          const retryPayload = buildScholarPayload(requestData);
-          (retryPayload as any).data.student_id = fallbackStudentId;
-          result = await postToScholar(retryPayload);
-        } else {
-          // Retry with original student_id
-          console.log("No linked_user_id or external_student_id returned, retrying with original ID...");
-          result = await postToScholar(payload);
-        }
-        console.log("Retry result:", JSON.stringify(result).substring(0, 500));
-      } else {
-        console.error("Student sync failed, cannot retry assignment push:", syncResult.error);
-      }
-    }
-
-    // For live sessions, process each participant individually
+    // --- For live sessions, process each participant individually (skip initial empty call) ---
     if (requestData.type === "live_session_completed" && requestData.participant_results) {
+      const results: any[] = [];
       for (const participant of requestData.participant_results) {
         if (participant.participated) {
           const participantPayload = buildScholarPayload({
@@ -414,10 +373,22 @@ serve(async (req) => {
             grade: participant.accuracy,
             xp_reward: participant.credit_awarded,
           });
-          await postToScholar(participantPayload);
+          const pResult = await postToScholar(participantPayload);
+          results.push({ student: participant.student_name, accuracy: participant.accuracy, success: pResult.success });
+          console.log(`Synced ${participant.student_name}: accuracy=${participant.accuracy}%, success=${pResult.success}`);
         }
       }
+
+      return new Response(
+        JSON.stringify({ success: true, participants_synced: results.length, results }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    // --- Build and send Scholar payload (non-live-session types) ---
+    const payload = buildScholarPayload(requestData);
+    let result = await postToScholar(payload);
+    console.log("Scholar result:", JSON.stringify(result).substring(0, 500));
 
     // Send email for relevant types
     if (requestData.type === "assignment_push" || requestData.type === "grade") {
