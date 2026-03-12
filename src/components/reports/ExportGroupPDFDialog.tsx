@@ -336,14 +336,7 @@ export function ExportGroupPDFDialog({
             const maxTextWidth = contentWidth * 0.9;
             const textLines = pdf.splitTextToSize(sanitizedPrompt, maxTextWidth);
             textLines.forEach((line: string) => {
-              // Additional cleanup for any remaining encoding issues
-              const cleanLine = line
-                .replace(/Â\s*"H/gi, 'π')
-                .replace(/Â\s*\[\s*\]/gi, 'π')
-                .replace(/Â(?=\s|$)/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-              pdf.text(cleanLine, marginLeft + 8, yPosition);
+              pdf.text(line, marginLeft + 8, yPosition);
               yPosition += 5;
             });
             pdf.setFontSize(11); // Reset

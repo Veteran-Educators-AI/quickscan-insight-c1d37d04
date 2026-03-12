@@ -697,16 +697,16 @@ export function sanitizeForPDF(text: string): string {
     [/πÂ/g, 'pi'],
     
     // Fix corrupted degree, superscripts, fractions with Â prefix
-    [/Â°/g, ' degrees'],
-    [/°Â/g, ' degrees'],
-    [/Â²/g, '^2'],
-    [/Â³/g, '^3'],
-    [/Â¹/g, '^1'],
-    [/Â½/g, '1/2'],
-    [/Â¼/g, '1/4'],
-    [/Â¾/g, '3/4'],
-    [/Â±/g, '+/-'],
-    [/Â·/g, '*'],
+    [/Â°/g, '°'],
+    [/°Â/g, '°'],
+    [/Â²/g, '²'],
+    [/Â³/g, '³'],
+    [/Â¹/g, '¹'],
+    [/Â½/g, '½'],
+    [/Â¼/g, '¼'],
+    [/Â¾/g, '¾'],
+    [/Â±/g, '±'],
+    [/Â·/g, '·'],
     
     // Greek letters mojibake - convert to text
     [/Ï€/g, 'pi'],
@@ -781,16 +781,17 @@ export function sanitizeForPDF(text: string): string {
     [/τ/g, 'tau'],
     
     // Math operators and relations
+    // KEEP Windows-1252 supported: ± (U+00B1), × (U+00D7), ÷ (U+00F7), · (U+00B7), ° (U+00B0)
     [/≤/g, '<='],
     [/≥/g, '>='],
     [/≠/g, '!='],
     [/≈/g, '~='],
     [/≡/g, '==='],
-    [/±/g, '+/-'],
+    // ± intentionally NOT converted - renders in Helvetica
     [/∓/g, '-/+'],
-    [/×/g, 'x'],
-    [/÷/g, '/'],
-    [/·/g, '*'],
+    // × intentionally NOT converted - renders in Helvetica
+    // ÷ intentionally NOT converted - renders in Helvetica
+    // · intentionally NOT converted - renders in Helvetica
     [/√\(([^)]+)\)/g, 'sqrt($1)'], // √(expression) -> sqrt(expression)
     [/√(\d+)/g, 'sqrt($1)'], // √7 -> sqrt(7)
     [/√/g, 'sqrt'], // Remaining standalone √
@@ -809,7 +810,7 @@ export function sanitizeForPDF(text: string): string {
     [/⊥/g, 'perp'],
     [/∥/g, '||'],
     [/≅/g, '~='],
-    [/°/g, ' degrees'],
+    // ° intentionally NOT converted - renders in Helvetica
     
     // Set theory
     [/∈/g, 'in'],
@@ -837,11 +838,10 @@ export function sanitizeForPDF(text: string): string {
     [/′/g, "'"],
     [/″/g, "''"],
     
-    // Superscript numbers - convert to ^n format
+    // Superscript numbers - KEEP ¹²³ (Windows-1252 supported), convert others to ^n
+    // ¹ (U+00B9), ² (U+00B2), ³ (U+00B3) are in Latin-1 Supplement and render in Helvetica
     [/⁰/g, '^0'],
-    [/¹/g, '^1'],
-    [/²/g, '^2'],
-    [/³/g, '^3'],
+    // ¹, ², ³ intentionally NOT converted - they render correctly in jsPDF Helvetica
     [/⁴/g, '^4'],
     [/⁵/g, '^5'],
     [/⁶/g, '^6'],
@@ -886,12 +886,10 @@ export function sanitizeForPDF(text: string): string {
     // Remove any remaining orphan subscripts from words
     [/([a-zA-Z]{2,})[ₐₑᵢₙₓᵧ]/g, '$1'],
     
-    // Unicode fractions - convert to a/b format
-    [/½/g, '1/2'],
+    // Unicode fractions - KEEP Windows-1252 supported: ½ (U+00BD), ¼ (U+00BC), ¾ (U+00BE)
+    // ½, ¼, ¾ intentionally NOT converted - they render in Helvetica
     [/⅓/g, '1/3'],
     [/⅔/g, '2/3'],
-    [/¼/g, '1/4'],
-    [/¾/g, '3/4'],
     [/⅕/g, '1/5'],
     [/⅖/g, '2/5'],
     [/⅗/g, '3/5'],
@@ -913,17 +911,17 @@ export function sanitizeForPDF(text: string): string {
   result = result.replace(/(\d)(pi|theta|alpha|beta|gamma|delta|sigma|omega|phi|lambda|mu|rho|tau)(?=\s|$|[^a-zA-Z])/gi, '$1 $2');
   result = result.replace(/(pi|theta|alpha|beta|gamma|delta|sigma|omega|phi|lambda|mu|rho|tau)([a-zA-Z])/gi, '$1 $2');
   
-  // Fix spacing around "degrees" and other units
-  result = result.replace(/(\d)\s*degrees/gi, '$1 degrees');
-  result = result.replace(/degrees([a-zA-Z])/gi, 'degrees $1');
+  // Fix spacing around ° symbol
+  result = result.replace(/(\d)°([a-zA-Z])/g, '$1° $2');
   
   // Clean consecutive operators and fix spacing
   result = result.replace(/\^\s*\^/g, '^');
   result = result.replace(/_\s*_/g, '_');
   
-  // Final cleanup: Remove any remaining problematic characters
-  // Keep only ASCII printable characters (0x20-0x7E)
-  result = result.replace(/[^\x20-\x7E]/g, '');
+  // Final cleanup: Remove problematic characters but KEEP Windows-1252 compatible ones
+  // Windows-1252 includes: ¹²³ (superscripts), °±×÷· (math), ½¼¾ (fractions), and Latin accented chars
+  // Range: ASCII printable (0x20-0x7E) + Windows-1252 extended (0xA0-0xFF)
+  result = result.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '');
   
   // Clean up multiple spaces and trim
   result = result.replace(/\s+/g, ' ').trim();
