@@ -31,7 +31,7 @@ export function AnswerKeySheet({
   worksheetTitle,
   teacherName,
   format,
-  marginIn = 0.75,
+  marginIn = 0.5,
 }: AnswerKeySheetProps) {
   const questionsWithAnswers = questions.filter(q => q.answer);
   
