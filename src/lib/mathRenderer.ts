@@ -886,12 +886,10 @@ export function sanitizeForPDF(text: string): string {
     // Remove any remaining orphan subscripts from words
     [/([a-zA-Z]{2,})[ₐₑᵢₙₓᵧ]/g, '$1'],
     
-    // Unicode fractions - convert to a/b format
-    [/½/g, '1/2'],
+    // Unicode fractions - KEEP Windows-1252 supported: ½ (U+00BD), ¼ (U+00BC), ¾ (U+00BE)
+    // ½, ¼, ¾ intentionally NOT converted - they render in Helvetica
     [/⅓/g, '1/3'],
     [/⅔/g, '2/3'],
-    [/¼/g, '1/4'],
-    [/¾/g, '3/4'],
     [/⅕/g, '1/5'],
     [/⅖/g, '2/5'],
     [/⅗/g, '3/5'],
