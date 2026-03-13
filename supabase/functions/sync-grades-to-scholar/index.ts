@@ -16,8 +16,9 @@
  * 4. Award XP/coins for improvement on weak topics
  * 
  * REQUIRED SECRETS:
- * - SISTER_APP_API_KEY: The API key for authenticating with Scholar
- * - NYCOLOGIC_API_URL: The endpoint URL of Scholar app
+ * - NYCOLOGIC_API_URL: Endpoint URL of Scholar app receiver
+ * - SCHOLAR_SUPABASE_SERVICE_ROLE_KEY: Preferred auth for shared-database sync (no API key management)
+ * - SISTER_APP_API_KEY: Optional legacy fallback
  * 
  * ============================================================================
  */
