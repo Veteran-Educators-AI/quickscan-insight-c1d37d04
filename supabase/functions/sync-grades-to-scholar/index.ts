@@ -491,19 +491,10 @@ serve(async (req) => {
     if (isOwnReceiver) {
       // Use batch sync for our own receiver
       try {
-        const response = await fetch(sisterAppEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': sisterAppApiKey,
-          },
-          body: JSON.stringify(batchPayload),
-        });
-
-        const responseText = await response.text();
+        const { response, responseText, usedAuthMode } = await postWithAuthFallback(sisterAppEndpoint, batchPayload);
         
         if (!response.ok) {
-          console.error('Batch sync failed:', response.status, responseText);
+          console.error('Batch sync failed:', response.status, responseText, `auth_mode=${usedAuthMode}`);
 
           try {
             await supabase.from('sister_app_sync_log').insert({
