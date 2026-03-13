@@ -672,18 +672,10 @@ serve(async (req) => {
       
       const batchPromise = Promise.allSettled(
         batch.map(async ({ profile, payload }) => {
-          const response = await fetch(syncStudentEndpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': sisterAppApiKey,
-            },
-            body: JSON.stringify(payload),
-          });
+          const { response, responseText } = await postWithAuthFallback(syncStudentEndpoint, payload);
 
           if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`${profile.student_name}: ${response.status} - ${errorText.slice(0, 100)}`);
+            throw new Error(`${profile.student_name}: ${response.status} - ${responseText.slice(0, 100)}`);
           }
           return profile.student_name;
         })
