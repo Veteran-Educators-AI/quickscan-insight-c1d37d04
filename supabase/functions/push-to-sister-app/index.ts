@@ -7,11 +7,11 @@
  * Scholar requires an x-api-key header validated against its integration_tokens table.
  *
  * REQUIRED SECRETS:
- *   SCHOLAR_SUPABASE_URL              – Scholar project URL
- *   SCHOLAR_SUPABASE_ANON_KEY         – Scholar anon/publishable key
- *   SISTER_APP_API_KEY                – API key registered in Scholar's integration_tokens
- *   BREVO_API_KEY                     – (optional) for email notifications
- * ============================================================================
+ *   SCHOLAR_SUPABASE_URL               – Scholar project URL
+ *   SCHOLAR_SUPABASE_SERVICE_ROLE_KEY  – Preferred for shared-database auth (no API key management)
+ *   SCHOLAR_SUPABASE_ANON_KEY          – Optional legacy fallback
+ *   SISTER_APP_API_KEY                 – Optional legacy fallback when remote requires token auth
+ *   BREVO_API_KEY                      – (optional) for email notifications
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
