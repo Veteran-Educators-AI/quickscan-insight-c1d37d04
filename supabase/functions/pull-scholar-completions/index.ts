@@ -5,6 +5,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const decodeBase64Url = (value: string): string => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  return atob(padded);
+};
+
+const deriveSupabaseUrlFromServiceKey = (serviceRoleKey: string): string | null => {
+  try {
+    const parts = serviceRoleKey.split('.');
+    if (parts.length < 2) return null;
+
+    const payload = JSON.parse(decodeBase64Url(parts[1]));
+    const projectRef = payload?.ref;
+
+    if (typeof projectRef !== 'string' || !projectRef.trim()) return null;
+    return `https://${projectRef}.supabase.co`;
+  } catch (error) {
+    console.error('Failed to derive Scholar URL from service key:', error);
+    return null;
+  }
+};
+
 /**
  * Pull Scholar completions — queries the Scholar (sister) database directly
  * and imports any new grades by matching students on first_name + last_name.
