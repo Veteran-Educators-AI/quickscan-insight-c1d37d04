@@ -204,6 +204,7 @@ serve(async (req) => {
               message: 'Successfully connected to Scholar API!',
               endpoint: baseEndpoint,
               status: testResponse.status,
+              auth_mode: usedAuthMode,
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -213,6 +214,7 @@ serve(async (req) => {
               success: false, 
               error: `Scholar API returned ${testResponse.status}: ${responseText.slice(0, 200)}`,
               endpoint: baseEndpoint,
+              auth_mode: usedAuthMode,
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
