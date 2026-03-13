@@ -1024,7 +1024,96 @@ serve(async (req) => {
             }
           } else {
             console.log(`No score/topic for ${body.action}: score=${score}, topic=${topicName}, data_keys=${Object.keys(body.data || {}).join(',')}`);
-            processedResult = { logged: true, no_grade_data: true, action: body.action };
+            
+            // FALLBACK: Query Scholar shared database directly for recent grades
+            if (resolvedStudent.resolvedId) {
+              console.log(`Attempting Scholar DB fallback for student ${resolvedStudent.resolvedId}...`);
+              try {
+                const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
+                const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
+                
+                if (scholarUrl && scholarKey) {
+                  const scholarClient = createClient(scholarUrl, scholarKey);
+                  
+                  // Pull recent grades from Scholar's grade_history for this student
+                  const sinceDate = new Date();
+                  sinceDate.setDate(sinceDate.getDate() - 7); // Last 7 days
+                  
+                  const { data: scholarGrades, error: scholarError } = await scholarClient
+                    .from('grade_history')
+                    .select('topic_name, grade, raw_score_earned, raw_score_possible, grade_justification, created_at')
+                    .eq('student_id', resolvedStudent.resolvedId)
+                    .gte('created_at', sinceDate.toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+                  
+                  if (scholarError) {
+                    console.error('Scholar DB fallback error:', scholarError);
+                    processedResult = { logged: true, no_grade_data: true, fallback_error: scholarError.message, action: body.action };
+                  } else if (scholarGrades && scholarGrades.length > 0) {
+                    console.log(`Scholar DB fallback found ${scholarGrades.length} grades for student ${resolvedStudent.resolvedId}`);
+                    
+                    // Check which grades we already have to avoid duplicates
+                    const { data: existingGrades } = await supabaseAdmin
+                      .from('grade_history')
+                      .select('topic_name, created_at')
+                      .eq('student_id', resolvedStudent.resolvedId)
+                      .gte('created_at', sinceDate.toISOString());
+                    
+                    const existingSet = new Set(
+                      (existingGrades || []).map(g => `${g.topic_name}|${g.created_at}`)
+                    );
+                    
+                    const newGrades = scholarGrades.filter(
+                      g => !existingSet.has(`${g.topic_name}|${g.created_at}`)
+                    );
+                    
+                    if (newGrades.length > 0) {
+                      const insertRows = newGrades.map(g => ({
+                        student_id: resolvedStudent.resolvedId!,
+                        teacher_id: teacherId,
+                        topic_name: g.topic_name,
+                        grade: g.grade,
+                        raw_score_earned: g.raw_score_earned,
+                        raw_score_possible: g.raw_score_possible,
+                        grade_justification: `Scholar fallback: ${g.grade_justification || g.topic_name}`,
+                      }));
+                      
+                      const { error: insertError } = await supabaseAdmin
+                        .from('grade_history')
+                        .insert(insertRows);
+                      
+                      if (insertError) {
+                        console.error('Error inserting fallback grades:', insertError);
+                        processedResult = { logged: true, fallback_insert_error: insertError.message, action: body.action };
+                      } else {
+                        console.log(`Fallback saved ${newGrades.length} new grades from Scholar DB`);
+                        processedResult = { 
+                          logged: true, 
+                          fallback_grades_saved: newGrades.length, 
+                          fallback_source: 'scholar_db',
+                          action: body.action 
+                        };
+                      }
+                    } else {
+                      console.log('Fallback: all Scholar grades already exist locally');
+                      processedResult = { logged: true, fallback_no_new_grades: true, action: body.action };
+                    }
+                  } else {
+                    console.log('Scholar DB fallback: no recent grades found');
+                    processedResult = { logged: true, no_grade_data: true, fallback_empty: true, action: body.action };
+                  }
+                } else {
+                  console.log('Scholar DB fallback skipped: missing SCHOLAR_SUPABASE_URL or SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
+                  processedResult = { logged: true, no_grade_data: true, fallback_no_config: true, action: body.action };
+                }
+              } catch (fallbackErr) {
+                console.error('Scholar DB fallback exception:', fallbackErr);
+                processedResult = { logged: true, no_grade_data: true, fallback_exception: String(fallbackErr), action: body.action };
+              }
+            } else {
+              processedResult = { logged: true, no_grade_data: true, action: body.action };
+            }
           }
           break;
         }
