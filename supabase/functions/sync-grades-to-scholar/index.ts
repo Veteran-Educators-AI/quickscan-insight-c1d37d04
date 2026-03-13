@@ -189,10 +189,19 @@ serve(async (req) => {
       const baseEndpoint = sisterAppEndpoint.replace(/\/$/, '');
       
       try {
-        const testPayload = {
-          action: 'ping',
-          timestamp: new Date().toISOString(),
-        };
+        const testPayload = baseEndpoint.includes('nycologic-webhook')
+          ? {
+              type: 'student_created',
+              data: {
+                external_id: 'ping-test',
+                full_name: 'Ping Test',
+                source: 'nycologic',
+              },
+            }
+          : {
+              action: 'ping',
+              timestamp: new Date().toISOString(),
+            };
 
         const { response: testResponse, responseText, usedAuthMode } = await postWithAuthFallback(baseEndpoint, testPayload);
         console.log('Scholar API response:', testResponse.status, responseText, `auth_mode=${usedAuthMode}`);
