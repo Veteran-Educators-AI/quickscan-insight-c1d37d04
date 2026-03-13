@@ -7,11 +7,11 @@
  * Scholar requires an x-api-key header validated against its integration_tokens table.
  *
  * REQUIRED SECRETS:
- *   SCHOLAR_SUPABASE_URL              – Scholar project URL
- *   SCHOLAR_SUPABASE_ANON_KEY         – Scholar anon/publishable key
- *   SISTER_APP_API_KEY                – API key registered in Scholar's integration_tokens
- *   BREVO_API_KEY                     – (optional) for email notifications
- * ============================================================================
+ *   SCHOLAR_SUPABASE_URL               – Scholar project URL
+ *   SCHOLAR_SUPABASE_SERVICE_ROLE_KEY  – Preferred for shared-database auth (no API key management)
+ *   SCHOLAR_SUPABASE_ANON_KEY          – Optional legacy fallback
+ *   SISTER_APP_API_KEY                 – Optional legacy fallback when remote requires token auth
+ *   BREVO_API_KEY                      – (optional) for email notifications
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -86,32 +86,62 @@ interface ParticipantResult {
 
 function getScholarConfig() {
   const url = Deno.env.get("SCHOLAR_SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SCHOLAR_SUPABASE_SERVICE_ROLE_KEY");
   const anonKey = Deno.env.get("SCHOLAR_SUPABASE_ANON_KEY");
   const sisterApiKey = Deno.env.get("SISTER_APP_API_KEY");
+
   if (!url) throw new Error("SCHOLAR_SUPABASE_URL not configured");
-  if (!anonKey) throw new Error("SCHOLAR_SUPABASE_ANON_KEY not configured");
-  if (!sisterApiKey) throw new Error("SISTER_APP_API_KEY not configured");
-  return { url, anonKey, sisterApiKey };
+
+  const authKey = serviceRoleKey || anonKey;
+  if (!authKey) {
+    throw new Error("Missing Scholar auth key: set SCHOLAR_SUPABASE_SERVICE_ROLE_KEY (preferred) or SCHOLAR_SUPABASE_ANON_KEY");
+  }
+
+  return { url, authKey, sisterApiKey, usingServiceRole: !!serviceRoleKey };
 }
 
-/** Call Scholar's nycologic-webhook with the x-api-key header */
+/** Call Scholar's nycologic-webhook with resilient auth headers */
 async function postToScholar(payload: Record<string, unknown>): Promise<{ success: boolean; data?: any; error?: string }> {
-  const { url, anonKey, sisterApiKey } = getScholarConfig();
+  const { url, authKey, sisterApiKey, usingServiceRole } = getScholarConfig();
   const webhookUrl = `${url}/functions/v1/nycologic-webhook`;
 
-  console.log("Posting to Scholar:", webhookUrl, "payload type:", payload.type || payload.action);
-
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: {
+  const buildHeaders = (useLegacyApiKey = false): Record<string, string> => {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "apikey": anonKey,
-      "Authorization": `Bearer ${anonKey}`,
-      "x-api-key": sisterApiKey,
-      "x-source-app": "nycologic-ai",
-    },
+      "apikey": authKey,
+      "Authorization": `Bearer ${authKey}`,
+    };
+
+    if (usingServiceRole && !useLegacyApiKey) {
+      headers["x-source-app"] = "scholar-app";
+      headers["x-api-key"] = authKey;
+      return headers;
+    }
+
+    headers["x-source-app"] = "nycologic-ai";
+    if (sisterApiKey) {
+      headers["x-api-key"] = sisterApiKey;
+    }
+
+    return headers;
+  };
+
+  console.log("Posting to Scholar:", webhookUrl, "payload type:", payload.type || payload.action, "auth_mode:", usingServiceRole ? "service_role" : "legacy_api_key");
+
+  let response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: buildHeaders(false),
     body: JSON.stringify(payload),
   });
+
+  if (!response.ok && usingServiceRole && sisterApiKey && (response.status === 401 || response.status === 403)) {
+    console.warn("Service-role auth was rejected; retrying with legacy API key header");
+    response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: buildHeaders(true),
+      body: JSON.stringify(payload),
+    });
+  }
 
   const text = await response.text();
   console.log("Scholar response:", response.status, text.substring(0, 500));

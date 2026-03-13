@@ -16,8 +16,9 @@
  * 4. Award XP/coins for improvement on weak topics
  * 
  * REQUIRED SECRETS:
- * - SISTER_APP_API_KEY: The API key for authenticating with Scholar
- * - NYCOLOGIC_API_URL: The endpoint URL of Scholar app
+ * - NYCOLOGIC_API_URL: Endpoint URL of Scholar app receiver
+ * - SCHOLAR_SUPABASE_SERVICE_ROLE_KEY: Preferred auth for shared-database sync (no API key management)
+ * - SISTER_APP_API_KEY: Optional legacy fallback
  * 
  * ============================================================================
  */
@@ -92,12 +93,13 @@ serve(async (req) => {
   }
 
   try {
-    const sisterAppApiKey = Deno.env.get('SISTER_APP_API_KEY');
     const sisterAppEndpoint = Deno.env.get('NYCOLOGIC_API_URL');
-    
-    if (!sisterAppApiKey) {
+    const scholarServiceRoleKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY') || null;
+    const sisterAppApiKey = Deno.env.get('SISTER_APP_API_KEY') || null;
+
+    if (!scholarServiceRoleKey && !sisterAppApiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Sister app API key not configured' }),
+        JSON.stringify({ success: false, error: 'Neither Scholar service role key nor sister app API key is configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -108,6 +110,50 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const authMode = scholarServiceRoleKey ? 'service_role' : 'api_key';
+
+    const getOutboundHeaders = (forceLegacyApiKey = false): Record<string, string> => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (scholarServiceRoleKey && !forceLegacyApiKey) {
+        headers['x-api-key'] = scholarServiceRoleKey;
+        headers['Authorization'] = `Bearer ${scholarServiceRoleKey}`;
+        headers['apikey'] = scholarServiceRoleKey;
+        headers['x-source-app'] = 'scholar-app';
+        return headers;
+      }
+
+      if (!sisterAppApiKey) {
+        throw new Error('Legacy API key fallback requested but SISTER_APP_API_KEY is not configured');
+      }
+
+      headers['x-api-key'] = sisterAppApiKey;
+      return headers;
+    };
+
+    const postWithAuthFallback = async (url: string, payload: unknown) => {
+      let usedAuthMode = authMode;
+      let response = await fetch(url, {
+        method: 'POST',
+        headers: getOutboundHeaders(false),
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok && scholarServiceRoleKey && sisterAppApiKey && (response.status === 401 || response.status === 403)) {
+        usedAuthMode = 'api_key_fallback';
+        response = await fetch(url, {
+          method: 'POST',
+          headers: getOutboundHeaders(true),
+          body: JSON.stringify(payload),
+        });
+      }
+
+      const responseText = await response.text();
+      return { response, responseText, usedAuthMode };
+    };
 
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
@@ -143,22 +189,22 @@ serve(async (req) => {
       const baseEndpoint = sisterAppEndpoint.replace(/\/$/, '');
       
       try {
-        const testPayload = {
-          action: 'ping',
-          timestamp: new Date().toISOString(),
-        };
-        
-        const testResponse = await fetch(baseEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': sisterAppApiKey,
-          },
-          body: JSON.stringify(testPayload),
-        });
+        const testPayload = baseEndpoint.includes('nycologic-webhook')
+          ? {
+              type: 'student_created',
+              data: {
+                external_id: 'ping-test',
+                full_name: 'Ping Test',
+                source: 'nycologic',
+              },
+            }
+          : {
+              action: 'ping',
+              timestamp: new Date().toISOString(),
+            };
 
-        const responseText = await testResponse.text();
-        console.log('Scholar API response:', testResponse.status, responseText);
+        const { response: testResponse, responseText, usedAuthMode } = await postWithAuthFallback(baseEndpoint, testPayload);
+        console.log('Scholar API response:', testResponse.status, responseText, `auth_mode=${usedAuthMode}`);
 
         if (testResponse.ok) {
           return new Response(
@@ -167,6 +213,7 @@ serve(async (req) => {
               message: 'Successfully connected to Scholar API!',
               endpoint: baseEndpoint,
               status: testResponse.status,
+              auth_mode: usedAuthMode,
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -176,6 +223,7 @@ serve(async (req) => {
               success: false, 
               error: `Scholar API returned ${testResponse.status}: ${responseText.slice(0, 200)}`,
               endpoint: baseEndpoint,
+              auth_mode: usedAuthMode,
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -454,19 +502,10 @@ serve(async (req) => {
     if (isOwnReceiver) {
       // Use batch sync for our own receiver
       try {
-        const response = await fetch(sisterAppEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': sisterAppApiKey,
-          },
-          body: JSON.stringify(batchPayload),
-        });
-
-        const responseText = await response.text();
+        const { response, responseText, usedAuthMode } = await postWithAuthFallback(sisterAppEndpoint, batchPayload);
         
         if (!response.ok) {
-          console.error('Batch sync failed:', response.status, responseText);
+          console.error('Batch sync failed:', response.status, responseText, `auth_mode=${usedAuthMode}`);
 
           try {
             await supabase.from('sister_app_sync_log').insert({
@@ -644,18 +683,10 @@ serve(async (req) => {
       
       const batchPromise = Promise.allSettled(
         batch.map(async ({ profile, payload }) => {
-          const response = await fetch(syncStudentEndpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': sisterAppApiKey,
-            },
-            body: JSON.stringify(payload),
-          });
+          const { response, responseText } = await postWithAuthFallback(syncStudentEndpoint, payload);
 
           if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`${profile.student_name}: ${response.status} - ${errorText.slice(0, 100)}`);
+            throw new Error(`${profile.student_name}: ${response.status} - ${responseText.slice(0, 100)}`);
           }
           return profile.student_name;
         })
