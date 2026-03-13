@@ -104,8 +104,16 @@ Deno.serve(async (req) => {
     console.log(`Local students loaded: ${localStudents.length}, unique names: ${nameToLocal.size}`);
 
     // ── Step 2: Query Scholar database ──
-    const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
+    const configuredScholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
     const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
+    const derivedScholarUrl = scholarKey ? deriveSupabaseUrlFromServiceKey(scholarKey) : null;
+    const scholarUrl = derivedScholarUrl || configuredScholarUrl;
+
+    if (configuredScholarUrl && derivedScholarUrl && configuredScholarUrl !== derivedScholarUrl) {
+      console.warn(
+        `SCHOLAR_SUPABASE_URL mismatch detected. Using URL derived from service key ref instead: ${derivedScholarUrl}`,
+      );
+    }
 
     if (!scholarUrl || !scholarKey) {
       // Fallback: just read local scholar grades
