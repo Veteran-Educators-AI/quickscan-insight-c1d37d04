@@ -93,12 +93,13 @@ serve(async (req) => {
   }
 
   try {
-    const sisterAppApiKey = Deno.env.get('SISTER_APP_API_KEY');
     const sisterAppEndpoint = Deno.env.get('NYCOLOGIC_API_URL');
-    
-    if (!sisterAppApiKey) {
+    const scholarServiceRoleKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY') || null;
+    const sisterAppApiKey = Deno.env.get('SISTER_APP_API_KEY') || null;
+
+    if (!scholarServiceRoleKey && !sisterAppApiKey) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Sister app API key not configured' }),
+        JSON.stringify({ success: false, error: 'Neither Scholar service role key nor sister app API key is configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -109,6 +110,50 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const authMode = scholarServiceRoleKey ? 'service_role' : 'api_key';
+
+    const getOutboundHeaders = (forceLegacyApiKey = false): Record<string, string> => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (scholarServiceRoleKey && !forceLegacyApiKey) {
+        headers['x-api-key'] = scholarServiceRoleKey;
+        headers['Authorization'] = `Bearer ${scholarServiceRoleKey}`;
+        headers['apikey'] = scholarServiceRoleKey;
+        headers['x-source-app'] = 'scholar-app';
+        return headers;
+      }
+
+      if (!sisterAppApiKey) {
+        throw new Error('Legacy API key fallback requested but SISTER_APP_API_KEY is not configured');
+      }
+
+      headers['x-api-key'] = sisterAppApiKey;
+      return headers;
+    };
+
+    const postWithAuthFallback = async (url: string, payload: unknown) => {
+      let usedAuthMode = authMode;
+      let response = await fetch(url, {
+        method: 'POST',
+        headers: getOutboundHeaders(false),
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok && scholarServiceRoleKey && sisterAppApiKey && (response.status === 401 || response.status === 403)) {
+        usedAuthMode = 'api_key_fallback';
+        response = await fetch(url, {
+          method: 'POST',
+          headers: getOutboundHeaders(true),
+          body: JSON.stringify(payload),
+        });
+      }
+
+      const responseText = await response.text();
+      return { response, responseText, usedAuthMode };
+    };
 
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
