@@ -182,6 +182,33 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── Diagnostic: check total grade count in Scholar DB (no filters) ──
+    const { count: totalScholarGrades, error: countErr } = await scholarClient
+      .from('grade_history')
+      .select('id', { count: 'exact', head: true });
+    console.log(`Scholar DB total grade_history rows: ${totalScholarGrades ?? 'error'} ${countErr ? countErr.message : ''}`);
+
+    // Also check if Scholar has a different grades table (e.g. practice_results, exam_results)
+    const altTables = ['practice_results', 'exam_results', 'practice_sessions', 'student_grades', 'completions'];
+    for (const tableName of altTables) {
+      const { count: altCount, error: altErr } = await scholarClient
+        .from(tableName)
+        .select('*', { count: 'exact', head: true });
+      if (!altErr && altCount !== null) {
+        console.log(`Scholar DB table '${tableName}' has ${altCount} rows`);
+      }
+    }
+
+    // Check a sample of Scholar grades without student filter
+    const { data: sampleGrades, error: sampleErr } = await scholarClient
+      .from('grade_history')
+      .select('id, student_id, topic_name, grade, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5);
+    if (!sampleErr && sampleGrades) {
+      console.log(`Scholar DB sample grades (newest 5): ${JSON.stringify(sampleGrades)}`);
+    }
+
     // Query Scholar grade_history for matched students
     const scholarStudentIds = Array.from(scholarIdToLocalId.keys());
     const { data: scholarGrades, error: scholarGradesErr } = await scholarClient
@@ -200,7 +227,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Scholar grades found: ${(scholarGrades || []).length}`);
+    console.log(`Scholar grades found for matched students: ${(scholarGrades || []).length}`);
 
     if (!scholarGrades || scholarGrades.length === 0) {
       return new Response(
