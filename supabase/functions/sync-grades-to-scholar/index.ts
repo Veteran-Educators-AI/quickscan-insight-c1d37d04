@@ -193,18 +193,9 @@ serve(async (req) => {
           action: 'ping',
           timestamp: new Date().toISOString(),
         };
-        
-        const testResponse = await fetch(baseEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': sisterAppApiKey,
-          },
-          body: JSON.stringify(testPayload),
-        });
 
-        const responseText = await testResponse.text();
-        console.log('Scholar API response:', testResponse.status, responseText);
+        const { response: testResponse, responseText, usedAuthMode } = await postWithAuthFallback(baseEndpoint, testPayload);
+        console.log('Scholar API response:', testResponse.status, responseText, `auth_mode=${usedAuthMode}`);
 
         if (testResponse.ok) {
           return new Response(
