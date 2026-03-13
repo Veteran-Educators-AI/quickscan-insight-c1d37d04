@@ -5,6 +5,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const decodeBase64Url = (value: string): string => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  return atob(padded);
+};
+
+const deriveSupabaseUrlFromServiceKey = (serviceRoleKey: string): string | null => {
+  try {
+    const parts = serviceRoleKey.split('.');
+    if (parts.length < 2) return null;
+
+    const payload = JSON.parse(decodeBase64Url(parts[1]));
+    const projectRef = payload?.ref;
+
+    if (typeof projectRef !== 'string' || !projectRef.trim()) return null;
+    return `https://${projectRef}.supabase.co`;
+  } catch (error) {
+    console.error('Failed to derive Scholar URL from service key:', error);
+    return null;
+  }
+};
+
 /**
  * Pull Scholar completions — queries the Scholar (sister) database directly
  * and imports any new grades by matching students on first_name + last_name.
@@ -82,8 +104,16 @@ Deno.serve(async (req) => {
     console.log(`Local students loaded: ${localStudents.length}, unique names: ${nameToLocal.size}`);
 
     // ── Step 2: Query Scholar database ──
-    const scholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
+    const configuredScholarUrl = Deno.env.get('SCHOLAR_SUPABASE_URL');
     const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
+    const derivedScholarUrl = scholarKey ? deriveSupabaseUrlFromServiceKey(scholarKey) : null;
+    const scholarUrl = derivedScholarUrl || configuredScholarUrl;
+
+    if (configuredScholarUrl && derivedScholarUrl && configuredScholarUrl !== derivedScholarUrl) {
+      console.warn(
+        `SCHOLAR_SUPABASE_URL mismatch detected. Using URL derived from service key ref instead: ${derivedScholarUrl}`,
+      );
+    }
 
     if (!scholarUrl || !scholarKey) {
       // Fallback: just read local scholar grades
