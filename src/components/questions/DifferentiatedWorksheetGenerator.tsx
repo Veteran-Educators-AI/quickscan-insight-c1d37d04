@@ -1398,6 +1398,17 @@ const toggleStudent = (studentId: string) => {
         })
       );
 
+      const blankAnswerKeyHeader = new Header({
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({ text: ' ', size: 1, color: 'FFFFFF' }),
+            ],
+            spacing: { before: 0, after: 0 },
+          }),
+        ],
+      });
+
       sections.push({
         properties: {
           page: {
@@ -1415,11 +1426,9 @@ const toggleStudent = (studentId: string) => {
           },
         },
         headers: {
-          default: new Header({
-            children: [
-              new Paragraph({ children: [] }),
-            ],
-          }),
+          default: blankAnswerKeyHeader,
+          first: blankAnswerKeyHeader,
+          even: blankAnswerKeyHeader,
         },
         children: answerKeyChildren,
       });
