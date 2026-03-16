@@ -1415,7 +1415,11 @@ const toggleStudent = (studentId: string) => {
           },
         },
         headers: {
-          default: new Header({ children: [] }),
+          default: new Header({
+            children: [
+              new Paragraph({ children: [] }),
+            ],
+          }),
         },
         children: answerKeyChildren,
       });
