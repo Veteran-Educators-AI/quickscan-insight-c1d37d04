@@ -2219,12 +2219,9 @@ export default function Scan() {
       <CreateAnswerSheetDialog
         open={showCreateAnswerSheet}
         onOpenChange={setShowCreateAnswerSheet}
-        onAnswerSheetCreated={(answerSheet, worksheetImage) => {
-          setGeneratedAnswerSheet(answerSheet);
-          setBatchAnswerGuideImage(worksheetImage);
-          toast.success('Answer sheet created! It will be used as the grading guide for all papers.', {
-            duration: 5000,
-          });
+        onAnswerSheetUploaded={(images) => {
+          setGeneratedAnswerSheet({ worksheet_title: 'Uploaded Answer Sheet', questions: [], uploaded_images: images });
+          setBatchAnswerGuideImage(images[0]);
         }}
       />
     </>
