@@ -355,7 +355,7 @@ interface UseBatchAnalysisReturn {
   convertToSeparatePaper: (itemId: string) => void;
   startBatchAnalysis: (rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string, answerGuideImage?: string, useLearnedStyle?: boolean) => Promise<void>;
   startConfidenceAnalysis: (analysisCount: 2 | 3, rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string) => Promise<void>;
-  startTeacherGuidedBatchAnalysis: (answerGuideImage: string, rubricSteps?: RubricStep[]) => Promise<void>;
+  startTeacherGuidedBatchAnalysis: (answerGuideImages: string[], rubricSteps?: RubricStep[]) => Promise<void>;
   reanalyzeItem: (itemId: string, rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string) => Promise<BatchItem | null>;
   overrideGrade: (itemId: string, newGrade: number, justification: string) => void;
   selectRunAsGrade: (itemId: string, runIndex: number) => void;
