@@ -981,8 +981,8 @@ function buildGradingPrompt(opts: {
     ? `\nCUSTOM RUBRIC:\n${opts.customRubric.criteria.map((c: any, i: number) => `  ${i + 1}. ${c.name} (${c.weight}%): ${c.description}`).join("\n")}`
     : "";
 
-  const teacherGuideNote = opts.answerGuideBase64
-    ? `\nIMPORTANT: A teacher answer guide image is attached. Use it as the PRIMARY grading reference.`
+  const teacherGuideNote = (opts.answerGuideBase64 || opts.answerGuideImages)
+    ? `\nIMPORTANT: Teacher answer guide image(s) are attached. Use them as the PRIMARY grading reference. Compare student work against ALL answer guide pages to determine correctness.`
     : "";
 
   const detailLevel =
