@@ -96,7 +96,7 @@ export default function Scan() {
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchSavedStudents, setBatchSavedStudents] = useState<Set<string>>(new Set());
   const [showBatchGradingModeSelector, setShowBatchGradingModeSelector] = useState(false);
-  const [batchAnswerGuideImage, setBatchAnswerGuideImage] = useState<string | null>(null);
+  const [batchAnswerGuideImages, setBatchAnswerGuideImages] = useState<string[]>([]);
   const [showSaveToDriveDialog, setShowSaveToDriveDialog] = useState(false);
   const [driveSaved, setDriveSaved] = useState(false);
   
@@ -1039,9 +1039,10 @@ export default function Scan() {
     }
 
     if (mode === 'teacher-guided' && answerGuideImage) {
-      setBatchAnswerGuideImage(answerGuideImage);
-      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers...`);
-      await batch.startTeacherGuidedBatchAnalysis(answerGuideImage, mockRubricSteps);
+      const guideImages = [answerGuideImage, ...batchAnswerGuideImages.filter(img => img !== answerGuideImage)];
+      setBatchAnswerGuideImages(guideImages);
+      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers with ${guideImages.length} answer sheet page(s)...`);
+      await batch.startTeacherGuidedBatchAnalysis(guideImages, mockRubricSteps);
     } else if (mode === 'ai-learned') {
       toast.info(`Starting AI analysis with your learned grading style...`);
       await batch.startBatchAnalysis(mockRubricSteps, 'teacher', undefined, undefined, true);
@@ -2219,9 +2220,14 @@ export default function Scan() {
       <CreateAnswerSheetDialog
         open={showCreateAnswerSheet}
         onOpenChange={setShowCreateAnswerSheet}
-        onAnswerSheetUploaded={(images) => {
-          setGeneratedAnswerSheet({ worksheet_title: 'Uploaded Answer Sheet', questions: [], uploaded_images: images });
-          setBatchAnswerGuideImage(images[0]);
+        onAnswerSheetUploaded={(images, extractedQuestions) => {
+          setGeneratedAnswerSheet({ 
+            worksheet_title: 'Uploaded Answer Sheet', 
+            questions: extractedQuestions?.questions || [], 
+            uploaded_images: images,
+            ...(extractedQuestions || {}),
+          });
+          setBatchAnswerGuideImages(images);
         }}
       />
     </>

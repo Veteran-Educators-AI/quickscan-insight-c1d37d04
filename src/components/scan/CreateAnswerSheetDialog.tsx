@@ -3,18 +3,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, CheckCircle, X, Plus, Image as ImageIcon, BookOpen } from 'lucide-react';
+import { Upload, CheckCircle, X, Plus, Image as ImageIcon, BookOpen, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { resizeImage, blobToBase64 } from '@/lib/imageUtils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CreateAnswerSheetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAnswerSheetUploaded?: (images: string[]) => void;
+  onAnswerSheetUploaded?: (images: string[], extractedQuestions?: any) => void;
 }
 
 export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploaded }: CreateAnswerSheetDialogProps) {
   const [answerImages, setAnswerImages] = useState<string[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addMoreRef = useRef<HTMLInputElement>(null);
 
@@ -42,6 +45,7 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploa
         newImages.push(dataUrl);
       }
       setAnswerImages(prev => [...prev, ...newImages]);
+      setExtractedData(null); // Reset extraction when images change
     } catch {
       toast.error('Failed to process one or more images');
     }
@@ -50,18 +54,45 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploa
 
   const removeImage = (index: number) => {
     setAnswerImages(prev => prev.filter((_, i) => i !== index));
+    setExtractedData(null);
   };
 
   const handleUseAsGuide = () => {
     if (answerImages.length && onAnswerSheetUploaded) {
-      onAnswerSheetUploaded(answerImages);
+      onAnswerSheetUploaded(answerImages, extractedData);
       onOpenChange(false);
       toast.success(`Answer sheet uploaded (${answerImages.length} page${answerImages.length !== 1 ? 's' : ''}) — ready for grading!`);
     }
   };
 
+  const handleExtractQuestions = async () => {
+    if (!answerImages.length) return;
+    setIsExtracting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-answer-sheet', {
+        body: {
+          imageBase64: answerImages[0],
+          additionalImages: answerImages.length > 1 ? answerImages.slice(1) : undefined,
+        },
+      });
+      if (error) throw error;
+      if (data?.success && data?.answerSheet) {
+        setExtractedData(data.answerSheet);
+        toast.success(`Extracted ${data.answerSheet.total_questions || data.answerSheet.questions?.length || 0} questions from answer sheet`);
+      } else {
+        throw new Error(data?.error || 'Failed to extract questions');
+      }
+    } catch (err: any) {
+      console.error('[CreateAnswerSheet] Extraction error:', err);
+      toast.error(err.message || 'Failed to analyze answer sheet');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleReset = () => {
     setAnswerImages([]);
+    setExtractedData(null);
   };
 
   return (
@@ -73,7 +104,7 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploa
             Upload Answer Sheet
           </DialogTitle>
           <DialogDescription>
-            Upload your answer key pages. These will be used as the grading reference when scanning student work.
+            Upload one or more pages of your answer key. All pages will be used as the grading reference when scanning student work.
           </DialogDescription>
         </DialogHeader>
 
@@ -103,7 +134,7 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploa
           </div>
         ) : (
           <div className="space-y-4">
-            <ScrollArea className="max-h-[320px]">
+            <ScrollArea className="max-h-[280px]">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {answerImages.map((img, idx) => (
                   <div key={idx} className="relative group rounded-lg overflow-hidden border bg-muted/30">
@@ -148,11 +179,31 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetUploa
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ImageIcon className="h-4 w-4" />
               {answerImages.length} page{answerImages.length !== 1 ? 's' : ''} uploaded
+              {extractedData && (
+                <Badge variant="outline" className="ml-2 text-xs border-primary/50 text-primary">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {extractedData.total_questions || extractedData.questions?.length || 0} questions extracted
+                </Badge>
+              )}
             </div>
 
             <div className="flex gap-3 pt-2 border-t">
-              <Button variant="outline" onClick={handleReset}>
+              <Button variant="outline" onClick={handleReset} size="sm">
                 Start Over
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleExtractQuestions} 
+                disabled={isExtracting}
+                size="sm"
+                className="border-primary/30"
+              >
+                {isExtracting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {isExtracting ? 'Analyzing...' : 'AI: Extract Questions'}
               </Button>
               <Button onClick={handleUseAsGuide} className="flex-1">
                 <CheckCircle className="h-4 w-4 mr-2" />

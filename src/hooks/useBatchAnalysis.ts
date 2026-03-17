@@ -355,7 +355,7 @@ interface UseBatchAnalysisReturn {
   convertToSeparatePaper: (itemId: string) => void;
   startBatchAnalysis: (rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string, answerGuideImage?: string, useLearnedStyle?: boolean) => Promise<void>;
   startConfidenceAnalysis: (analysisCount: 2 | 3, rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string) => Promise<void>;
-  startTeacherGuidedBatchAnalysis: (answerGuideImage: string, rubricSteps?: RubricStep[]) => Promise<void>;
+  startTeacherGuidedBatchAnalysis: (answerGuideImages: string[], rubricSteps?: RubricStep[]) => Promise<void>;
   reanalyzeItem: (itemId: string, rubricSteps?: RubricStep[], assessmentMode?: 'teacher' | 'ai', promptText?: string) => Promise<BatchItem | null>;
   overrideGrade: (itemId: string, newGrade: number, justification: string) => void;
   selectRunAsGrade: (itemId: string, runIndex: number) => void;
@@ -2386,9 +2386,9 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
     }));
   }, []);
 
-  // Teacher-guided batch analysis - analyzes all items with a common answer guide
+  // Teacher-guided batch analysis - analyzes all items with a common answer guide (multi-page)
   const startTeacherGuidedBatchAnalysis = useCallback(async (
-    answerGuideImage: string,
+    answerGuideImages: string[],
     rubricSteps?: RubricStep[]
   ) => {
     if (items.length === 0 || isProcessing) return;
@@ -2498,7 +2498,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           const requestBody: any = {
             imageBase64: item.imageDataUrl,
             additionalImages: additionalImages.length > 0 ? additionalImages : undefined,
-            answerGuideBase64: answerGuideImage,
+            answerGuideBase64: answerGuideImages[0],
+            answerGuideImages: answerGuideImages.length > 1 ? answerGuideImages : undefined,
             rubricSteps,
             studentName: item.studentName,
             teacherId: user?.id,

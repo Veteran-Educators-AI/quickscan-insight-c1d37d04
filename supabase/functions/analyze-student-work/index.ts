@@ -962,6 +962,7 @@ function buildGradingPrompt(opts: {
   customRubric?: any;
   promptText?: string;
   answerGuideBase64?: string;
+  answerGuideImages?: string[];
   gradingStyleContext: string;
   teacherAnswerSampleContext: string;
   verificationContext: string;
@@ -981,8 +982,9 @@ function buildGradingPrompt(opts: {
     ? `\nCUSTOM RUBRIC:\n${opts.customRubric.criteria.map((c: any, i: number) => `  ${i + 1}. ${c.name} (${c.weight}%): ${c.description}`).join("\n")}`
     : "";
 
-  const teacherGuideNote = opts.answerGuideBase64
-    ? `\nIMPORTANT: A teacher answer guide image is attached. Use it as the PRIMARY grading reference.`
+  const hasAnswerGuide = opts.answerGuideBase64 || opts.answerGuideImages;
+  const teacherGuideNote = hasAnswerGuide
+    ? `\nIMPORTANT: Teacher answer guide image(s) are attached. Use them as the PRIMARY grading reference. Compare student work against ALL answer guide pages to determine correctness. Identify which questions from the answer guide the student attempted, and grade each one individually.`
     : "";
 
   const detailLevel =
@@ -1460,6 +1462,7 @@ serve(async (req: Request) => {
       additionalImages,
       solutionBase64,
       answerGuideBase64,
+      answerGuideImages,
       questionId,
       rubricSteps,
       identifyOnly,
@@ -1727,6 +1730,7 @@ serve(async (req: Request) => {
         customRubric,
         promptText,
         answerGuideBase64: answerGuideBase64 ? "yes" : undefined,
+        answerGuideImages: answerGuideImages?.length ? "yes" : undefined,
         gradingStyleContext,
         teacherAnswerSampleContext,
         verificationContext,
@@ -1744,7 +1748,12 @@ serve(async (req: Request) => {
         userContent.push(formatImageForAI(imageBase64));
       }
 
-      if (answerGuideBase64) {
+      if (answerGuideImages && answerGuideImages.length > 0) {
+        userContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+        for (const guideImg of answerGuideImages) {
+          userContent.push(formatImageForAI(guideImg));
+        }
+      } else if (answerGuideBase64) {
         userContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
         userContent.push(formatImageForAI(answerGuideBase64));
       }
@@ -1891,6 +1900,7 @@ serve(async (req: Request) => {
       customRubric,
       promptText,
       answerGuideBase64: answerGuideBase64 ? "yes" : undefined,
+      answerGuideImages: answerGuideImages?.length ? "yes" : undefined,
       gradingStyleContext,
       teacherAnswerSampleContext,
       verificationContext,
@@ -1901,7 +1911,12 @@ serve(async (req: Request) => {
 
     // ── Build message with images ──
     const imageContent: any[] = [{ type: "text", text: userPromptText }, formatImageForAI(imageBase64)];
-    if (answerGuideBase64) {
+    if (answerGuideImages && answerGuideImages.length > 0) {
+      imageContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+      for (const guideImg of answerGuideImages) {
+        imageContent.push(formatImageForAI(guideImg));
+      }
+    } else if (answerGuideBase64) {
       imageContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
       imageContent.push(formatImageForAI(answerGuideBase64));
     }
