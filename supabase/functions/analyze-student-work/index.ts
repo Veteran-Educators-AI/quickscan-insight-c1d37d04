@@ -1909,7 +1909,12 @@ serve(async (req: Request) => {
 
     // ── Build message with images ──
     const imageContent: any[] = [{ type: "text", text: userPromptText }, formatImageForAI(imageBase64)];
-    if (answerGuideBase64) {
+    if (answerGuideImages && answerGuideImages.length > 0) {
+      imageContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+      for (const guideImg of answerGuideImages) {
+        imageContent.push(formatImageForAI(guideImg));
+      }
+    } else if (answerGuideBase64) {
       imageContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
       imageContent.push(formatImageForAI(answerGuideBase64));
     }
