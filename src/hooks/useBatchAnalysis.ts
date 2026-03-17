@@ -2498,7 +2498,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           const requestBody: any = {
             imageBase64: item.imageDataUrl,
             additionalImages: additionalImages.length > 0 ? additionalImages : undefined,
-            answerGuideBase64: answerGuideImage,
+            answerGuideBase64: answerGuideImages[0],
+            answerGuideImages: answerGuideImages.length > 1 ? answerGuideImages : undefined,
             rubricSteps,
             studentName: item.studentName,
             teacherId: user?.id,

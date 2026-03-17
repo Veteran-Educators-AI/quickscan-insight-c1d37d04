@@ -2221,7 +2221,7 @@ export default function Scan() {
         onOpenChange={setShowCreateAnswerSheet}
         onAnswerSheetUploaded={(images) => {
           setGeneratedAnswerSheet({ worksheet_title: 'Uploaded Answer Sheet', questions: [], uploaded_images: images });
-          setBatchAnswerGuideImage(images[0]);
+          setBatchAnswerGuideImages(images);
         }}
       />
     </>
