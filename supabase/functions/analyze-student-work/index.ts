@@ -962,6 +962,7 @@ function buildGradingPrompt(opts: {
   customRubric?: any;
   promptText?: string;
   answerGuideBase64?: string;
+  answerGuideImages?: string[];
   gradingStyleContext: string;
   teacherAnswerSampleContext: string;
   verificationContext: string;
