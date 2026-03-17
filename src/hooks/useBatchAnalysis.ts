@@ -2386,9 +2386,9 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
     }));
   }, []);
 
-  // Teacher-guided batch analysis - analyzes all items with a common answer guide
+  // Teacher-guided batch analysis - analyzes all items with a common answer guide (multi-page)
   const startTeacherGuidedBatchAnalysis = useCallback(async (
-    answerGuideImage: string,
+    answerGuideImages: string[],
     rubricSteps?: RubricStep[]
   ) => {
     if (items.length === 0 || isProcessing) return;
