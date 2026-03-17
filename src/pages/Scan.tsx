@@ -2220,8 +2220,13 @@ export default function Scan() {
       <CreateAnswerSheetDialog
         open={showCreateAnswerSheet}
         onOpenChange={setShowCreateAnswerSheet}
-        onAnswerSheetUploaded={(images) => {
-          setGeneratedAnswerSheet({ worksheet_title: 'Uploaded Answer Sheet', questions: [], uploaded_images: images });
+        onAnswerSheetUploaded={(images, extractedQuestions) => {
+          setGeneratedAnswerSheet({ 
+            worksheet_title: 'Uploaded Answer Sheet', 
+            questions: extractedQuestions?.questions || [], 
+            uploaded_images: images,
+            ...(extractedQuestions || {}),
+          });
           setBatchAnswerGuideImages(images);
         }}
       />
