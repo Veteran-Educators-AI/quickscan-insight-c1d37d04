@@ -96,7 +96,7 @@ export default function Scan() {
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchSavedStudents, setBatchSavedStudents] = useState<Set<string>>(new Set());
   const [showBatchGradingModeSelector, setShowBatchGradingModeSelector] = useState(false);
-  const [batchAnswerGuideImage, setBatchAnswerGuideImage] = useState<string | null>(null);
+  const [batchAnswerGuideImages, setBatchAnswerGuideImages] = useState<string[]>([]);
   const [showSaveToDriveDialog, setShowSaveToDriveDialog] = useState(false);
   const [driveSaved, setDriveSaved] = useState(false);
   
