@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, FileText, Loader2, Printer, CheckCircle, AlertTriangle, BookOpen } from 'lucide-react';
+import { Upload, FileText, Loader2, Printer, CheckCircle, AlertTriangle, BookOpen, X, Plus, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { resizeImage, blobToBase64, compressImage } from '@/lib/imageUtils';
@@ -34,42 +34,66 @@ interface CreateAnswerSheetDialogProps {
 }
 
 export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreated }: CreateAnswerSheetDialogProps) {
-  const [worksheetImage, setWorksheetImage] = useState<string | null>(null);
+  const [worksheetImages, setWorksheetImages] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [answerSheet, setAnswerSheet] = useState<AnswerSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMoreRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processFile = async (file: File): Promise<string> => {
     try {
       const resizedBlob = await resizeImage(file);
-      const dataUrl = await blobToBase64(resizedBlob);
-      setWorksheetImage(dataUrl);
+      return await blobToBase64(resizedBlob);
+    } catch {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target?.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    try {
+      const newImages: string[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await processFile(file);
+        newImages.push(dataUrl);
+      }
+      setWorksheetImages(prev => [...prev, ...newImages]);
       setAnswerSheet(null);
       setError(null);
     } catch {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setWorksheetImage(ev.target?.result as string);
-        setAnswerSheet(null);
-        setError(null);
-      };
-      reader.readAsDataURL(file);
+      toast.error('Failed to process one or more images');
     }
     e.target.value = '';
   };
 
+  const removeImage = (index: number) => {
+    setWorksheetImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const generateAnswerSheet = async () => {
-    if (!worksheetImage) return;
+    if (!worksheetImages.length) return;
     setIsGenerating(true);
     setError(null);
 
     try {
-      const compressed = await compressImage(worksheetImage, 1600, 0.8);
+      const compressed = await compressImage(worksheetImages[0], 1600, 0.8);
+      const additionalImages: string[] = [];
+      for (let i = 1; i < worksheetImages.length; i++) {
+        additionalImages.push(await compressImage(worksheetImages[i], 1600, 0.8));
+      }
+
       const { data, error: fnError } = await supabase.functions.invoke('generate-answer-sheet', {
-        body: { imageBase64: compressed },
+        body: {
+          imageBase64: compressed,
+          ...(additionalImages.length > 0 ? { additionalImages } : {}),
+        },
       });
 
       if (fnError) {
@@ -92,8 +116,8 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreat
   };
 
   const handleUseAsGuide = () => {
-    if (answerSheet && worksheetImage && onAnswerSheetCreated) {
-      onAnswerSheetCreated(answerSheet, worksheetImage);
+    if (answerSheet && worksheetImages.length && onAnswerSheetCreated) {
+      onAnswerSheetCreated(answerSheet, worksheetImages[0]);
       onOpenChange(false);
     }
   };
@@ -109,90 +133,17 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreat
         <title>Answer Sheet - ${answerSheet.worksheet_title}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&display=swap');
-          
-          body {
-            font-family: 'Caveat', cursive;
-            font-size: 18px;
-            line-height: 1.6;
-            padding: 40px;
-            color: #1a1a2e;
-            max-width: 800px;
-            margin: 0 auto;
-          }
-          h1 {
-            font-family: 'Caveat', cursive;
-            font-size: 32px;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 8px;
-            color: #16213e;
-            border-bottom: 3px solid #0f3460;
-            padding-bottom: 8px;
-          }
-          .subtitle {
-            text-align: center;
-            font-size: 20px;
-            color: #555;
-            margin-bottom: 24px;
-          }
-          .question-block {
-            margin-bottom: 28px;
-            page-break-inside: avoid;
-            border-left: 4px solid #0f3460;
-            padding-left: 16px;
-          }
-          .question-number {
-            font-weight: 700;
-            font-size: 22px;
-            color: #0f3460;
-            margin-bottom: 4px;
-          }
-          .question-text {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            color: #333;
-            background: #f5f5f5;
-            padding: 8px 12px;
-            border-radius: 6px;
-            margin-bottom: 8px;
-          }
-          .solution-step {
-            margin-left: 16px;
-            margin-bottom: 4px;
-          }
-          .final-answer {
-            font-weight: 700;
-            font-size: 22px;
-            color: #e94560;
-            background: #fff3f3;
-            padding: 6px 12px;
-            border-radius: 6px;
-            display: inline-block;
-            margin-top: 6px;
-          }
-          .formula-tag {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            background: #e8f4fd;
-            color: #0f3460;
-            padding: 2px 8px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-top: 4px;
-          }
-          .common-mistakes {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            color: #b33;
-            margin-top: 4px;
-            padding: 4px 8px;
-            background: #fff8f0;
-            border-radius: 4px;
-          }
-          @media print {
-            body { padding: 20px; }
-            .question-block { page-break-inside: avoid; }
-          }
+          body { font-family: 'Caveat', cursive; font-size: 18px; line-height: 1.6; padding: 40px; color: #1a1a2e; max-width: 800px; margin: 0 auto; }
+          h1 { font-family: 'Caveat', cursive; font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 8px; color: #16213e; border-bottom: 3px solid #0f3460; padding-bottom: 8px; }
+          .subtitle { text-align: center; font-size: 20px; color: #555; margin-bottom: 24px; }
+          .question-block { margin-bottom: 28px; page-break-inside: avoid; border-left: 4px solid #0f3460; padding-left: 16px; }
+          .question-number { font-weight: 700; font-size: 22px; color: #0f3460; margin-bottom: 4px; }
+          .question-text { font-family: Arial, sans-serif; font-size: 14px; color: #333; background: #f5f5f5; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }
+          .solution-step { margin-left: 16px; margin-bottom: 4px; }
+          .final-answer { font-weight: 700; font-size: 22px; color: #e94560; background: #fff3f3; padding: 6px 12px; border-radius: 6px; display: inline-block; margin-top: 6px; }
+          .formula-tag { font-family: Arial, sans-serif; font-size: 12px; background: #e8f4fd; color: #0f3460; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+          .common-mistakes { font-family: Arial, sans-serif; font-size: 12px; color: #b33; margin-top: 4px; padding: 4px 8px; background: #fff8f0; border-radius: 4px; }
+          @media print { body { padding: 20px; } .question-block { page-break-inside: avoid; } }
         </style>
       </head>
       <body>
@@ -217,7 +168,7 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreat
   };
 
   const handleReset = () => {
-    setWorksheetImage(null);
+    setWorksheetImages([]);
     setAnswerSheet(null);
     setError(null);
   };
@@ -231,51 +182,95 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreat
             Create Answer Sheet
           </DialogTitle>
           <DialogDescription>
-            Upload a blank worksheet to generate a complete answer key with solutions. Use it as a grading guide for all student papers.
+            Upload your answer key pages (single or multi-page) to generate a complete grading guide. You can also upload a blank worksheet to have solutions generated automatically.
           </DialogDescription>
         </DialogHeader>
 
-        {!worksheetImage ? (
+        {worksheetImages.length === 0 && !answerSheet ? (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
               <Upload className="h-10 w-10 text-primary" />
             </div>
             <div className="text-center">
-              <h3 className="font-semibold text-lg">Upload Blank Worksheet</h3>
+              <h3 className="font-semibold text-lg">Upload Answer Key or Blank Worksheet</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Upload the worksheet with questions only (no student answers)
+                Select one or more pages — supports multi-page answer keys
               </p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple
               onChange={handleUpload}
               className="hidden"
             />
             <Button onClick={() => fileInputRef.current?.click()}>
               <Upload className="h-4 w-4 mr-2" />
-              Select Worksheet Image
+              Select Pages
             </Button>
           </div>
         ) : !answerSheet ? (
           <div className="space-y-4">
-            <div className="relative rounded-lg overflow-hidden border bg-muted/30">
-              <img
-                src={worksheetImage}
-                alt="Worksheet"
-                className="max-h-[300px] w-full object-contain"
-              />
-            </div>
+            {/* Multi-page thumbnail strip */}
+            <ScrollArea className="max-h-[280px]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {worksheetImages.map((img, idx) => (
+                  <div key={idx} className="relative group rounded-lg overflow-hidden border bg-muted/30">
+                    <img
+                      src={img}
+                      alt={`Page ${idx + 1}`}
+                      className="w-full h-36 object-contain"
+                    />
+                    <div className="absolute top-1 left-1">
+                      <Badge variant="secondary" className="text-xs">
+                        Page {idx + 1}
+                      </Badge>
+                    </div>
+                    <button
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full p-1"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Add more pages tile */}
+                <button
+                  onClick={() => addMoreRef.current?.click()}
+                  className="flex flex-col items-center justify-center h-36 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5 transition-colors gap-2"
+                >
+                  <Plus className="h-6 w-6 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Add Pages</span>
+                </button>
+              </div>
+            </ScrollArea>
+
+            <input
+              ref={addMoreRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleUpload}
+              className="hidden"
+            />
+
             {error && (
               <div className="flex items-center gap-2 text-destructive text-sm">
                 <AlertTriangle className="h-4 w-4" />
                 {error}
               </div>
             )}
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <ImageIcon className="h-4 w-4" />
+              {worksheetImages.length} page{worksheetImages.length !== 1 ? 's' : ''} uploaded
+            </div>
+
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleReset} disabled={isGenerating}>
-                Change Image
+                Start Over
               </Button>
               <Button onClick={generateAnswerSheet} disabled={isGenerating} className="flex-1">
                 {isGenerating ? (
@@ -286,7 +281,7 @@ export function CreateAnswerSheetDialog({ open, onOpenChange, onAnswerSheetCreat
                 ) : (
                   <>
                     <FileText className="h-4 w-4 mr-2" />
-                    Generate Answer Sheet
+                    Generate Answer Sheet ({worksheetImages.length} page{worksheetImages.length !== 1 ? 's' : ''})
                   </>
                 )}
               </Button>
