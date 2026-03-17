@@ -1746,7 +1746,12 @@ serve(async (req: Request) => {
         userContent.push(formatImageForAI(imageBase64));
       }
 
-      if (answerGuideBase64) {
+      if (answerGuideImages && answerGuideImages.length > 0) {
+        userContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+        for (const guideImg of answerGuideImages) {
+          userContent.push(formatImageForAI(guideImg));
+        }
+      } else if (answerGuideBase64) {
         userContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
         userContent.push(formatImageForAI(answerGuideBase64));
       }
