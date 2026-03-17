@@ -1460,6 +1460,7 @@ serve(async (req: Request) => {
       additionalImages,
       solutionBase64,
       answerGuideBase64,
+      answerGuideImages,
       questionId,
       rubricSteps,
       identifyOnly,
