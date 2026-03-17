@@ -1898,6 +1898,7 @@ serve(async (req: Request) => {
       customRubric,
       promptText,
       answerGuideBase64: answerGuideBase64 ? "yes" : undefined,
+      answerGuideImages: answerGuideImages?.length ? "yes" : undefined,
       gradingStyleContext,
       teacherAnswerSampleContext,
       verificationContext,
