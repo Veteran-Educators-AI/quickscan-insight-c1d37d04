@@ -982,9 +982,14 @@ function buildGradingPrompt(opts: {
     ? `\nCUSTOM RUBRIC:\n${opts.customRubric.criteria.map((c: any, i: number) => `  ${i + 1}. ${c.name} (${c.weight}%): ${c.description}`).join("\n")}`
     : "";
 
-  const hasAnswerGuide = opts.answerGuideBase64 || opts.answerGuideImages;
+  const answerGuideCount = Array.isArray(opts.answerGuideImages)
+    ? opts.answerGuideImages.length
+    : opts.answerGuideBase64
+      ? 1
+      : 0;
+  const hasAnswerGuide = answerGuideCount > 0;
   const teacherGuideNote = hasAnswerGuide
-    ? `\nIMPORTANT: Teacher answer guide image(s) are attached. Use them as the PRIMARY grading reference. Compare student work against ALL answer guide pages to determine correctness. Identify which questions from the answer guide the student attempted, and grade each one individually.`
+    ? `\nIMPORTANT: ${answerGuideCount} teacher answer guide image(s) are attached. They may represent multiple different worksheets, quizzes, or solution sets. Before grading, compare the student paper against ALL uploaded guide pages, determine which guide page(s) best match that specific paper, ignore unrelated guides, and grade only against the matched answer set. If a guide does not clearly match a student response, say so and rely on the visible question content rather than forcing a bad match.`
     : "";
 
   const detailLevel =
