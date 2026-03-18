@@ -1023,7 +1023,7 @@ export default function Scan() {
     setShowBatchGradingModeSelector(true);
   };
 
-  const handleBatchGradingModeSelect = async (mode: BatchGradingMode, answerGuideImage?: string) => {
+  const handleBatchGradingModeSelect = async (mode: BatchGradingMode, answerGuideImages?: string[]) => {
     setShowBatchGradingModeSelector(false);
     
     // Check if all items have students assigned
@@ -1038,11 +1038,10 @@ export default function Scan() {
       return;
     }
 
-    if (mode === 'teacher-guided' && answerGuideImage) {
-      const guideImages = [answerGuideImage, ...batchAnswerGuideImages.filter(img => img !== answerGuideImage)];
-      setBatchAnswerGuideImages(guideImages);
-      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers with ${guideImages.length} answer sheet page(s)...`);
-      await batch.startTeacherGuidedBatchAnalysis(guideImages, mockRubricSteps);
+    if (mode === 'teacher-guided' && answerGuideImages?.length) {
+      setBatchAnswerGuideImages(answerGuideImages);
+      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers with ${answerGuideImages.length} answer sheet page(s)...`);
+      await batch.startTeacherGuidedBatchAnalysis(answerGuideImages, mockRubricSteps);
     } else if (mode === 'ai-learned') {
       toast.info(`Starting AI analysis with your learned grading style...`);
       await batch.startBatchAnalysis(mockRubricSteps, 'teacher', undefined, undefined, true);
@@ -1992,12 +1991,13 @@ export default function Scan() {
 
       {/* Batch Grading Mode Selector Dialog */}
       <Dialog open={showBatchGradingModeSelector} onOpenChange={setShowBatchGradingModeSelector}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <BatchGradingModeSelector
             itemCount={batch.items.length}
             onSelectMode={handleBatchGradingModeSelect}
             onCancel={() => setShowBatchGradingModeSelector(false)}
             isProcessing={batch.isProcessing}
+            initialAnswerGuideImages={batchAnswerGuideImages}
           />
         </DialogContent>
       </Dialog>
