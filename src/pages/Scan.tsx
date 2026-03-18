@@ -1040,7 +1040,7 @@ export default function Scan() {
 
     if (mode === 'teacher-guided' && answerGuideImages?.length) {
       setBatchAnswerGuideImages(answerGuideImages);
-      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers with ${answerGuideImages.length} answer sheet page(s)...`);
+      toast.info(`Starting teacher-guided analysis of ${batch.items.length} papers with AI matching across ${answerGuideImages.length} uploaded guide page(s)...`);
       await batch.startTeacherGuidedBatchAnalysis(answerGuideImages, mockRubricSteps);
     } else if (mode === 'ai-learned') {
       toast.info(`Starting AI analysis with your learned grading style...`);
