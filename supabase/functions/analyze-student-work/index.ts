@@ -1754,12 +1754,15 @@ serve(async (req: Request) => {
       }
 
       if (answerGuideImages && answerGuideImages.length > 0) {
-        userContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+        userContent.push({
+          type: "text",
+          text: `[TEACHER ANSWER GUIDES — AUTO MATCH REQUIRED: ${answerGuideImages.length} uploaded page(s). These may include multiple different answer sets. First select the guide page(s) that best match this student paper, then grade only against that matched guide.]`,
+        });
         for (const guideImg of answerGuideImages) {
           userContent.push(formatImageForAI(guideImg));
         }
       } else if (answerGuideBase64) {
-        userContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
+        userContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE — AUTO MATCH REQUIRED: Use this attached guide as the primary reference.]" });
         userContent.push(formatImageForAI(answerGuideBase64));
       }
 
