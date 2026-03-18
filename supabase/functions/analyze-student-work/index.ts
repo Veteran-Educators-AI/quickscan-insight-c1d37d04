@@ -1920,12 +1920,15 @@ serve(async (req: Request) => {
     // ── Build message with images ──
     const imageContent: any[] = [{ type: "text", text: userPromptText }, formatImageForAI(imageBase64)];
     if (answerGuideImages && answerGuideImages.length > 0) {
-      imageContent.push({ type: "text", text: `[TEACHER ANSWER GUIDE — ${answerGuideImages.length} page(s):]` });
+      imageContent.push({
+        type: "text",
+        text: `[TEACHER ANSWER GUIDES — AUTO MATCH REQUIRED: ${answerGuideImages.length} uploaded page(s). These may include multiple different answer sets. First select the guide page(s) that best match this student paper, then grade only against that matched guide.]`,
+      });
       for (const guideImg of answerGuideImages) {
         imageContent.push(formatImageForAI(guideImg));
       }
     } else if (answerGuideBase64) {
-      imageContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE:]" });
+      imageContent.push({ type: "text", text: "[TEACHER ANSWER GUIDE — AUTO MATCH REQUIRED: Use this attached guide as the primary reference.]" });
       imageContent.push(formatImageForAI(answerGuideBase64));
     }
     if (additionalImages?.length) {

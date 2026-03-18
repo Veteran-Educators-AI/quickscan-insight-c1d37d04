@@ -199,8 +199,8 @@ export function BatchGradingModeSelector({
                 <div>
                   <p className="text-sm font-medium">Teacher-Guided AI</p>
                   <p className="text-xs text-muted-foreground">
-                    Upload one or more answer-sheet pages or solution sets. AI compares each student's work
-                    against all uploaded guide pages for more accurate grading.
+                    Upload one or more answer-sheet pages or solution sets. AI first matches each student's work
+                    to the most relevant guide page(s), then grades only against that matched answer set.
                   </p>
                 </div>
               </div>
@@ -274,7 +274,7 @@ export function BatchGradingModeSelector({
 
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CheckCircle className="h-3.5 w-3.5 text-success" />
-                Same guide applied to all {itemCount} papers
+                AI matches each paper to the relevant guide page(s)
               </div>
             </div>
           </TabsContent>
