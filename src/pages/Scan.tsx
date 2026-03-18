@@ -1991,12 +1991,13 @@ export default function Scan() {
 
       {/* Batch Grading Mode Selector Dialog */}
       <Dialog open={showBatchGradingModeSelector} onOpenChange={setShowBatchGradingModeSelector}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <BatchGradingModeSelector
             itemCount={batch.items.length}
             onSelectMode={handleBatchGradingModeSelect}
             onCancel={() => setShowBatchGradingModeSelector(false)}
             isProcessing={batch.isProcessing}
+            initialAnswerGuideImages={batchAnswerGuideImages}
           />
         </DialogContent>
       </Dialog>

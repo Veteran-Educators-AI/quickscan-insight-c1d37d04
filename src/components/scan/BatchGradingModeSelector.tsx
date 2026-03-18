@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Bot, User, FileImage, Upload, ArrowRight, CheckCircle, X, BookOpen, Scale, Play, Pencil, GraduationCap, Brain } from 'lucide-react';
+import { Bot, Upload, CheckCircle, X, BookOpen, Scale, Play, Pencil, Brain, Plus, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,14 +8,16 @@ import { toast } from 'sonner';
 import { resizeImage, blobToBase64 } from '@/lib/imageUtils';
 import { useAILearningStatus } from '@/hooks/useAILearningStatus';
 import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export type BatchGradingMode = 'ai' | 'ai-learned' | 'teacher-guided' | 'manual';
 
 interface BatchGradingModeSelectorProps {
   itemCount: number;
-  onSelectMode: (mode: BatchGradingMode, answerGuideImage?: string) => void;
+  onSelectMode: (mode: BatchGradingMode, answerGuideImages?: string[]) => void;
   onCancel: () => void;
   isProcessing?: boolean;
+  initialAnswerGuideImages?: string[];
 }
 
 export function BatchGradingModeSelector({
@@ -23,32 +25,49 @@ export function BatchGradingModeSelector({
   onSelectMode,
   onCancel,
   isProcessing = false,
+  initialAnswerGuideImages = [],
 }: BatchGradingModeSelectorProps) {
   const [selectedMode, setSelectedMode] = useState<BatchGradingMode | null>(null);
-  const [answerGuideImage, setAnswerGuideImage] = useState<string | null>(null);
+  const [answerGuideImages, setAnswerGuideImages] = useState<string[]>(initialAnswerGuideImages);
   const answerGuideInputRef = useRef<HTMLInputElement>(null);
   const { isReady: aiLearningReady, correctionCount, readinessPercent, isLoading: learningStatusLoading } = useAILearningStatus();
 
-  const handleAnswerGuideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const resizedBlob = await resizeImage(file);
-        const dataUrl = await blobToBase64(resizedBlob);
-        setAnswerGuideImage(dataUrl);
-        toast.success('Answer guide uploaded!');
-      } catch (err) {
-        console.error('Error resizing image:', err);
+  const processFile = async (file: File): Promise<string> => {
+    try {
+      const resizedBlob = await resizeImage(file);
+      return await blobToBase64(resizedBlob);
+    } catch (err) {
+      console.error('Error resizing image:', err);
+      return await new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (ev) => {
-          const dataUrl = ev.target?.result as string;
-          setAnswerGuideImage(dataUrl);
-          toast.success('Answer guide uploaded!');
-        };
+        reader.onload = (ev) => resolve(ev.target?.result as string);
+        reader.onerror = reject;
         reader.readAsDataURL(file);
-      }
+      });
     }
+  };
+
+  const handleAnswerGuideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+
+    try {
+      const uploadedImages = await Promise.all(Array.from(files).map(processFile));
+      setAnswerGuideImages(prev => [...prev, ...uploadedImages]);
+      toast.success(`${uploadedImages.length} answer guide page${uploadedImages.length === 1 ? '' : 's'} uploaded!`);
+    } catch {
+      toast.error('Failed to upload one or more answer guide pages');
+    }
+
     e.target.value = '';
+  };
+
+  const removeAnswerGuideImage = (index: number) => {
+    setAnswerGuideImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAnswerGuideImages = () => {
+    setAnswerGuideImages([]);
   };
 
   const handleProceed = () => {
@@ -56,15 +75,18 @@ export function BatchGradingModeSelector({
       onSelectMode('ai');
     } else if (selectedMode === 'ai-learned') {
       onSelectMode('ai-learned');
-    } else if (selectedMode === 'teacher-guided' && answerGuideImage) {
-      onSelectMode('teacher-guided', answerGuideImage);
+    } else if (selectedMode === 'teacher-guided' && answerGuideImages.length > 0) {
+      onSelectMode('teacher-guided', answerGuideImages);
     } else if (selectedMode === 'manual') {
       onSelectMode('manual');
     }
   };
 
-  const needsGuide = selectedMode === 'teacher-guided';
-  const canProceed = selectedMode === 'ai' || selectedMode === 'ai-learned' || selectedMode === 'manual' || (selectedMode === 'teacher-guided' && answerGuideImage);
+  const canProceed =
+    selectedMode === 'ai' ||
+    selectedMode === 'ai-learned' ||
+    selectedMode === 'manual' ||
+    (selectedMode === 'teacher-guided' && answerGuideImages.length > 0);
 
   return (
     <Card>
@@ -83,6 +105,7 @@ export function BatchGradingModeSelector({
           ref={answerGuideInputRef}
           onChange={handleAnswerGuideUpload}
           accept="image/*"
+          multiple
           className="hidden"
         />
 
@@ -93,8 +116,8 @@ export function BatchGradingModeSelector({
               <span className="hidden sm:inline">AI Only</span>
               <span className="sm:hidden">AI</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="ai-learned" 
+            <TabsTrigger
+              value="ai-learned"
               className="flex items-center gap-1.5 relative"
               disabled={!aiLearningReady && !learningStatusLoading}
             >
@@ -102,7 +125,7 @@ export function BatchGradingModeSelector({
               <span className="hidden sm:inline">AI Learned</span>
               <span className="sm:hidden">Learned</span>
               {aiLearningReady && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-success" />
               )}
             </TabsTrigger>
             <TabsTrigger value="teacher-guided" className="flex items-center gap-1.5">
@@ -119,18 +142,18 @@ export function BatchGradingModeSelector({
 
           <TabsContent value="ai" className="mt-4">
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                <Bot className="h-5 w-5 text-primary mt-0.5" />
+              <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <Bot className="mt-0.5 h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-sm">AI Analysis</p>
+                  <p className="text-sm font-medium">AI Analysis</p>
                   <p className="text-xs text-muted-foreground">
                     AI grades each paper using its knowledge of math concepts and common rubrics.
                     Fast and consistent grading for the entire batch.
                   </p>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Fastest option for batch grading
               </div>
             </div>
@@ -138,19 +161,19 @@ export function BatchGradingModeSelector({
 
           <TabsContent value="ai-learned" className="mt-4">
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                <Brain className="h-5 w-5 text-green-600 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-lg border border-success/20 bg-success/10 p-3">
+                <Brain className="mt-0.5 h-5 w-5 text-success" />
                 <div>
-                  <p className="font-medium text-sm">AI Learned Your Style</p>
+                  <p className="text-sm font-medium">AI Learned Your Style</p>
                   <p className="text-xs text-muted-foreground">
                     AI grades using patterns learned from your {correctionCount} grading corrections.
                     Applies your preferences for strictness, partial credit, and grading focus.
                   </p>
                 </div>
               </div>
-              
+
               {!aiLearningReady ? (
-                <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+                <div className="space-y-2 rounded-lg bg-muted/50 p-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Learning progress</span>
                     <span className="font-medium">{correctionCount}/10 corrections</span>
@@ -161,8 +184,8 @@ export function BatchGradingModeSelector({
                   </p>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CheckCircle className="h-3.5 w-3.5 text-success" />
                   AI has learned from {correctionCount} of your corrections
                 </div>
               )}
@@ -171,52 +194,86 @@ export function BatchGradingModeSelector({
 
           <TabsContent value="teacher-guided" className="mt-4">
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                <BookOpen className="h-5 w-5 text-amber-600 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-lg border border-warning/20 bg-warning/10 p-3">
+                <BookOpen className="mt-0.5 h-5 w-5 text-warning" />
                 <div>
-                  <p className="font-medium text-sm">Teacher-Guided AI</p>
+                  <p className="text-sm font-medium">Teacher-Guided AI</p>
                   <p className="text-xs text-muted-foreground">
-                    Upload your answer key or solution. AI compares each student's work 
-                    against your guide for more accurate grading.
+                    Upload one or more answer-sheet pages or solution sets. AI compares each student's work
+                    against all uploaded guide pages for more accurate grading.
                   </p>
                 </div>
               </div>
 
-              {/* Answer Guide Upload */}
               <div className="space-y-2">
-                <p className="text-sm font-medium">Answer Guide (Required)</p>
-                {answerGuideImage ? (
-                  <div className="relative">
-                    <img 
-                      src={answerGuideImage} 
-                      alt="Answer guide" 
-                      className="w-full max-h-40 object-contain rounded-lg border"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-6 w-6"
-                      onClick={() => setAnswerGuideImage(null)}
-                    >
-                      <X className="h-4 w-4" />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Answer Guide Pages (Required)</p>
+                  {answerGuideImages.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearAnswerGuideImages}>
+                      Clear all
                     </Button>
-                  </div>
+                  )}
+                </div>
+
+                {answerGuideImages.length > 0 ? (
+                  <>
+                    <ScrollArea className="max-h-[220px]">
+                      <div className="grid grid-cols-2 gap-3 pr-3">
+                        {answerGuideImages.map((image, index) => (
+                          <div key={`${image.slice(0, 24)}-${index}`} className="group relative overflow-hidden rounded-lg border bg-muted/30">
+                            <img
+                              src={image}
+                              alt={`Answer guide page ${index + 1}`}
+                              className="h-32 w-full object-contain"
+                            />
+                            <div className="absolute left-1 top-1">
+                              <Badge variant="secondary" className="text-xs">
+                                Page {index + 1}
+                              </Badge>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeAnswerGuideImage(index)}
+                              className="absolute right-1 top-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                              aria-label={`Remove answer guide page ${index + 1}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => answerGuideInputRef.current?.click()}
+                          className="flex h-32 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-background text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5"
+                        >
+                          <Plus className="h-5 w-5" />
+                          <span className="text-xs">Add Pages</span>
+                        </button>
+                      </div>
+                    </ScrollArea>
+
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      {answerGuideImages.length} answer guide page{answerGuideImages.length === 1 ? '' : 's'} ready
+                    </div>
+                  </>
                 ) : (
                   <Button
                     variant="outline"
-                    className="w-full h-20 border-dashed"
+                    className="h-20 w-full border-dashed"
                     onClick={() => answerGuideInputRef.current?.click()}
                   >
                     <div className="flex flex-col items-center gap-1">
                       <Upload className="h-5 w-5" />
-                      <span className="text-xs">Upload answer key / solution</span>
+                      <span className="text-xs">Upload answer key / solution pages</span>
                     </div>
                   </Button>
                 )}
               </div>
 
-              <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Same guide applied to all {itemCount} papers
               </div>
             </div>
@@ -224,43 +281,42 @@ export function BatchGradingModeSelector({
 
           <TabsContent value="manual" className="mt-4">
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                <Pencil className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/10 p-3">
+                <Pencil className="mt-0.5 h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-sm">Manual Scoring</p>
+                  <p className="text-sm font-medium">Manual Scoring</p>
                   <p className="text-xs text-muted-foreground">
-                    Skip AI analysis. You'll manually enter scores for each paper 
+                    Skip AI analysis. You'll manually enter scores for each paper
                     after viewing the scanned work.
                   </p>
                 </div>
               </div>
-              <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle className="h-3.5 w-3.5 text-success" />
                 Full control over grading
               </div>
             </div>
           </TabsContent>
         </Tabs>
 
-        {/* Action Buttons */}
         <div className="flex gap-3 pt-2">
           <Button variant="outline" className="flex-1" onClick={onCancel}>
             Cancel
           </Button>
-          <Button 
-            variant="hero" 
+          <Button
+            variant="hero"
             className="flex-1"
             onClick={handleProceed}
             disabled={!canProceed || isProcessing}
           >
             {isProcessing ? (
               <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
                 Processing...
               </>
             ) : (
               <>
-                <Play className="h-4 w-4 mr-2" />
+                <Play className="mr-2 h-4 w-4" />
                 {selectedMode === 'manual' ? 'Start Manual Scoring' : `Analyze ${itemCount} Papers`}
               </>
             )}
