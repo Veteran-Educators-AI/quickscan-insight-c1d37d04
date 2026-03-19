@@ -183,17 +183,15 @@ export function BatchImageZoomDialog({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoom > 1) {
-      setIsPanning(true);
-      setStartPos({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      });
-    }
+    setIsPanning(true);
+    setStartPos({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning && zoom > 1) {
+    if (isPanning) {
       setPosition({
         x: e.clientX - startPos.x,
         y: e.clientY - startPos.y,
