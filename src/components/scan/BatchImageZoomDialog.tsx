@@ -239,7 +239,7 @@ export function BatchImageZoomDialog({
 
   // Touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && zoom > 1) {
+    if (e.touches.length === 1) {
       setIsPanning(true);
       setStartPos({
         x: e.touches[0].clientX - position.x,
@@ -249,7 +249,7 @@ export function BatchImageZoomDialog({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isPanning && e.touches.length === 1 && zoom > 1) {
+    if (isPanning && e.touches.length === 1) {
       setPosition({
         x: e.touches[0].clientX - startPos.x,
         y: e.touches[0].clientY - startPos.y,
