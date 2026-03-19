@@ -183,17 +183,15 @@ export function BatchImageZoomDialog({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (zoom > 1) {
-      setIsPanning(true);
-      setStartPos({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      });
-    }
+    setIsPanning(true);
+    setStartPos({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning && zoom > 1) {
+    if (isPanning) {
       setPosition({
         x: e.clientX - startPos.x,
         y: e.clientY - startPos.y,
@@ -241,7 +239,7 @@ export function BatchImageZoomDialog({
 
   // Touch handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1 && zoom > 1) {
+    if (e.touches.length === 1) {
       setIsPanning(true);
       setStartPos({
         x: e.touches[0].clientX - position.x,
@@ -251,7 +249,7 @@ export function BatchImageZoomDialog({
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isPanning && e.touches.length === 1 && zoom > 1) {
+    if (isPanning && e.touches.length === 1) {
       setPosition({
         x: e.touches[0].clientX - startPos.x,
         y: e.touches[0].clientY - startPos.y,
@@ -483,7 +481,7 @@ export function BatchImageZoomDialog({
             ref={containerRef}
             className={cn(
               "relative overflow-hidden bg-muted/30 flex-1",
-              isAnnotating ? 'cursor-crosshair' : zoom > 1 ? 'cursor-grab' : 'cursor-zoom-in',
+              isAnnotating ? 'cursor-crosshair' : 'cursor-grab',
               isPanning && !isAnnotating && 'cursor-grabbing'
             )}
             onMouseDown={isAnnotating ? undefined : handleMouseDown}
