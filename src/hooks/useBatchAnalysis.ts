@@ -107,7 +107,7 @@ async function invokeWithRetry(
     initialDelayMs = 1500,
     compressImages = true,
     imageKeys = ['imageBase64', 'image1Base64', 'image2Base64', 'answerGuideBase64', 'solutionBase64'],
-    imageArrayKeys = ['additionalImages'],
+    imageArrayKeys = ['additionalImages', 'answerGuideImages'],
   } = options;
 
   // Step 1: Compress images in the body to reduce payload size
