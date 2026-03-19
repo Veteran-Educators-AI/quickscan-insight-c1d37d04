@@ -481,7 +481,7 @@ export function BatchImageZoomDialog({
             ref={containerRef}
             className={cn(
               "relative overflow-hidden bg-muted/30 flex-1",
-              isAnnotating ? 'cursor-crosshair' : zoom > 1 ? 'cursor-grab' : 'cursor-zoom-in',
+              isAnnotating ? 'cursor-crosshair' : 'cursor-grab',
               isPanning && !isAnnotating && 'cursor-grabbing'
             )}
             onMouseDown={isAnnotating ? undefined : handleMouseDown}
