@@ -217,8 +217,8 @@ export function BatchGradingModeSelector({
 
                 {answerGuideImages.length > 0 ? (
                   <>
-                    <ScrollArea className="max-h-[220px]">
-                      <div className="grid grid-cols-2 gap-3 pr-3">
+                    <div className="max-h-[300px] overflow-y-auto pr-1">
+                      <div className="grid grid-cols-2 gap-3">
                         {answerGuideImages.map((image, index) => (
                           <div key={`${image.slice(0, 24)}-${index}`} className="group relative overflow-hidden rounded-lg border bg-muted/30">
                             <img
@@ -251,7 +251,7 @@ export function BatchGradingModeSelector({
                           <span className="text-xs">Add Pages</span>
                         </button>
                       </div>
-                    </ScrollArea>
+                    </div>
 
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <ImageIcon className="h-3.5 w-3.5" />
