@@ -214,6 +214,17 @@ function isZeroCouponBondTopic(topicName: string): boolean {
          lowerTopic.includes('zerocoupon');
 }
 
+// Check if topic is SOHCAHTOA / trig ratios related
+function isSOHCAHTOATopic(topicName: string): boolean {
+  const lowerTopic = topicName.toLowerCase();
+  return lowerTopic.includes('sohcahtoa') || 
+         lowerTopic.includes('soh cah toa') ||
+         lowerTopic.includes('trigonometric ratio') ||
+         lowerTopic.includes('sine cosine tangent') ||
+         (lowerTopic.includes('trig') && lowerTopic.includes('ratio'));
+}
+
+
 function hasExplicitExitTicket(slides: LessonSlide[]): boolean {
   return slides.some((slide) => {
     const title = slide.title?.toLowerCase() || "";
