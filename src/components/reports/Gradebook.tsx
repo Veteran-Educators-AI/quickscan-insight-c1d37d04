@@ -290,6 +290,7 @@ export function Gradebook({ classId }: GradebookProps) {
   const [pushAssignmentOpen, setPushAssignmentOpen] = useState(false);
   const [showStudentAverages, setShowStudentAverages] = useState(true);
   const [pushAssignmentTopic, setPushAssignmentTopic] = useState('');
+  const [doeAutoFillOpen, setDoeAutoFillOpen] = useState(false);
   
   // Scroll to gradebook and expand when URL params change
   useEffect(() => {
