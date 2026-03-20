@@ -21,7 +21,8 @@ import {
   Info,
   Rocket,
   Users,
-  BarChart3
+  BarChart3,
+  Zap
 } from 'lucide-react';
 import { PushAssignmentDialog } from './PushAssignmentDialog';
 import { DOEAutoFillDialog } from './DOEAutoFillDialog';
