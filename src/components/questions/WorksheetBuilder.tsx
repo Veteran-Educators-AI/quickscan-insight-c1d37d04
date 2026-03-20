@@ -663,6 +663,7 @@ export function WorksheetBuilder({
     setQuestionCount(worksheet.settings.questionCount);
     setDifficultyFilter(worksheet.settings.difficultyFilter);
     setShowAnswerLines(worksheet.settings.showAnswerLines);
+    setAnswerFormat((worksheet.settings as any).answerFormat ?? "ai_optimized");
     setIncludeFormulas(worksheet.settings.includeFormulas ?? false);
     setIncludeFormulaSheet(worksheet.settings.includeFormulaSheet ?? false);
     setIncludeGraphPaper(worksheet.settings.includeGraphPaper ?? false);
