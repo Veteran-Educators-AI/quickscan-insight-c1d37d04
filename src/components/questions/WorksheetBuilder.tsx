@@ -1854,9 +1854,60 @@ export function WorksheetBuilder({
             <!-- Work Area Box -->
             ${
               showAnswerLines
-                ? `
+                ? answerFormat === 'step_by_step' ? `
               <div style="border: 2px solid #1e3a5f; margin-top: 0.5rem; margin-left: 1rem; margin-right: 0.5rem; background-color: #ffffff; overflow: hidden; box-sizing: border-box;">
-                <!-- Work Area Section -->
+                ${[1,2,3].map(step => `
+                <div style="border-bottom: ${step < 3 ? '2px dashed #94a3b8' : 'none'}; padding: 0.4rem 0.75rem; background-color: ${step === 1 ? '#f0f9ff' : '#ffffff'};">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem;">
+                    <span style="font-size: 0.65rem; font-weight: 700; color: #1e3a5f; text-transform: uppercase; background-color: #dbeafe; padding: 0.1rem 0.4rem; border-radius: 0.2rem; border: 1px solid #93c5fd;">Step ${step}</span>
+                    <span style="font-size: 0.55rem; color: #64748b; font-style: italic;">${step === 1 ? 'Set up / identify' : step === 2 ? 'Calculate / reason' : 'Solve & simplify'}</span>
+                  </div>
+                  <div style="min-height: 30px; position: relative;">
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                    <div style="position: absolute; top: 0; left: 0; width: 8px; height: 8px; border-left: 2px solid #1e3a5f; border-top: 2px solid #1e3a5f;"></div>
+                    <div style="position: absolute; top: 0; right: 0; width: 8px; height: 8px; border-right: 2px solid #1e3a5f; border-top: 2px solid #1e3a5f;"></div>
+                  </div>
+                </div>`).join('')}
+                <div style="padding: 0.5rem 0.75rem; background-color: #fef3c7; border-top: 2px solid #f59e0b;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="font-size: 0.7rem; font-weight: 700; color: #92400e; text-transform: uppercase; background-color: #fde68a; padding: 0.15rem 0.5rem; border-radius: 0.2rem; border: 1.5px solid #f59e0b; white-space: nowrap;">Final Answer</span>
+                    <div style="flex: 1; border-bottom: 1.5px solid #d97706; min-height: 1.25rem;"></div>
+                  </div>
+                </div>
+              </div>`
+                : answerFormat === 'dual_zone' ? `
+              <div style="border: 2px solid #1e3a5f; margin-top: 0.5rem; margin-left: 1rem; margin-right: 0.5rem; background-color: #ffffff; overflow: hidden; box-sizing: border-box; display: flex;">
+                <div style="flex: 7; border-right: 2px solid #1e3a5f; padding: 0.5rem 0.75rem; background-color: #f8fafc; position: relative;">
+                  <span style="font-size: 0.65rem; font-weight: 700; color: #1e3a5f; text-transform: uppercase; background-color: #e0f2fe; padding: 0.1rem 0.4rem; border-radius: 0.2rem; border: 1px solid #7dd3fc;">Work Area</span>
+                  <div style="min-height: 80px; margin-top: 0.4rem;">
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                    <div style="border-bottom: 1px solid #cbd5e1; height: 1rem;"></div>
+                  </div>
+                </div>
+                <div style="flex: 3; padding: 0.5rem; background-color: #fef3c7; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+                  <span style="font-size: 0.65rem; font-weight: 700; color: #92400e; text-transform: uppercase; margin-bottom: 0.4rem;">Final Answer</span>
+                  <div style="width: 85%; min-height: 40px; border-bottom: 2px solid #d97706; background-color: #fffbeb; padding: 0.2rem;"></div>
+                </div>
+              </div>`
+                : answerFormat === 'grid_cell' ? `
+              <div style="border: 2px solid #1e3a5f; margin-top: 0.5rem; margin-left: 1rem; margin-right: 0.5rem; background-color: #ffffff; overflow: hidden; box-sizing: border-box;">
+                <div style="border-bottom: 2px dashed #94a3b8; padding: 0.4rem 0.75rem; background-color: #f8fafc;">
+                  <span style="font-size: 0.6rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Scratch Work</span>
+                  <div style="min-height: 40px;"><div style="border-bottom: 1px solid #e2e8f0; height: 1rem;"></div><div style="border-bottom: 1px solid #e2e8f0; height: 1rem;"></div></div>
+                </div>
+                <div style="padding: 0.5rem 0.75rem; background-color: #fef3c7; border-top: 2px solid #f59e0b;">
+                  <span style="font-size: 0.65rem; font-weight: 700; color: #92400e; text-transform: uppercase; display: block; margin-bottom: 0.4rem;">Final answer — one character per cell:</span>
+                  <div style="display: flex; gap: 2px; justify-content: center; flex-wrap: wrap;">
+                    ${Array.from({length: 14}, () => '<div style="width: 24px; height: 28px; border: 2px solid #d97706; background-color: #fffbeb; border-radius: 2px;"></div>').join('')}
+                  </div>
+                  <p style="font-size: 0.5rem; color: #92400e; margin-top: 0.25rem; text-align: center; font-style: italic;">One cell per digit, letter, symbol, decimal, or fraction bar</p>
+                </div>
+              </div>`
+                : `
+              <div style="border: 2px solid #1e3a5f; margin-top: 0.5rem; margin-left: 1rem; margin-right: 0.5rem; background-color: #ffffff; overflow: hidden; box-sizing: border-box;">
                 <div style="border-bottom: 2px dashed #94a3b8; padding: 0.5rem 0.75rem; background-color: #ffffff;">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.375rem;">
                     <span style="font-size: 0.7rem; font-weight: 700; color: #1e3a5f; text-transform: uppercase; letter-spacing: 0.05em;">
@@ -1876,8 +1927,6 @@ export function WorksheetBuilder({
                     <div style="position: absolute; top: 0; right: 0; width: 10px; height: 10px; border-right: 2px solid #1e3a5f; border-top: 2px solid #1e3a5f;"></div>
                   </div>
                 </div>
-                
-                <!-- Final Answer Section -->
                 <div style="padding: 0.5rem 0.75rem; background-color: #fef3c7; border-top: 2px solid #f59e0b;">
                   <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <span style="font-size: 0.7rem; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.03em; background-color: #fde68a; padding: 0.15rem 0.5rem; border-radius: 0.2rem; border: 1.5px solid #f59e0b; white-space: nowrap;">
