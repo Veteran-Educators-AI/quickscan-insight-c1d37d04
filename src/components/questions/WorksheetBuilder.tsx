@@ -430,6 +430,7 @@ export function WorksheetBuilder({
     }
   }, [selectedQuestions, hasUserEditedTitle, worksheetMode]);
   const [showAnswerLines, setShowAnswerLines] = useState(true);
+  const [answerFormat, setAnswerFormat] = useState<"ai_optimized" | "step_by_step" | "grid_cell" | "dual_zone">("ai_optimized");
   const [questionCount, setQuestionCount] = useState("5");
   const [difficultyFilter, setDifficultyFilter] = useState<string[]>(["medium", "hard", "challenging"]);
   const [bloomFilter, setBloomFilter] = useState<BloomLevel[]>([
