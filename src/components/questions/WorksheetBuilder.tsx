@@ -619,6 +619,7 @@ export function WorksheetBuilder({
             questionCount,
             difficultyFilter,
             showAnswerLines,
+            answerFormat,
             includeFormulas,
             includeFormulaSheet,
             includeGraphPaper,
