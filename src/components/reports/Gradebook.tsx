@@ -1590,6 +1590,12 @@ export function Gradebook({ classId }: GradebookProps) {
           preselectedStandard={pushPracticeStudent.standard}
         />
       )}
+
+      <DOEAutoFillDialog
+        open={doeAutoFillOpen}
+        onOpenChange={setDoeAutoFillOpen}
+        students={doeStudentData}
+      />
     </Collapsible>
   );
 }
