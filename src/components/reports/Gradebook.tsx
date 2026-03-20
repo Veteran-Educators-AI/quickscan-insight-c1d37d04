@@ -665,7 +665,54 @@ export function Gradebook({ classId }: GradebookProps) {
     toast.success('NYC DOE Gradebook CSV exported! Upload this file to the DOE Gradebook portal.', { duration: 5000 });
   };
 
-  const getGradeColor = (grade: number) => {
+  const getLetterGradeStandalone = (avg: number): string => {
+    if (avg >= 97) return 'A+';
+    if (avg >= 93) return 'A';
+    if (avg >= 90) return 'A-';
+    if (avg >= 87) return 'B+';
+    if (avg >= 83) return 'B';
+    if (avg >= 80) return 'B-';
+    if (avg >= 77) return 'C+';
+    if (avg >= 73) return 'C';
+    if (avg >= 70) return 'C-';
+    if (avg >= 67) return 'D+';
+    if (avg >= 65) return 'D';
+    return 'F';
+  };
+
+  // Compute student grade data for DOE Auto-Fill dialog
+  const doeStudentData = useMemo(() => {
+    if (!filteredGrades.length) return [];
+    const map = new Map<string, { lastName: string; firstName: string; className: string; grades: number[] }>();
+    filteredGrades.forEach(g => {
+      if (!g.student) return;
+      const existing = map.get(g.student_id);
+      if (existing) {
+        existing.grades.push(g.grade);
+      } else {
+        map.set(g.student_id, {
+          lastName: g.student.last_name || '',
+          firstName: g.student.first_name || '',
+          className: g.student.class?.name || '',
+          grades: [g.grade],
+        });
+      }
+    });
+    return Array.from(map.values())
+      .sort((a, b) => a.lastName.localeCompare(b.lastName))
+      .map(s => {
+        const avg = Math.round(s.grades.reduce((sum, g) => sum + g, 0) / s.grades.length);
+        return {
+          lastName: s.lastName,
+          firstName: s.firstName,
+          className: s.className,
+          numericGrade: avg,
+          letterGrade: getLetterGradeStandalone(avg),
+          assessmentCount: s.grades.length,
+        };
+      });
+  }, [filteredGrades]);
+
     if (grade >= 80) return 'text-green-600 dark:text-green-400';
     if (grade >= 50) return 'text-yellow-600 dark:text-yellow-400';
     return 'text-red-600 dark:text-red-400';
