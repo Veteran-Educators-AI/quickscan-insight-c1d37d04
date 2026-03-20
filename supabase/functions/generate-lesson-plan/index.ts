@@ -265,10 +265,13 @@ serve(async (req) => {
 
     console.log(`Generating lesson plan for: ${topicName} (${standard})`);
 
-    // Add specialized content for Zero-Coupon Bonds
-    const specializedContent = isZeroCouponBondTopic(topicName) 
-      ? `\n\nUSE THE FOLLOWING DETAILED CONTENT AND EXAMPLES IN YOUR LESSON:\n${ZERO_COUPON_BOND_CONTENT}\n\nYou MUST include at least 5 worked examples from this content.`
-      : '';
+    // Add specialized content for known topics
+    let specializedContent = '';
+    if (isZeroCouponBondTopic(topicName)) {
+      specializedContent = `\n\nUSE THE FOLLOWING DETAILED CONTENT AND EXAMPLES IN YOUR LESSON:\n${ZERO_COUPON_BOND_CONTENT}\n\nYou MUST include at least 5 worked examples from this content.`;
+    } else if (isSOHCAHTOATopic(topicName)) {
+      specializedContent = `\n\nUSE THE FOLLOWING DETAILED CONTENT AND EXAMPLES IN YOUR LESSON:\n${SOHCAHTOA_CONTENT}\n\nYou MUST include the mnemonic breakdown, all special angle examples (30°, 45°, 60°), real-world applications, and at least 6 worked examples. Include right triangle diagrams descriptions with clearly labeled Opposite, Adjacent, and Hypotenuse sides.`;
+    }
 
     const prompt = `Create a comprehensive PowerPoint-style lesson plan for teaching "${topicName}" aligned to NYS Regents standard ${standard}.
 
