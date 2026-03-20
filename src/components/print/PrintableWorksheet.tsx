@@ -40,6 +40,9 @@ const LEVEL_DESCRIPTIONS: Record<AdvancementLevel, string> = {
   F: 'Needs Intervention - Requires intensive support',
 };
 
+// Answer format types for structured student responses
+export type AnswerFormat = 'ai_optimized' | 'step_by_step' | 'grid_cell' | 'dual_zone';
+
 interface PrintableWorksheetProps {
   student: Student;
   questions: Question[];
@@ -51,6 +54,7 @@ interface PrintableWorksheetProps {
   standard?: string;
   teacherName?: string;
   aiOptimizedLayout?: boolean; // Enable AI-optimized bounded answer zones
+  answerFormat?: AnswerFormat; // Structured answer format selection
   pageNumber?: number; // For multi-page worksheets - current page
   totalPages?: number; // For multi-page worksheets - total pages
   hideLevelFromStudent?: boolean; // Hide level indicator except for Advanced (A) students
