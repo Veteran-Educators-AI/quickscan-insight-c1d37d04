@@ -4340,9 +4340,41 @@ export function WorksheetBuilder({
                     className="rounded border-input"
                   />
                   <Label htmlFor="answerLines" className="text-sm cursor-pointer">
-                    Include answer lines
+                    Include answer zones
                   </Label>
                 </div>
+
+                {/* Answer Format Selector */}
+                {showAnswerLines && (
+                  <div className="ml-5 space-y-2 border-l-2 border-primary/20 pl-3">
+                    <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Brain className="h-3 w-3" />
+                      Answer Format (for AI grading accuracy)
+                    </Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { value: 'ai_optimized' as const, label: 'Work + Answer', desc: 'Work area → final answer box' },
+                        { value: 'step_by_step' as const, label: 'Step-by-Step', desc: 'Step 1 → 2 → 3 → final answer' },
+                        { value: 'dual_zone' as const, label: 'Dual Zone', desc: 'Work left | answer right' },
+                        { value: 'grid_cell' as const, label: 'Grid Cells', desc: 'One character per cell' },
+                      ].map((fmt) => (
+                        <button
+                          key={fmt.value}
+                          type="button"
+                          onClick={() => setAnswerFormat(fmt.value)}
+                          className={`text-left p-2 rounded-md border text-xs transition-all ${
+                            answerFormat === fmt.value
+                              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                              : 'border-border hover:border-muted-foreground/40'
+                          }`}
+                        >
+                          <span className="font-medium block">{fmt.label}</span>
+                          <span className="text-muted-foreground text-[10px]">{fmt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
