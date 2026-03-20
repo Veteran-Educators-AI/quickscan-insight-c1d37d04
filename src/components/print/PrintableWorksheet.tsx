@@ -652,8 +652,8 @@ export function PrintableWorksheet({
         </div>
       )}
 
-      {/* AI Scanning Instructions Banner (only for AI-optimized layout) */}
-      {aiOptimizedLayout && (
+      {/* Scanning Instructions Banner — adapts to answer format */}
+      {showAnswerBox && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -671,7 +671,13 @@ export function PrintableWorksheet({
             📋 Instructions
           </span>
           <span style={{ flex: 1 }}>
-            Write all work in the <strong>Work Area</strong> boxes. Put your final answer in the <strong>Final Answer</strong> section.
+            {answerFormat === 'step_by_step'
+              ? <>Complete each <strong>Step</strong> box in order, then write your result in the <strong>Final Answer</strong> section.</>
+              : answerFormat === 'grid_cell'
+              ? <>Write your final answer in the <strong>grid cells</strong> — one character per box. Use scratch space for your work.</>
+              : answerFormat === 'dual_zone'
+              ? <>Show all work on the <strong>left side</strong>. Write only your final answer on the <strong>right side</strong>.</>
+              : <>Write all work in the <strong>Work Area</strong> boxes. Put your final answer in the <strong>Final Answer</strong> section.</>}
           </span>
         </div>
       )}
