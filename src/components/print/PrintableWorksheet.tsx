@@ -828,14 +828,8 @@ export function PrintableWorksheet({
                   />
                 )}
 
-                {/* Answer Box - AI Optimized or Standard */}
-                {showAnswerBox && (
-                  aiOptimizedLayout ? (
-                    <AIOptimizedAnswerBox questionNumber={index + 1} />
-                  ) : (
-                    <StandardAnswerBox />
-                  )
-                )}
+                {/* Answer Box - format-aware rendering */}
+                {renderAnswerBox(index + 1)}
               </div>
             </div>
           </div>
