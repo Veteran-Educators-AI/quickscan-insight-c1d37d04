@@ -24,6 +24,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { PushAssignmentDialog } from './PushAssignmentDialog';
+import { DOEAutoFillDialog } from './DOEAutoFillDialog';
 import { PushStudentPracticeDialog } from './PushStudentPracticeDialog';
 import { StudentReportDialog } from './StudentReportDialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
