@@ -915,6 +915,15 @@ export function Gradebook({ classId }: GradebookProps) {
                 Export CSV
               </Button>
               <Button 
+                variant="outline" 
+                onClick={handleExportDOEGradebook} 
+                disabled={!filteredGrades.length}
+                className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/20"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                DOE Gradebook
+              </Button>
+              <Button 
                 onClick={handleSyncToScholar} 
                 disabled={!filteredGrades.length || isSyncingToScholar}
                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
