@@ -584,6 +584,84 @@ export function Gradebook({ classId }: GradebookProps) {
     toast.success('Gradebook exported!');
   };
 
+  const handleExportDOEGradebook = () => {
+    if (!filteredGrades.length) return;
+
+    // Build per-student averages for DOE format
+    const studentGrades = new Map<string, {
+      lastName: string;
+      firstName: string;
+      grades: number[];
+      className: string;
+    }>();
+
+    filteredGrades.forEach(g => {
+      if (!g.student) return;
+      const key = g.student_id;
+      const existing = studentGrades.get(key);
+
+      if (existing) {
+        existing.grades.push(g.grade);
+      } else {
+        studentGrades.set(key, {
+          lastName: g.student.last_name || '',
+          firstName: g.student.first_name || '',
+          grades: [g.grade],
+          className: g.student.class?.name || '',
+        });
+      }
+    });
+
+    // NYC DOE Gradebook CSV format
+    const headers = [
+      'Last Name',
+      'First Name',
+      'Class',
+      'Mark',
+      'Grade (Numeric)',
+      'Comment',
+    ];
+
+    const getLetterGrade = (avg: number): string => {
+      if (avg >= 97) return 'A+';
+      if (avg >= 93) return 'A';
+      if (avg >= 90) return 'A-';
+      if (avg >= 87) return 'B+';
+      if (avg >= 83) return 'B';
+      if (avg >= 80) return 'B-';
+      if (avg >= 77) return 'C+';
+      if (avg >= 73) return 'C';
+      if (avg >= 70) return 'C-';
+      if (avg >= 67) return 'D+';
+      if (avg >= 65) return 'D';
+      return 'F';
+    };
+
+    const rows = Array.from(studentGrades.values())
+      .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
+      .map(student => {
+        const avg = Math.round(student.grades.reduce((s, g) => s + g, 0) / student.grades.length);
+        return [
+          student.lastName,
+          student.firstName,
+          student.className,
+          getLetterGrade(avg),
+          avg,
+          `Based on ${student.grades.length} assessment(s)`,
+        ];
+      });
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `DOE-Gradebook-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('NYC DOE Gradebook CSV exported! Upload this file to the DOE Gradebook portal.', { duration: 5000 });
+  };
+
   const getGradeColor = (grade: number) => {
     if (grade >= 80) return 'text-green-600 dark:text-green-400';
     if (grade >= 50) return 'text-yellow-600 dark:text-yellow-400';
