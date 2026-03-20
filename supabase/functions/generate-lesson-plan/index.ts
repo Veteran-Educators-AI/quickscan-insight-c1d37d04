@@ -87,6 +87,82 @@ Even though no cash is received, investor owes taxes on phantom income.
 - Students may use simple interest instead of compound interest
 `;
 
+const SOHCAHTOA_CONTENT = `
+## SOHCAHTOA: Right Triangle Trigonometry
+
+### The Mnemonic:
+SOH-CAH-TOA
+- SOH: Sine = Opposite / Hypotenuse → sin(θ) = O/H
+- CAH: Cosine = Adjacent / Hypotenuse → cos(θ) = A/H
+- TOA: Tangent = Opposite / Adjacent → tan(θ) = O/A
+
+Memory trick: "Some Old Hippie Caught Another Hippie Trippin' On Acid"
+
+### Identifying Sides:
+- Hypotenuse: ALWAYS the longest side, opposite the right angle
+- Opposite: The side ACROSS from the angle you're working with
+- Adjacent: The side NEXT TO the angle you're working with (not the hypotenuse)
+
+### Example 1: Finding a Missing Side (30° angle)
+A right triangle has hypotenuse = 10 and angle = 30°. Find the opposite side.
+Solution:
+- sin(30°) = Opposite / 10
+- 0.5 = Opposite / 10
+- Opposite = 10 × 0.5 = 5
+
+### Example 2: Finding a Missing Side (45° angle)
+A right triangle has adjacent side = 8 and angle = 45°. Find the opposite side.
+Solution:
+- tan(45°) = Opposite / 8
+- 1 = Opposite / 8
+- Opposite = 8
+
+### Example 3: Finding a Missing Side (60° angle)
+A right triangle has hypotenuse = 20 and angle = 60°. Find the adjacent side.
+Solution:
+- cos(60°) = Adjacent / 20
+- 0.5 = Adjacent / 20
+- Adjacent = 20 × 0.5 = 10
+
+### Example 4: Finding an Angle
+A right triangle has opposite = 7 and hypotenuse = 14. Find the angle.
+Solution:
+- sin(θ) = 7/14 = 0.5
+- θ = sin⁻¹(0.5) = 30°
+
+### Example 5: Real-World Application (Engineering)
+A ramp must rise 6 feet over a horizontal distance of 24 feet. What is the angle of elevation?
+Solution:
+- tan(θ) = 6/24 = 0.25
+- θ = tan⁻¹(0.25) ≈ 14.04°
+
+### Example 6: Navigation Application
+A ship sails 15 miles east and 8 miles north. What bearing angle did the ship travel?
+Solution:
+- tan(θ) = 8/15 = 0.5333
+- θ = tan⁻¹(0.5333) ≈ 28.07° north of east
+
+### Special Angle Values Table:
+| Angle | sin(θ) | cos(θ) | tan(θ) |
+|-------|--------|--------|--------|
+| 30°   | 1/2    | √3/2   | √3/3   |
+| 45°   | √2/2   | √2/2   | 1      |
+| 60°   | √3/2   | 1/2    | √3     |
+
+### Common Misconceptions:
+- Confusing which side is "opposite" vs "adjacent" — it changes depending on which angle you use
+- Using the wrong trig ratio (e.g., using sine when cosine is needed)
+- Forgetting to use inverse trig functions (sin⁻¹, cos⁻¹, tan⁻¹) when finding angles
+- Mixing up hypotenuse with other sides — hypotenuse is ALWAYS opposite the 90° angle
+- Calculator in wrong mode (degrees vs radians)
+
+### Practice Problems:
+1. In a right triangle, angle A = 35° and the hypotenuse = 12. Find the opposite side.
+2. A ladder leans against a wall at 72° with the ground. If the ladder is 20 ft long, how high up the wall does it reach?
+3. From the top of a 50-meter building, the angle of depression to a car is 40°. How far is the car from the base of the building?
+4. A surveyor measures the angle of elevation to the top of a tree as 55° from a point 30 meters away. How tall is the tree?
+`;
+
 async function callLovableAI(prompt: string): Promise<string> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
