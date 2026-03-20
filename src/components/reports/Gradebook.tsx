@@ -923,7 +923,16 @@ export function Gradebook({ classId }: GradebookProps) {
                 className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/20"
               >
                 <FileText className="h-4 w-4 mr-2" />
-                DOE Gradebook
+                DOE CSV
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setDoeAutoFillOpen(true)} 
+                disabled={!filteredGrades.length}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/20"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                DOE Auto-Fill
               </Button>
               <Button 
                 onClick={handleSyncToScholar} 
