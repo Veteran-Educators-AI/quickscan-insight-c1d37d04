@@ -70,10 +70,11 @@ export function PrintableWorksheet({
   topicName,
   standard,
   teacherName,
-  aiOptimizedLayout = true, // Default to AI-optimized for all diagnostic worksheets
+  aiOptimizedLayout = true,
+  answerFormat = 'ai_optimized',
   pageNumber = 1,
   totalPages = 1,
-  hideLevelFromStudent = true, // Default: hide level from students unless Advanced
+  hideLevelFromStudent = true,
 }: PrintableWorksheetProps) {
   const levelInfo = studentLevel ? LEVEL_COLORS[studentLevel] : null;
   const levelDescription = studentLevel ? LEVEL_DESCRIPTIONS[studentLevel] : null;
