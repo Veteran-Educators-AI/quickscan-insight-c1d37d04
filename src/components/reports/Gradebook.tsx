@@ -21,9 +21,11 @@ import {
   Info,
   Rocket,
   Users,
-  BarChart3
+  BarChart3,
+  Zap
 } from 'lucide-react';
 import { PushAssignmentDialog } from './PushAssignmentDialog';
+import { DOEAutoFillDialog } from './DOEAutoFillDialog';
 import { PushStudentPracticeDialog } from './PushStudentPracticeDialog';
 import { StudentReportDialog } from './StudentReportDialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -289,6 +291,7 @@ export function Gradebook({ classId }: GradebookProps) {
   const [pushAssignmentOpen, setPushAssignmentOpen] = useState(false);
   const [showStudentAverages, setShowStudentAverages] = useState(true);
   const [pushAssignmentTopic, setPushAssignmentTopic] = useState('');
+  const [doeAutoFillOpen, setDoeAutoFillOpen] = useState(false);
   
   // Scroll to gradebook and expand when URL params change
   useEffect(() => {
@@ -662,6 +665,54 @@ export function Gradebook({ classId }: GradebookProps) {
     toast.success('NYC DOE Gradebook CSV exported! Upload this file to the DOE Gradebook portal.', { duration: 5000 });
   };
 
+  const getLetterGradeStandalone = (avg: number): string => {
+    if (avg >= 97) return 'A+';
+    if (avg >= 93) return 'A';
+    if (avg >= 90) return 'A-';
+    if (avg >= 87) return 'B+';
+    if (avg >= 83) return 'B';
+    if (avg >= 80) return 'B-';
+    if (avg >= 77) return 'C+';
+    if (avg >= 73) return 'C';
+    if (avg >= 70) return 'C-';
+    if (avg >= 67) return 'D+';
+    if (avg >= 65) return 'D';
+    return 'F';
+  };
+
+  // Compute student grade data for DOE Auto-Fill dialog
+  const doeStudentData = useMemo(() => {
+    if (!filteredGrades.length) return [];
+    const map = new Map<string, { lastName: string; firstName: string; className: string; grades: number[] }>();
+    filteredGrades.forEach(g => {
+      if (!g.student) return;
+      const existing = map.get(g.student_id);
+      if (existing) {
+        existing.grades.push(g.grade);
+      } else {
+        map.set(g.student_id, {
+          lastName: g.student.last_name || '',
+          firstName: g.student.first_name || '',
+          className: g.student.class?.name || '',
+          grades: [g.grade],
+        });
+      }
+    });
+    return Array.from(map.values())
+      .sort((a, b) => a.lastName.localeCompare(b.lastName))
+      .map(s => {
+        const avg = Math.round(s.grades.reduce((sum, g) => sum + g, 0) / s.grades.length);
+        return {
+          lastName: s.lastName,
+          firstName: s.firstName,
+          className: s.className,
+          numericGrade: avg,
+          letterGrade: getLetterGradeStandalone(avg),
+          assessmentCount: s.grades.length,
+        };
+      });
+  }, [filteredGrades]);
+
   const getGradeColor = (grade: number) => {
     if (grade >= 80) return 'text-green-600 dark:text-green-400';
     if (grade >= 50) return 'text-yellow-600 dark:text-yellow-400';
@@ -921,7 +972,16 @@ export function Gradebook({ classId }: GradebookProps) {
                 className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/20"
               >
                 <FileText className="h-4 w-4 mr-2" />
-                DOE Gradebook
+                DOE CSV
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setDoeAutoFillOpen(true)} 
+                disabled={!filteredGrades.length}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/20"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                DOE Auto-Fill
               </Button>
               <Button 
                 onClick={handleSyncToScholar} 
@@ -1579,6 +1639,12 @@ export function Gradebook({ classId }: GradebookProps) {
           preselectedStandard={pushPracticeStudent.standard}
         />
       )}
+
+      <DOEAutoFillDialog
+        open={doeAutoFillOpen}
+        onOpenChange={setDoeAutoFillOpen}
+        students={doeStudentData}
+      />
     </Collapsible>
   );
 }
