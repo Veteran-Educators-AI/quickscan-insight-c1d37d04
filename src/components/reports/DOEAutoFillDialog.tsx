@@ -433,7 +433,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1">
               <h4 className="font-semibold text-sm flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-4 w-4" />
-                {validationErrors.length} validation error{validationErrors.length > 1 ? 's' : ''} — fix before pushing
+                {validationErrors.length} warning{validationErrors.length > 1 ? 's' : ''} — review before pushing
               </h4>
               <ul className="text-xs space-y-0.5 text-destructive/80">
                 {validationErrors.slice(0, 5).map((e, i) => (
