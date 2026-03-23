@@ -606,7 +606,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
           </Button>
           <Button
             onClick={handleCopyBookmarklet}
-            disabled={!effectiveStudents.length || hasErrors}
+            disabled={!effectiveStudents.length || hasBlockingErrors}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             {copied ? (
