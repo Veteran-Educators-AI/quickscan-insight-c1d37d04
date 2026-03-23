@@ -429,7 +429,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
 
         <div className="space-y-4">
           {/* Validation errors */}
-          {hasErrors && (
+          {hasWarnings && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1">
               <h4 className="font-semibold text-sm flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-4 w-4" />
