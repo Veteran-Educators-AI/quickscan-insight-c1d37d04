@@ -111,7 +111,10 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
     return errors;
   }, [students, overrides, excludedIndices]);
 
-  const hasErrors = validationErrors.length > 0;
+  // Only block on critical errors (NaN grades), treat others as warnings
+  const criticalErrors = validationErrors.filter(e => e.field === 'grade' && e.message.includes('not a number'));
+  const hasBlockingErrors = criticalErrors.length > 0;
+  const hasWarnings = validationErrors.length > 0;
   const errorIndices = new Set(validationErrors.map(e => e.index));
 
   const startEdit = (i: number) => {
