@@ -393,7 +393,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
   }, [effectiveStudents]);
 
   const handleCopyBookmarklet = async () => {
-    if (hasErrors) {
+    if (hasBlockingErrors) {
       toast.error('Fix validation errors before copying the script');
       return;
     }
