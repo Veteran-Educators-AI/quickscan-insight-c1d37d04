@@ -111,7 +111,10 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
     return errors;
   }, [students, overrides, excludedIndices]);
 
-  const hasErrors = validationErrors.length > 0;
+  // Only block on critical errors (NaN grades), treat others as warnings
+  const criticalErrors = validationErrors.filter(e => e.field === 'grade' && e.message.includes('not a number'));
+  const hasBlockingErrors = criticalErrors.length > 0;
+  const hasWarnings = validationErrors.length > 0;
   const errorIndices = new Set(validationErrors.map(e => e.index));
 
   const startEdit = (i: number) => {
@@ -390,7 +393,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
   }, [effectiveStudents]);
 
   const handleCopyBookmarklet = async () => {
-    if (hasErrors) {
+    if (hasBlockingErrors) {
       toast.error('Fix validation errors before copying the script');
       return;
     }
@@ -426,11 +429,11 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
 
         <div className="space-y-4">
           {/* Validation errors */}
-          {hasErrors && (
+          {hasWarnings && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1">
               <h4 className="font-semibold text-sm flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-4 w-4" />
-                {validationErrors.length} validation error{validationErrors.length > 1 ? 's' : ''} — fix before pushing
+                {validationErrors.length} warning{validationErrors.length > 1 ? 's' : ''} — review before pushing
               </h4>
               <ul className="text-xs space-y-0.5 text-destructive/80">
                 {validationErrors.slice(0, 5).map((e, i) => (
@@ -444,7 +447,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
           )}
 
           {/* No errors badge */}
-          {!hasErrors && effectiveStudents.length > 0 && (
+          {!hasWarnings && effectiveStudents.length > 0 && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-green-600" />
               <span className="text-sm text-green-700 dark:text-green-400">
@@ -603,7 +606,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
           </Button>
           <Button
             onClick={handleCopyBookmarklet}
-            disabled={!effectiveStudents.length || hasErrors}
+            disabled={!effectiveStudents.length || hasBlockingErrors}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             {copied ? (
