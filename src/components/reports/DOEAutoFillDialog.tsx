@@ -447,7 +447,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
           )}
 
           {/* No errors badge */}
-          {!hasErrors && effectiveStudents.length > 0 && (
+          {!hasWarnings && effectiveStudents.length > 0 && (
             <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-green-600" />
               <span className="text-sm text-green-700 dark:text-green-400">
