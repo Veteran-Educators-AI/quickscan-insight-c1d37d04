@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
       console.warn('Scholar external_students fetch threw, skipping:', e);
     }
 
-    console.log(`Scholar external_students: ${(extStudents || []).length}`);
+    console.log(`Scholar external_students: ${extStudents.length}`);
 
     // Match external_students → local students by name, collecting linked_user_ids
     const scholarUserToLocal = new Map<string, string>(); // Scholar user_id → local student_id
