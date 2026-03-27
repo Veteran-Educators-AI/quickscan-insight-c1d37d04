@@ -19,10 +19,27 @@ const deriveSupabaseUrl = (serviceRoleKey: string): string | null => {
   } catch { return null; }
 };
 
+/** Safely query a remote table — returns empty array if table doesn't exist */
+async function safeQuery(client: any, table: string, select: string, filters?: (q: any) => any, limit = 1000): Promise<any[]> {
+  try {
+    let q = client.from(table).select(select).limit(limit);
+    if (filters) q = filters(q);
+    const { data, error } = await q;
+    if (error) {
+      console.warn(`Scholar table '${table}' query failed (may not exist): ${error.message}`);
+      return [];
+    }
+    return data || [];
+  } catch (e) {
+    console.warn(`Scholar table '${table}' threw: ${e}`);
+    return [];
+  }
+}
+
 /**
- * Pull Scholar completions — queries the Scholar database's ACTUAL tables
- * (practice_sets, attempts, external_students, student_profiles)
- * and imports grades by matching students on first_name + last_name.
+ * Pull Scholar completions — queries the Scholar (shared) database
+ * and imports grades into local grade_history by matching students on name.
+ * All remote queries are resilient to missing tables.
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -70,7 +87,6 @@ Deno.serve(async (req) => {
 
     const { data: localStudents, error: studentsError } = await studentsQuery;
     if (studentsError) {
-      console.error('Error fetching local students:', studentsError);
       return new Response(
         JSON.stringify({ success: false, error: studentsError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -84,7 +100,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build name→local student map
+    // Build name → local student map (first_name|last_name → {id, class_id})
     const nameToLocal = new Map<string, { id: string; class_id: string }>();
     for (const s of localStudents) {
       const key = `${(s.first_name || '').toLowerCase().trim()}|${(s.last_name || '').toLowerCase().trim()}`;
@@ -107,37 +123,21 @@ Deno.serve(async (req) => {
     }
 
     const scholar = createClient(scholarUrl, scholarKey);
+    const matchedNames: string[] = [];
+    const scholarProfileToLocal = new Map<string, string>(); // Scholar profile id → local student id
 
-    // ── Step 3: Try Scholar external_students (may not exist in remote DB) ──
-    let extStudents: any[] = [];
-    try {
-      const { data, error: extErr } = await scholar
-        .from('external_students')
-        .select('id, external_id, first_name, last_name, full_name, linked_user_id, email')
-        .limit(1000);
+    // ── Step 3: Try multiple strategies to match Scholar students to local ──
 
-      if (extErr) {
-        console.warn('Scholar external_students not available (table may not exist), skipping:', extErr.message);
-      } else {
-        extStudents = data || [];
-      }
-    } catch (e) {
-      console.warn('Scholar external_students fetch threw, skipping:', e);
-    }
-
+    // Strategy A: external_students table (may not exist)
+    const extStudents = await safeQuery(scholar, 'external_students',
+      'id, external_id, first_name, last_name, full_name, linked_user_id, email');
     console.log(`Scholar external_students: ${extStudents.length}`);
 
-    // Match external_students → local students by name, collecting linked_user_ids
-    const scholarUserToLocal = new Map<string, string>(); // Scholar user_id → local student_id
-    const scholarExtIdToLocal = new Map<string, string>(); // Scholar external_id → local student_id
-    const matchedNames: string[] = [];
+    const scholarUserToLocal = new Map<string, string>();
 
     for (const es of extStudents) {
-      // Try first_name + last_name match
       let key = `${(es.first_name || '').toLowerCase().trim()}|${(es.last_name || '').toLowerCase().trim()}`;
       let local = nameToLocal.get(key);
-
-      // Fallback: parse full_name
       if (!local && es.full_name) {
         const parts = es.full_name.trim().split(/\s+/);
         if (parts.length >= 2) {
@@ -145,169 +145,179 @@ Deno.serve(async (req) => {
           local = nameToLocal.get(key);
         }
       }
-
       if (local) {
-        if (es.linked_user_id) {
-          scholarUserToLocal.set(es.linked_user_id, local.id);
-        }
-        if (es.external_id) {
-          scholarExtIdToLocal.set(es.external_id, local.id);
-        }
+        if (es.linked_user_id) scholarUserToLocal.set(es.linked_user_id, local.id);
         matchedNames.push(es.full_name || `${es.first_name} ${es.last_name}`);
       }
     }
 
-    console.log(`Matched ${matchedNames.length} Scholar students: ${matchedNames.slice(0, 20).join(', ')}${matchedNames.length > 20 ? '...' : ''}`);
-
-    // ── Step 4: Get Scholar student_profiles ──
+    // Resolve linked_user_id → student_profiles.id
     const linkedUserIds = Array.from(scholarUserToLocal.keys());
-    const scholarProfileToLocal = new Map<string, string>();
-
     if (linkedUserIds.length > 0) {
       for (let i = 0; i < linkedUserIds.length; i += 50) {
         const batch = linkedUserIds.slice(i, i + 50);
-        const { data: profiles, error: profErr } = await scholar
-          .from('student_profiles')
-          .select('id, user_id')
-          .in('user_id', batch);
-
-        if (profErr) {
-          console.warn('Error fetching Scholar student_profiles by user_id:', profErr.message);
-        } else {
-          for (const p of (profiles || [])) {
-            const localId = scholarUserToLocal.get(p.user_id);
-            if (localId) {
-              scholarProfileToLocal.set(p.id, localId);
-            }
-          }
+        const profiles = await safeQuery(scholar, 'student_profiles', 'id, user_id',
+          (q: any) => q.in('user_id', batch));
+        for (const p of profiles) {
+          const localId = scholarUserToLocal.get(p.user_id);
+          if (localId) scholarProfileToLocal.set(p.id, localId);
         }
       }
     }
 
-    // Fallback: if external_students was empty, try matching student_profiles by name directly
-    if (extStudents.length === 0 && scholarProfileToLocal.size === 0) {
-      console.log('No external_students found, trying direct student_profiles name match...');
-      try {
-        const { data: allProfiles, error: allProfErr } = await scholar
-          .from('student_profiles')
-          .select('id, user_id, first_name, last_name, display_name')
-          .limit(1000);
+    // Strategy B: Direct name match on student_profiles (fallback)
+    if (scholarProfileToLocal.size === 0) {
+      console.log('Trying direct student_profiles name match...');
+      const allProfiles = await safeQuery(scholar, 'student_profiles',
+        'id, user_id, first_name, last_name, display_name');
 
-        if (!allProfErr && allProfiles) {
-          for (const p of allProfiles) {
-            let key = `${(p.first_name || '').toLowerCase().trim()}|${(p.last_name || '').toLowerCase().trim()}`;
-            let local = nameToLocal.get(key);
-
-            if (!local && p.display_name) {
-              const parts = p.display_name.trim().split(/\s+/);
-              if (parts.length >= 2) {
-                key = `${parts[0].toLowerCase()}|${parts.slice(1).join(' ').toLowerCase()}`;
-                local = nameToLocal.get(key);
-              }
-            }
-
-            if (local) {
-              scholarProfileToLocal.set(p.id, local.id);
-              matchedNames.push(p.display_name || `${p.first_name} ${p.last_name}`);
-            }
+      for (const p of allProfiles) {
+        let key = `${(p.first_name || '').toLowerCase().trim()}|${(p.last_name || '').toLowerCase().trim()}`;
+        let local = nameToLocal.get(key);
+        if (!local && p.display_name) {
+          const parts = p.display_name.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            key = `${parts[0].toLowerCase()}|${parts.slice(1).join(' ').toLowerCase()}`;
+            local = nameToLocal.get(key);
           }
-          console.log(`Direct profile name match found: ${scholarProfileToLocal.size}`);
         }
-      } catch (e) {
-        console.warn('Direct student_profiles name match failed:', e);
+        if (local) {
+          scholarProfileToLocal.set(p.id, local.id);
+          matchedNames.push(p.display_name || `${p.first_name} ${p.last_name}`);
+        }
       }
+      console.log(`Direct profile name match: ${scholarProfileToLocal.size}`);
     }
 
-    console.log(`Scholar student_profiles mapped: ${scholarProfileToLocal.size}`);
+    // Strategy C: Try xp_transactions or grade_history directly if profiles didn't work
+    if (scholarProfileToLocal.size === 0) {
+      console.log('No student_profiles matched. Trying Scholar grade_history by student name...');
+      // Try querying Scholar's grade_history or similar tables with student references
+      const scholarGrades = await safeQuery(scholar, 'grade_history',
+        'id, student_id, topic_name, grade, grade_justification, created_at',
+        (q: any) => q.gte('created_at', sinceISO).order('created_at', { ascending: false }),
+        500);
 
-    if (scholarProfileToLocal.size === 0 && scholarExtIdToLocal.size === 0) {
+      if (scholarGrades.length > 0) {
+        // Get student info from Scholar's students table
+        const scholarStudentIds = [...new Set(scholarGrades.map((g: any) => g.student_id))];
+        const scholarStudents = await safeQuery(scholar, 'students',
+          'id, first_name, last_name',
+          (q: any) => q.in('id', scholarStudentIds.slice(0, 200)));
+
+        const scholarStudentMap = new Map<string, any>();
+        for (const ss of scholarStudents) {
+          scholarStudentMap.set(ss.id, ss);
+        }
+
+        // Direct grade import by name matching
+        const gradeRows: any[] = [];
+        for (const sg of scholarGrades) {
+          const ss = scholarStudentMap.get(sg.student_id);
+          if (!ss) continue;
+          const key = `${(ss.first_name || '').toLowerCase().trim()}|${(ss.last_name || '').toLowerCase().trim()}`;
+          const local = nameToLocal.get(key);
+          if (local) {
+            gradeRows.push({
+              student_id: local.id,
+              topic_name: sg.topic_name,
+              grade: sg.grade,
+              justification: sg.grade_justification || `Scholar grade: ${sg.topic_name}`,
+              created_at: sg.created_at,
+            });
+            matchedNames.push(`${ss.first_name} ${ss.last_name}`);
+          }
+        }
+
+        if (gradeRows.length > 0) {
+          // De-duplicate and insert (same logic as below)
+          const result = await deduplicateAndInsert(supabase, gradeRows, user.id, sinceISO);
+          await logSync(supabase, user.id, {
+            source_method: 'scholar_grade_history_direct',
+            grades_imported: result.imported,
+            students_matched: [...new Set(matchedNames)].length,
+            class_id: class_id || 'all',
+          });
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              source: 'scholar_db_direct',
+              grades_imported: result.imported,
+              students_matched: [...new Set(matchedNames)].length,
+              message: result.imported > 0
+                ? `Imported ${result.imported} grades directly from Scholar`
+                : 'No new grades to import (already synced)',
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
           source: 'scholar_db',
           grades_imported: 0,
-          students_matched: matchedNames.length,
-          profiles_linked: 0,
-          message: 'Matched students by name but none have linked Scholar profiles yet',
+          students_matched: 0,
+          message: 'Could not match any Scholar students to local roster. Ensure student names match between systems.',
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // ── Step 5: Pull practice_sets (completed) from Scholar ──
+    console.log(`Scholar profiles mapped: ${scholarProfileToLocal.size}, matched names: ${matchedNames.length}`);
+
+    // ── Step 4: Pull practice_sets (completed) from Scholar ──
     const scholarProfileIds = Array.from(scholarProfileToLocal.keys());
     let allPracticeSets: any[] = [];
 
     for (let i = 0; i < scholarProfileIds.length; i += 50) {
       const batch = scholarProfileIds.slice(i, i + 50);
-      const { data: sets, error: setsErr } = await scholar
-        .from('practice_sets')
-        .select('id, student_id, title, score, completed_at, skill_tags, status')
-        .in('student_id', batch)
-        .eq('status', 'completed')
-        .gte('completed_at', sinceISO)
-        .order('completed_at', { ascending: false })
-        .limit(200);
-
-      if (setsErr) {
-        console.error('Error fetching practice_sets batch:', setsErr);
-      } else {
-        allPracticeSets = allPracticeSets.concat(sets || []);
-      }
+      const sets = await safeQuery(scholar, 'practice_sets',
+        'id, student_id, title, score, completed_at, skill_tags, status',
+        (q: any) => q.in('student_id', batch).eq('status', 'completed').gte('completed_at', sinceISO)
+          .order('completed_at', { ascending: false }),
+        200);
+      allPracticeSets = allPracticeSets.concat(sets);
     }
-
     console.log(`Scholar practice_sets found: ${allPracticeSets.length}`);
 
-    // ── Step 6: Pull attempts (submitted/graded) from Scholar ──
+    // ── Step 5: Pull attempts (submitted/graded) from Scholar ──
     let allAttempts: any[] = [];
 
     for (let i = 0; i < scholarProfileIds.length; i += 50) {
       const batch = scholarProfileIds.slice(i, i + 50);
-      const { data: atts, error: attsErr } = await scholar
-        .from('attempts')
-        .select('id, student_id, assignment_id, score, submitted_at, status, mode')
-        .in('student_id', batch)
-        .in('status', ['submitted', 'graded', 'verified'])
-        .not('score', 'is', null)
-        .gte('submitted_at', sinceISO)
-        .order('submitted_at', { ascending: false })
-        .limit(200);
-
-      if (attsErr) {
-        console.error('Error fetching attempts batch:', attsErr);
-      } else {
-        allAttempts = allAttempts.concat(atts || []);
-      }
+      const atts = await safeQuery(scholar, 'attempts',
+        'id, student_id, assignment_id, score, submitted_at, status, mode',
+        (q: any) => q.in('student_id', batch).in('status', ['submitted', 'graded', 'verified'])
+          .not('score', 'is', null).gte('submitted_at', sinceISO)
+          .order('submitted_at', { ascending: false }),
+        200);
+      allAttempts = allAttempts.concat(atts);
     }
-
     console.log(`Scholar attempts found: ${allAttempts.length}`);
 
-    // Get assignment titles for attempts
+    // Get assignment titles
     const assignmentIds = [...new Set(allAttempts.map(a => a.assignment_id).filter(Boolean))];
     const assignmentTitles = new Map<string, string>();
-
     if (assignmentIds.length > 0) {
       for (let i = 0; i < assignmentIds.length; i += 50) {
         const batch = assignmentIds.slice(i, i + 50);
-        const { data: assignments } = await scholar
-          .from('assignments')
-          .select('id, title, subject')
-          .in('id', batch);
-
-        for (const a of (assignments || [])) {
+        const assignments = await safeQuery(scholar, 'assignments', 'id, title, subject',
+          (q: any) => q.in('id', batch));
+        for (const a of assignments) {
           assignmentTitles.set(a.id, a.title || a.subject || 'Scholar Assignment');
         }
       }
     }
 
-    // ── Step 7: Build grade rows to import ──
-    const gradeRows: { student_id: string; topic_name: string; grade: number; justification: string; created_at: string }[] = [];
+    // ── Step 6: Build grade rows ──
+    const gradeRows: any[] = [];
 
-    // From practice_sets
     for (const ps of allPracticeSets) {
       const localId = scholarProfileToLocal.get(ps.student_id);
       if (!localId || ps.score === null || ps.score === undefined) continue;
-
       gradeRows.push({
         student_id: localId,
         topic_name: ps.title || 'Scholar Practice',
@@ -317,11 +327,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // From attempts
     for (const att of allAttempts) {
       const localId = scholarProfileToLocal.get(att.student_id);
       if (!localId || att.score === null || att.score === undefined) continue;
-
       const title = assignmentTitles.get(att.assignment_id) || 'Scholar Assignment';
       gradeRows.push({
         student_id: localId,
@@ -350,55 +358,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Step 8: De-duplicate against existing local grades ──
-    const affectedStudentIds = [...new Set(gradeRows.map(g => g.student_id))];
-    const { data: existingGrades } = await supabase
-      .from('grade_history')
-      .select('student_id, topic_name, created_at')
-      .in('student_id', affectedStudentIds)
-      .gte('created_at', sinceISO);
+    // ── Step 7: De-duplicate and insert ──
+    const result = await deduplicateAndInsert(supabase, gradeRows, user.id, sinceISO);
 
-    const existingSet = new Set(
-      (existingGrades || []).map(g => `${g.student_id}|${g.topic_name}|${g.created_at}`)
-    );
-    // Also de-dup by student + topic (looser match)
-    const existingTopicSet = new Set(
-      (existingGrades || []).map(g => `${g.student_id}|${g.topic_name}`)
-    );
-
-    const newGrades = gradeRows.filter(g => {
-      const exactKey = `${g.student_id}|${g.topic_name}|${g.created_at}`;
-      const topicKey = `${g.student_id}|${g.topic_name}`;
-      return !existingSet.has(exactKey) && !existingTopicSet.has(topicKey);
-    });
-
-    console.log(`New grades after de-dup: ${newGrades.length} (from ${gradeRows.length})`);
-
-    // ── Step 9: Insert new grades ──
-    let gradesImported = 0;
-    if (newGrades.length > 0) {
-      for (let i = 0; i < newGrades.length; i += 50) {
-        const batch = newGrades.slice(i, i + 50).map(g => ({
-          student_id: g.student_id,
-          teacher_id: user.id,
-          topic_name: g.topic_name,
-          grade: g.grade,
-          grade_justification: `Scholar (synced) | ${g.justification}`,
-        }));
-
-        const { error: insertError } = await supabase
-          .from('grade_history')
-          .insert(batch);
-
-        if (insertError) {
-          console.error(`Batch insert error at offset ${i}:`, insertError);
-        } else {
-          gradesImported += batch.length;
-        }
-      }
-    }
-
-    // ── Step 10: Mark pending sync logs as processed ──
+    // Mark pending sync logs as processed
     const { data: pendingLogs } = await supabase
       .from('sister_app_sync_log')
       .select('id')
@@ -413,27 +376,16 @@ Deno.serve(async (req) => {
         .in('id', pendingLogs.map(l => l.id));
     }
 
-    // Log this pull
-    try {
-      await supabase.from('sister_app_sync_log').insert({
-        teacher_id: user.id,
-        action: 'pull_completions',
-        data: {
-          source_method: 'scholar_db_real_tables',
-          practice_sets_found: allPracticeSets.length,
-          attempts_found: allAttempts.length,
-          grades_imported: gradesImported,
-          students_matched: matchedNames.length,
-          profiles_linked: scholarProfileToLocal.size,
-          since_date: sinceISO,
-          class_id: class_id || 'all',
-        },
-        processed: true,
-        processed_at: new Date().toISOString(),
-      });
-    } catch (logErr) {
-      console.error('Non-fatal log error:', logErr);
-    }
+    await logSync(supabase, user.id, {
+      source_method: 'scholar_db_multi_strategy',
+      practice_sets_found: allPracticeSets.length,
+      attempts_found: allAttempts.length,
+      grades_imported: result.imported,
+      students_matched: matchedNames.length,
+      profiles_linked: scholarProfileToLocal.size,
+      since_date: sinceISO,
+      class_id: class_id || 'all',
+    });
 
     return new Response(
       JSON.stringify({
@@ -441,12 +393,12 @@ Deno.serve(async (req) => {
         source: 'scholar_db',
         practice_sets_found: allPracticeSets.length,
         attempts_found: allAttempts.length,
-        grades_imported: gradesImported,
+        grades_imported: result.imported,
         students_matched: matchedNames.length,
         profiles_linked: scholarProfileToLocal.size,
-        message: gradesImported > 0
-          ? `Imported ${gradesImported} grades from Scholar for ${scholarProfileToLocal.size} linked students`
-          : `No new grades to import (${allPracticeSets.length} practice sets, ${allAttempts.length} attempts already synced or no new data)`,
+        message: result.imported > 0
+          ? `Imported ${result.imported} grades from Scholar for ${scholarProfileToLocal.size} linked students`
+          : `No new grades to import (${allPracticeSets.length + allAttempts.length} entries already synced)`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -458,3 +410,68 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+/** De-duplicate grades against existing local grade_history, then insert new ones */
+async function deduplicateAndInsert(
+  supabase: any,
+  gradeRows: { student_id: string; topic_name: string; grade: number; justification: string; created_at: string }[],
+  teacherId: string,
+  sinceISO: string
+): Promise<{ imported: number }> {
+  const affectedStudentIds = [...new Set(gradeRows.map(g => g.student_id))];
+  const { data: existingGrades } = await supabase
+    .from('grade_history')
+    .select('student_id, topic_name, created_at')
+    .in('student_id', affectedStudentIds)
+    .gte('created_at', sinceISO);
+
+  const existingSet = new Set(
+    (existingGrades || []).map((g: any) => `${g.student_id}|${g.topic_name}|${g.created_at}`)
+  );
+  const existingTopicSet = new Set(
+    (existingGrades || []).map((g: any) => `${g.student_id}|${g.topic_name}`)
+  );
+
+  const newGrades = gradeRows.filter(g => {
+    const exactKey = `${g.student_id}|${g.topic_name}|${g.created_at}`;
+    const topicKey = `${g.student_id}|${g.topic_name}`;
+    return !existingSet.has(exactKey) && !existingTopicSet.has(topicKey);
+  });
+
+  console.log(`New grades after de-dup: ${newGrades.length} (from ${gradeRows.length})`);
+
+  let imported = 0;
+  for (let i = 0; i < newGrades.length; i += 50) {
+    const batch = newGrades.slice(i, i + 50).map(g => ({
+      student_id: g.student_id,
+      teacher_id: teacherId,
+      topic_name: g.topic_name,
+      grade: g.grade,
+      grade_justification: `Scholar (synced) | ${g.justification}`,
+    }));
+
+    const { error } = await supabase.from('grade_history').insert(batch);
+    if (error) {
+      console.error(`Batch insert error at offset ${i}:`, error);
+    } else {
+      imported += batch.length;
+    }
+  }
+
+  return { imported };
+}
+
+/** Log a sync event */
+async function logSync(supabase: any, teacherId: string, data: Record<string, any>) {
+  try {
+    await supabase.from('sister_app_sync_log').insert({
+      teacher_id: teacherId,
+      action: 'pull_completions',
+      data,
+      processed: true,
+      processed_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('Non-fatal log error:', e);
+  }
+}
