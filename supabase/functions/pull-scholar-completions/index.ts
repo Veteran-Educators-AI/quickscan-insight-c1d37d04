@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     const scholarExtIdToLocal = new Map<string, string>(); // Scholar external_id → local student_id
     const matchedNames: string[] = [];
 
-    for (const es of (extStudents || [])) {
+    for (const es of extStudents) {
       // Try first_name + last_name match
       let key = `${(es.first_name || '').toLowerCase().trim()}|${(es.last_name || '').toLowerCase().trim()}`;
       let local = nameToLocal.get(key);
