@@ -5,35 +5,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+interface GradeRow {
+  student_id: string;
+  topic_name: string;
+  grade: number;
+  justification: string;
+  created_at: string;
+}
+
 const decodeBase64Url = (value: string): string => {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
   return atob(padded);
 };
 
-const deriveSupabaseUrl = (serviceRoleKey: string): string | null => {
-  try {
-    const payload = JSON.parse(decodeBase64Url(serviceRoleKey.split('.')[1]));
-    const ref = payload?.ref;
-    return typeof ref === 'string' && ref.trim() ? `https://${ref}.supabase.co` : null;
-  } catch { return null; }
+const deriveSupabaseUrl = (serviceRoleKey: string): string => {
+  const payload = JSON.parse(decodeBase64Url(serviceRoleKey.split('.')[1]));
+  const ref = payload?.ref;
+  if (!ref || typeof ref !== 'string') {
+    throw new Error('Invalid Scholar service role key');
+  }
+  return `https://${ref}.supabase.co`;
 };
 
-/** Safely query a remote table — returns empty array if table doesn't exist */
+const isUuid = (value: string | null | undefined) =>
+  !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 async function safeQuery(client: any, table: string, select: string, filters?: (q: any) => any, limit = 1000): Promise<any[]> {
   try {
     let q = client.from(table).select(select).limit(limit);
     if (filters) q = filters(q);
     const { data, error } = await q;
     if (error) {
-      console.warn(`Table '${table}' query failed: ${error.message}`);
+      console.warn(`Scholar table '${table}' query failed: ${error.message}`);
       return [];
     }
     return data || [];
-  } catch (e) {
-    console.warn(`Table '${table}' threw: ${e}`);
+  } catch (error) {
+    console.warn(`Scholar table '${table}' threw: ${error}`);
     return [];
   }
+}
+
+function jsonResp(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -44,10 +62,7 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResp({ success: false, error: 'Unauthorized' }, 401);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -55,25 +70,25 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
+
     if (userError || !user) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResp({ success: false, error: 'Invalid token' }, 401);
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { class_id, since_days = 30 } = body;
 
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - since_days);
     const sinceISO = sinceDate.toISOString();
 
-    // ── Step 1: Get local students ──
     let studentsQuery = supabase
       .from('students')
-      .select('id, first_name, last_name, class_id, classes!inner(id, name, teacher_id)')
+      .select('id, first_name, last_name, class_id, classes!inner(id, teacher_id)')
       .eq('classes.teacher_id', user.id);
 
     if (class_id && class_id !== 'all') {
@@ -85,265 +100,190 @@ Deno.serve(async (req) => {
       return jsonResp({ success: false, error: studentsError.message }, 500);
     }
 
-    if (!localStudents || localStudents.length === 0) {
-      return jsonResp({ success: true, message: 'No students found', grades_imported: 0 });
+    if (!localStudents?.length) {
+      return jsonResp({ success: true, grades_imported: 0, message: 'No students found in this class.' });
     }
 
-    // Build name lookup: "firstname|lastname" → local student
     const nameToLocal = new Map<string, { id: string; class_id: string }>();
-    for (const s of localStudents) {
-      const key = `${(s.first_name || '').toLowerCase().trim()}|${(s.last_name || '').toLowerCase().trim()}`;
+    for (const student of localStudents) {
+      const key = `${(student.first_name || '').toLowerCase().trim()}|${(student.last_name || '').toLowerCase().trim()}`;
       if (!nameToLocal.has(key)) {
-        nameToLocal.set(key, { id: s.id, class_id: s.class_id });
+        nameToLocal.set(key, { id: student.id, class_id: student.class_id });
       }
-    }
-    // Also map by id for sync log entries that already have student_id
-    const idToLocal = new Map<string, string>();
-    for (const s of localStudents) {
-      idToLocal.set(s.id, s.id);
     }
 
     console.log(`Local students: ${localStudents.length}, unique names: ${nameToLocal.size}`);
 
-    let totalImported = 0;
-    let studentsMatched = 0;
-    const matchedStudentIds = new Set<string>();
+    const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
+    if (!scholarKey) {
+      return jsonResp({ success: false, error: 'Scholar connection is not configured.' }, 500);
+    }
 
-    // ══════════════════════════════════════════════════════════════
-    // SOURCE 1: Local sync log (data pushed from Scholar via webhook)
-    // ══════════════════════════════════════════════════════════════
-    const { data: syncLogs } = await supabase
-      .from('sister_app_sync_log')
-      .select('id, action, data, student_id, created_at')
-      .eq('teacher_id', user.id)
-      .in('action', ['grade_completed', 'activity_completed', 'sync_practice_session', 'batch_sync_student'])
-      .gte('created_at', sinceISO)
-      .order('created_at', { ascending: false })
-      .limit(500);
+    const scholarUrl = deriveSupabaseUrl(scholarKey);
+    const scholar = createClient(scholarUrl, scholarKey);
 
-    const localGradeRows: GradeRow[] = [];
+    const scholarGrades = await safeQuery(
+      scholar,
+      'grade_history',
+      'id, student_id, topic_name, grade, grade_justification, created_at',
+      (q: any) => q.gte('created_at', sinceISO).order('created_at', { ascending: false }),
+      1000,
+    );
 
-    if (syncLogs && syncLogs.length > 0) {
-      console.log(`Found ${syncLogs.length} local sync log entries to process`);
+    console.log(`Scholar grade_history entries found: ${scholarGrades.length}`);
 
-      for (const log of syncLogs) {
-        const d = log.data as any;
-        if (!d) continue;
+    if (!scholarGrades.length) {
+      await logSync(supabase, user.id, {
+        source_method: 'scholar_remote_grade_history',
+        class_id: class_id || 'all',
+        since_date: sinceISO,
+        grades_found: 0,
+        students_matched: 0,
+        grades_imported: 0,
+      });
 
-        // Extract grade from various data formats
-        const score = d.score ?? d.grade ?? d.overall_average;
-        const topicName = d.topic_name ?? d.activity_name ?? d.subject ?? 'Scholar Activity';
+      return jsonResp({
+        success: true,
+        grades_imported: 0,
+        grades_created: 0,
+        students_matched: 0,
+        completions_found: 0,
+        duplicates_skipped: 0,
+        message: 'No grades found in Scholar for the selected time period.',
+      });
+    }
 
-        if (score === null || score === undefined || score === 0) continue;
+    const scholarStudentIds = [...new Set(scholarGrades.map((grade: any) => grade.student_id).filter((id: string) => isUuid(id)))];
+    const scholarStudentMap = new Map<string, { first_name: string; last_name: string }>();
 
-        // Find matching local student
-        let localStudentId: string | null = null;
+    for (let i = 0; i < scholarStudentIds.length; i += 50) {
+      const batch = scholarStudentIds.slice(i, i + 50);
+      const scholarStudents = await safeQuery(
+        scholar,
+        'students',
+        'id, first_name, last_name, email',
+        (q: any) => q.in('id', batch),
+        100,
+      );
 
-        // Try student_id from log row
-        if (log.student_id && idToLocal.has(log.student_id)) {
-          localStudentId = log.student_id;
-        }
-
-        // Try name matching from data
-        if (!localStudentId && d.student_name) {
-          const parts = d.student_name.trim().split(/\s+/);
-          if (parts.length >= 2) {
-            const key = `${parts[0].toLowerCase()}|${parts.slice(1).join(' ').toLowerCase()}`;
-            const local = nameToLocal.get(key);
-            if (local) localStudentId = local.id;
-          }
-        }
-
-        if (!localStudentId) continue;
-
-        matchedStudentIds.add(localStudentId);
-        localGradeRows.push({
-          student_id: localStudentId,
-          topic_name: topicName,
-          grade: Math.round(Number(score)),
-          justification: `Scholar sync: ${topicName}`,
-          created_at: log.created_at,
+      for (const student of scholarStudents) {
+        scholarStudentMap.set(student.id, {
+          first_name: student.first_name || '',
+          last_name: student.last_name || '',
         });
       }
-
-      console.log(`Local sync log grades extracted: ${localGradeRows.length}`);
     }
 
-    // Insert local sync log grades
-    if (localGradeRows.length > 0) {
-      const result = await deduplicateAndInsert(supabase, localGradeRows, user.id, sinceISO);
-      totalImported += result.imported;
+    console.log(`Scholar students resolved: ${scholarStudentMap.size}`);
+
+    const matchedStudentIds = new Set<string>();
+    const remoteGradeRows: GradeRow[] = [];
+
+    for (const scholarGrade of scholarGrades) {
+      const scholarStudent = scholarStudentMap.get(scholarGrade.student_id);
+      if (!scholarStudent) continue;
+
+      const key = `${scholarStudent.first_name.toLowerCase().trim()}|${scholarStudent.last_name.toLowerCase().trim()}`;
+      const localStudent = nameToLocal.get(key);
+      if (!localStudent) continue;
+      if (scholarGrade.grade === null || scholarGrade.grade === undefined) continue;
+
+      matchedStudentIds.add(localStudent.id);
+      remoteGradeRows.push({
+        student_id: localStudent.id,
+        topic_name: scholarGrade.topic_name || 'Scholar Grade',
+        grade: Math.round(Number(scholarGrade.grade)),
+        justification: scholarGrade.grade_justification || `Scholar: ${scholarGrade.topic_name || 'Grade'}`,
+        created_at: scholarGrade.created_at,
+      });
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // SOURCE 2: Remote Scholar DB (direct query)
-    // ══════════════════════════════════════════════════════════════
-    const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
-    const scholarUrl = scholarKey ? deriveSupabaseUrl(scholarKey) : Deno.env.get('SCHOLAR_SUPABASE_URL');
+    console.log(`Remote Scholar grades matched to local students: ${remoteGradeRows.length}`);
 
-    if (scholarUrl && scholarKey) {
-      console.log('Querying remote Scholar database...');
-      const scholar = createClient(scholarUrl, scholarKey);
+    const result = await deduplicateAndInsert(supabase, remoteGradeRows, user.id, sinceISO);
 
-      // Query Scholar's grade_history directly
-      const scholarGrades = await safeQuery(scholar, 'grade_history',
-        'id, student_id, topic_name, grade, grade_justification, created_at',
-        (q: any) => q.gte('created_at', sinceISO).order('created_at', { ascending: false }),
-        500);
-
-      console.log(`Scholar grade_history entries: ${scholarGrades.length}`);
-
-      if (scholarGrades.length > 0) {
-        // Get the unique student IDs from Scholar grades (filter to valid UUIDs only)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const scholarStudentIds = [...new Set(
-          scholarGrades.map((g: any) => g.student_id).filter((id: string) => uuidRegex.test(id))
-        )];
-
-        if (scholarStudentIds.length > 0) {
-          // Get student names from Scholar's students table
-          const scholarStudentMap = new Map<string, { first_name: string; last_name: string }>();
-
-          for (let i = 0; i < scholarStudentIds.length; i += 50) {
-            const batch = scholarStudentIds.slice(i, i + 50);
-            const scholarStudents = await safeQuery(scholar, 'students',
-              'id, first_name, last_name',
-              (q: any) => q.in('id', batch));
-            for (const ss of scholarStudents) {
-              scholarStudentMap.set(ss.id, { first_name: ss.first_name, last_name: ss.last_name });
-            }
-          }
-
-          console.log(`Scholar students resolved: ${scholarStudentMap.size}`);
-
-          // Match Scholar grades to local students by name
-          const remoteGradeRows: GradeRow[] = [];
-          for (const sg of scholarGrades) {
-            const ss = scholarStudentMap.get(sg.student_id);
-            if (!ss) continue;
-
-            const key = `${(ss.first_name || '').toLowerCase().trim()}|${(ss.last_name || '').toLowerCase().trim()}`;
-            const local = nameToLocal.get(key);
-            if (!local) continue;
-
-            matchedStudentIds.add(local.id);
-            remoteGradeRows.push({
-              student_id: local.id,
-              topic_name: sg.topic_name,
-              grade: sg.grade,
-              justification: sg.grade_justification || `Scholar: ${sg.topic_name}`,
-              created_at: sg.created_at,
-            });
-          }
-
-          console.log(`Remote Scholar grades matched to local: ${remoteGradeRows.length}`);
-
-          if (remoteGradeRows.length > 0) {
-            const result = await deduplicateAndInsert(supabase, remoteGradeRows, user.id, sinceISO);
-            totalImported += result.imported;
-          }
-        }
-      }
-    } else {
-      console.log('Scholar DB credentials not configured, using local sync log only');
-    }
-
-    studentsMatched = matchedStudentIds.size;
-
-    // Log this pull
     await logSync(supabase, user.id, {
-      grades_imported: totalImported,
-      students_matched: studentsMatched,
-      local_sync_entries: syncLogs?.length || 0,
-      since_date: sinceISO,
+      source_method: 'scholar_remote_grade_history',
       class_id: class_id || 'all',
+      since_date: sinceISO,
+      grades_found: scholarGrades.length,
+      students_matched: matchedStudentIds.size,
+      grades_imported: result.imported,
+      duplicates_skipped: remoteGradeRows.length - result.imported,
     });
 
     return jsonResp({
       success: true,
-      grades_imported: totalImported,
-      grades_created: totalImported,
-      students_matched: studentsMatched,
-      completions_found: localGradeRows.length,
-      duplicates_skipped: localGradeRows.length - totalImported,
-      message: totalImported > 0
-        ? `Imported ${totalImported} grades for ${studentsMatched} students`
-        : studentsMatched > 0
-          ? 'No new grades to import (already synced)'
-          : 'No matching student grades found. Ensure student names match between systems.',
+      grades_imported: result.imported,
+      grades_created: result.imported,
+      students_matched: matchedStudentIds.size,
+      completions_found: remoteGradeRows.length,
+      duplicates_skipped: Math.max(0, remoteGradeRows.length - result.imported),
+      message: result.imported > 0
+        ? `Imported ${result.imported} grades from Scholar for ${matchedStudentIds.size} students.`
+        : matchedStudentIds.size > 0
+          ? 'Scholar grades were found, but they were already imported.'
+          : 'Scholar grades were found, but no student names matched your class roster.',
     });
   } catch (error) {
     console.error('Error in pull-scholar-completions:', error);
-    return jsonResp(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-      500
-    );
+    return jsonResp({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
   }
 });
-
-// ── Helpers ──
-
-interface GradeRow {
-  student_id: string;
-  topic_name: string;
-  grade: number;
-  justification: string;
-  created_at: string;
-}
-
-function jsonResp(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
-}
 
 async function deduplicateAndInsert(
   supabase: any,
   gradeRows: GradeRow[],
   teacherId: string,
-  sinceISO: string
+  sinceISO: string,
 ): Promise<{ imported: number }> {
-  const affectedStudentIds = [...new Set(gradeRows.map(g => g.student_id))];
+  if (!gradeRows.length) {
+    return { imported: 0 };
+  }
 
-  // Get existing grades to avoid duplicates
+  const affectedStudentIds = [...new Set(gradeRows.map((grade) => grade.student_id))];
   const { data: existingGrades } = await supabase
     .from('grade_history')
     .select('student_id, topic_name, created_at')
-    .in('student_id', affectedStudentIds.slice(0, 200))
+    .in('student_id', affectedStudentIds)
     .gte('created_at', sinceISO);
 
-  const existingSet = new Set(
-    (existingGrades || []).map((g: any) => `${g.student_id}|${g.topic_name}|${g.created_at}`)
-  );
-  const existingTopicSet = new Set(
-    (existingGrades || []).map((g: any) => `${g.student_id}|${g.topic_name}`)
+  const existingExact = new Set(
+    (existingGrades || []).map((grade: any) => `${grade.student_id}|${grade.topic_name}|${grade.created_at}`),
   );
 
-  const newGrades = gradeRows.filter(g => {
-    const exactKey = `${g.student_id}|${g.topic_name}|${g.created_at}`;
-    const topicKey = `${g.student_id}|${g.topic_name}`;
-    return !existingSet.has(exactKey) && !existingTopicSet.has(topicKey);
+  const existingTopic = new Set(
+    (existingGrades || []).map((grade: any) => `${grade.student_id}|${grade.topic_name}`),
+  );
+
+  const newGrades = gradeRows.filter((grade) => {
+    const exactKey = `${grade.student_id}|${grade.topic_name}|${grade.created_at}`;
+    const topicKey = `${grade.student_id}|${grade.topic_name}`;
+    return !existingExact.has(exactKey) && !existingTopic.has(topicKey);
   });
 
   console.log(`New grades after de-dup: ${newGrades.length} (from ${gradeRows.length})`);
 
   let imported = 0;
   for (let i = 0; i < newGrades.length; i += 50) {
-    const batch = newGrades.slice(i, i + 50).map(g => ({
-      student_id: g.student_id,
+    const batch = newGrades.slice(i, i + 50).map((grade) => ({
+      student_id: grade.student_id,
       teacher_id: teacherId,
-      topic_name: g.topic_name,
-      grade: g.grade,
-      grade_justification: `Scholar (synced) | ${g.justification}`,
+      topic_name: grade.topic_name,
+      grade: grade.grade,
+      grade_justification: `Scholar (synced) | ${grade.justification}`,
     }));
 
     const { error } = await supabase.from('grade_history').insert(batch);
     if (error) {
       console.error(`Batch insert error at offset ${i}:`, error.message);
-    } else {
-      imported += batch.length;
+      continue;
     }
+
+    imported += batch.length;
   }
 
   return { imported };
@@ -358,7 +298,7 @@ async function logSync(supabase: any, teacherId: string, data: Record<string, an
       processed: true,
       processed_at: new Date().toISOString(),
     });
-  } catch (e) {
-    console.error('Non-fatal log error:', e);
+  } catch (error) {
+    console.error('Non-fatal log error:', error);
   }
 }
