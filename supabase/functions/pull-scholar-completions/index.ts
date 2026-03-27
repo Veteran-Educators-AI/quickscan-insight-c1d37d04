@@ -159,12 +159,11 @@ Deno.serve(async (req) => {
 
     console.log(`Matched ${matchedNames.length} Scholar students: ${matchedNames.slice(0, 20).join(', ')}${matchedNames.length > 20 ? '...' : ''}`);
 
-    // ── Step 4: Get Scholar student_profiles for linked users ──
+    // ── Step 4: Get Scholar student_profiles ──
     const linkedUserIds = Array.from(scholarUserToLocal.keys());
-    const scholarProfileToLocal = new Map<string, string>(); // Scholar student_profiles.id → local student_id
+    const scholarProfileToLocal = new Map<string, string>();
 
     if (linkedUserIds.length > 0) {
-      // Batch in groups of 50
       for (let i = 0; i < linkedUserIds.length; i += 50) {
         const batch = linkedUserIds.slice(i, i + 50);
         const { data: profiles, error: profErr } = await scholar
@@ -173,7 +172,7 @@ Deno.serve(async (req) => {
           .in('user_id', batch);
 
         if (profErr) {
-          console.error('Error fetching Scholar student_profiles:', profErr);
+          console.warn('Error fetching Scholar student_profiles by user_id:', profErr.message);
         } else {
           for (const p of (profiles || [])) {
             const localId = scholarUserToLocal.get(p.user_id);
@@ -182,6 +181,40 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
+    }
+
+    // Fallback: if external_students was empty, try matching student_profiles by name directly
+    if (extStudents.length === 0 && scholarProfileToLocal.size === 0) {
+      console.log('No external_students found, trying direct student_profiles name match...');
+      try {
+        const { data: allProfiles, error: allProfErr } = await scholar
+          .from('student_profiles')
+          .select('id, user_id, first_name, last_name, display_name')
+          .limit(1000);
+
+        if (!allProfErr && allProfiles) {
+          for (const p of allProfiles) {
+            let key = `${(p.first_name || '').toLowerCase().trim()}|${(p.last_name || '').toLowerCase().trim()}`;
+            let local = nameToLocal.get(key);
+
+            if (!local && p.display_name) {
+              const parts = p.display_name.trim().split(/\s+/);
+              if (parts.length >= 2) {
+                key = `${parts[0].toLowerCase()}|${parts.slice(1).join(' ').toLowerCase()}`;
+                local = nameToLocal.get(key);
+              }
+            }
+
+            if (local) {
+              scholarProfileToLocal.set(p.id, local.id);
+              matchedNames.push(p.display_name || `${p.first_name} ${p.last_name}`);
+            }
+          }
+          console.log(`Direct profile name match found: ${scholarProfileToLocal.size}`);
+        }
+      } catch (e) {
+        console.warn('Direct student_profiles name match failed:', e);
       }
     }
 
