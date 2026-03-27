@@ -31,6 +31,19 @@ const deriveSupabaseUrl = (serviceRoleKey: string): string => {
 const isUuid = (value: string | null | undefined) =>
   !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+const normalize = (value: string | null | undefined) =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(jr|sr|ii|iii|iv)\b/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const buildNameKey = (firstName: string | null | undefined, lastName: string | null | undefined) =>
+  `${normalize(firstName)}|${normalize(lastName)}`;
+
 async function safeQuery(client: any, table: string, select: string, filters?: (q: any) => any, limit = 1000): Promise<any[]> {
   try {
     let q = client.from(table).select(select).limit(limit);
@@ -88,7 +101,7 @@ Deno.serve(async (req) => {
 
     let studentsQuery = supabase
       .from('students')
-      .select('id, first_name, last_name, class_id, classes!inner(id, teacher_id)')
+      .select('id, first_name, last_name, email, class_id, classes!inner(id, teacher_id)')
       .eq('classes.teacher_id', user.id);
 
     if (class_id && class_id !== 'all') {
@@ -104,15 +117,20 @@ Deno.serve(async (req) => {
       return jsonResp({ success: true, grades_imported: 0, message: 'No students found in this class.' });
     }
 
-    const nameToLocal = new Map<string, { id: string; class_id: string }>();
+    const localById = new Map<string, { id: string; class_id: string }>();
+    const localByEmail = new Map<string, { id: string; class_id: string }>();
+    const localByName = new Map<string, { id: string; class_id: string }>();
+
     for (const student of localStudents) {
-      const key = `${(student.first_name || '').toLowerCase().trim()}|${(student.last_name || '').toLowerCase().trim()}`;
-      if (!nameToLocal.has(key)) {
-        nameToLocal.set(key, { id: student.id, class_id: student.class_id });
-      }
+      const entry = { id: student.id, class_id: student.class_id };
+      localById.set(student.id, entry);
+      const emailKey = normalize(student.email);
+      if (emailKey && !localByEmail.has(emailKey)) localByEmail.set(emailKey, entry);
+      const nameKey = buildNameKey(student.first_name, student.last_name);
+      if (nameKey !== '|' && !localByName.has(nameKey)) localByName.set(nameKey, entry);
     }
 
-    console.log(`Local students: ${localStudents.length}, unique names: ${nameToLocal.size}`);
+    console.log(`Local students: ${localStudents.length}, unique names: ${localByName.size}`);
 
     const scholarKey = Deno.env.get('SCHOLAR_SUPABASE_SERVICE_ROLE_KEY');
     if (!scholarKey) {
@@ -154,7 +172,7 @@ Deno.serve(async (req) => {
     }
 
     const scholarStudentIds = [...new Set(scholarGrades.map((grade: any) => grade.student_id).filter((id: string) => isUuid(id)))];
-    const scholarStudentMap = new Map<string, { first_name: string; last_name: string }>();
+    const scholarStudentMap = new Map<string, { first_name: string; last_name: string; email: string }>();
 
     for (let i = 0; i < scholarStudentIds.length; i += 50) {
       const batch = scholarStudentIds.slice(i, i + 50);
@@ -170,6 +188,7 @@ Deno.serve(async (req) => {
         scholarStudentMap.set(student.id, {
           first_name: student.first_name || '',
           last_name: student.last_name || '',
+          email: student.email || '',
         });
       }
     }
@@ -178,15 +197,31 @@ Deno.serve(async (req) => {
 
     const matchedStudentIds = new Set<string>();
     const remoteGradeRows: GradeRow[] = [];
+    let matchedById = 0;
+    let matchedByEmail = 0;
+    let matchedByName = 0;
 
     for (const scholarGrade of scholarGrades) {
-      const scholarStudent = scholarStudentMap.get(scholarGrade.student_id);
-      if (!scholarStudent) continue;
-
-      const key = `${scholarStudent.first_name.toLowerCase().trim()}|${scholarStudent.last_name.toLowerCase().trim()}`;
-      const localStudent = nameToLocal.get(key);
-      if (!localStudent) continue;
       if (scholarGrade.grade === null || scholarGrade.grade === undefined) continue;
+
+      let localStudent = localById.get(scholarGrade.student_id) || null;
+      if (localStudent) {
+        matchedById += 1;
+      }
+
+      const scholarStudent = scholarStudentMap.get(scholarGrade.student_id);
+
+      if (!localStudent && scholarStudent?.email) {
+        localStudent = localByEmail.get(normalize(scholarStudent.email)) || null;
+        if (localStudent) matchedByEmail += 1;
+      }
+
+      if (!localStudent && scholarStudent) {
+        localStudent = localByName.get(buildNameKey(scholarStudent.first_name, scholarStudent.last_name)) || null;
+        if (localStudent) matchedByName += 1;
+      }
+
+      if (!localStudent) continue;
 
       matchedStudentIds.add(localStudent.id);
       remoteGradeRows.push({
@@ -199,6 +234,7 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Remote Scholar grades matched to local students: ${remoteGradeRows.length}`);
+    console.log(`Match breakdown — id: ${matchedById}, email: ${matchedByEmail}, name: ${matchedByName}`);
 
     const result = await deduplicateAndInsert(supabase, remoteGradeRows, user.id, sinceISO);
 
@@ -210,6 +246,11 @@ Deno.serve(async (req) => {
       students_matched: matchedStudentIds.size,
       grades_imported: result.imported,
       duplicates_skipped: remoteGradeRows.length - result.imported,
+      match_breakdown: {
+        id: matchedById,
+        email: matchedByEmail,
+        name: matchedByName,
+      },
     });
 
     return jsonResp({
@@ -223,7 +264,7 @@ Deno.serve(async (req) => {
         ? `Imported ${result.imported} grades from Scholar for ${matchedStudentIds.size} students.`
         : matchedStudentIds.size > 0
           ? 'Scholar grades were found, but they were already imported.'
-          : 'Scholar grades were found, but no student names matched your class roster.',
+          : 'Scholar grades were found, but no student IDs, emails, or names matched your class roster.',
     });
   } catch (error) {
     console.error('Error in pull-scholar-completions:', error);
