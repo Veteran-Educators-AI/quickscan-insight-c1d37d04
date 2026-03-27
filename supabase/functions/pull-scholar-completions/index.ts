@@ -108,19 +108,21 @@ Deno.serve(async (req) => {
 
     const scholar = createClient(scholarUrl, scholarKey);
 
-    // ── Step 3: Get Scholar external_students (pushed from this app) ──
-    // These have first_name, last_name, and linked_user_id (Scholar auth user)
-    const { data: extStudents, error: extErr } = await scholar
-      .from('external_students')
-      .select('id, external_id, first_name, last_name, full_name, linked_user_id, email')
-      .limit(1000);
+    // ── Step 3: Try Scholar external_students (may not exist in remote DB) ──
+    let extStudents: any[] = [];
+    try {
+      const { data, error: extErr } = await scholar
+        .from('external_students')
+        .select('id, external_id, first_name, last_name, full_name, linked_user_id, email')
+        .limit(1000);
 
-    if (extErr) {
-      console.error('Error fetching Scholar external_students:', extErr);
-      return new Response(
-        JSON.stringify({ success: false, error: `Scholar external_students query failed: ${extErr.message}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (extErr) {
+        console.warn('Scholar external_students not available (table may not exist), skipping:', extErr.message);
+      } else {
+        extStudents = data || [];
+      }
+    } catch (e) {
+      console.warn('Scholar external_students fetch threw, skipping:', e);
     }
 
     console.log(`Scholar external_students: ${(extStudents || []).length}`);
