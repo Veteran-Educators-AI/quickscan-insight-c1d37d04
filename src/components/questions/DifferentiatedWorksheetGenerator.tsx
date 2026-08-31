@@ -2420,7 +2420,12 @@ const toggleStudent = (studentId: string) => {
       setGenerationProgress(90);
       const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
-      trackFeature('differentiated_worksheet', 'worksheets', 'generate_banded_single_sheet');
+      trackFeature({
+        featureName: 'Generate Banded Single Sheet',
+        category: 'worksheets',
+        action: 'generated',
+        metadata: { itemCount: items.length, composition },
+      });
 
       toast({
         title: 'Worksheet created',
