@@ -4434,7 +4434,7 @@ const toggleStudent = (studentId: string) => {
                     disabled={!selectedClassId}
                     onClick={() => setSetAssignmentOpen(true)}
                   >
-                    <Users className="h-4 w-4 mr-2" /> Set assignment &amp; placement (teacher only)
+                    <Users className="h-4 w-4 mr-2" /> Variant assignment &amp; placement (teacher only)
                   </Button>
                   {!selectedClassId && (
                     <span className="text-xs text-muted-foreground">Select a class first.</span>
