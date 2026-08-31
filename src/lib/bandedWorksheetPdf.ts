@@ -221,11 +221,13 @@ const bandName = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
 
 /**
  * The teacher-facing answer keys: one key per variant. Each item shows its number,
- * the band shape AND the band name in words, the answer, and an ANCHOR mark on the
- * four items common to every variant. Whole-sheet band totals and the variant's
- * CHECK total sit at the top of each key.
+ * the band shape AND the band name in words, the NYS standard, the answer, and an
+ * ANCHOR mark on the four items common to every variant. Whole-sheet band totals and
+ * the variant's CHECK total sit at the top of each key, a standards-coverage block
+ * sits under it, and a cross-variant coverage page closes the document.
  */
 export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOptions): jsPDF {
+
   const fmt = opts.formatText || ((t: string) => t);
   const pdf = new jsPDF('p', 'mm', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
