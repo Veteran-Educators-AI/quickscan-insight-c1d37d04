@@ -2379,16 +2379,49 @@ const toggleStudent = (studentId: string) => {
 
       // Title only names topics when the items were actually filtered to them.
       const title = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
+
+      // All four CHECK totals are computed and stored with the worksheet; only the
+      // one matching a student's assigned set is ever printed (set assignment is a later step).
+      const setChecks = computeSetChecks(items);
+
       const pdf = buildBandedSheetPdf({
         items,
         title,
         marginSize,
         formatText: formatPdfText,
+        setChecks,
+        assignedSet: null,
       });
 
       setGenerationProgress(90);
+
+      try {
+        await supabase.from('worksheets').insert({
+          teacher_id: user.id,
+          title,
+          questions: items.map((q, idx) => ({
+            number: idx + 1,
+            questionId: q.id,
+            band: q.band,
+            answerGroup: q.answer_group,
+            prompt: q.prompt_text,
+            answer: q.answer_text,
+          })) as never,
+          topics: (selectedTopics.length > 0 ? selectedTopics : []) as never,
+          settings: {
+            mode: 'banded-single-sheet',
+            composition,
+            setRanges: SET_RANGES,
+            setChecks,
+          } as never,
+        });
+      } catch (persistError) {
+        console.error('Could not store banded worksheet metadata:', persistError);
+      }
+
       const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
       pdf.save(fileName);
+
       trackFeature({
         featureName: 'Generate Banded Single Sheet',
         category: 'worksheets',
