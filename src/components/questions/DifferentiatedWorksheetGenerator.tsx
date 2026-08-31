@@ -4741,6 +4741,15 @@ const toggleStudent = (studentId: string) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Teacher-only surface: never rendered on a class-facing or projected view. */}
+      <SetAssignmentDialog
+        open={setAssignmentOpen}
+        onOpenChange={setSetAssignmentOpen}
+        classId={selectedClassId}
+        className={classes.find((c) => c.id === selectedClassId)?.name}
+      />
     </Dialog>
+
   );
 }
