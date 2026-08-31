@@ -96,7 +96,8 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
 
   pages.forEach((pageItems, pageIdx) => {
     const isLast = pageIdx === pages.length - 1;
-    const bottom = isLast ? stripTop - 4 : pageHeight - margin;
+    const bottom = isLast ? footerTop - 4 : pageHeight - margin;
+
 
     if (pageIdx > 0) {
       pdf.addPage();
