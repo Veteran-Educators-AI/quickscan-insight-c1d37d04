@@ -325,7 +325,6 @@ export function parseNumericAnswer(raw: string | null | undefined): number | nul
   }
   if (/[/÷]/.test(s)) return null;   // fractions / ratios are not unambiguous
   if (/[<>≤≥±~≈]/.test(s)) return null;
-  if (/[a-z]\s*[²³]?\s*$/i.test(s) === false && /[+*^√π]/.test(s)) return null;
   if (/[+*^√π]/.test(s)) return null; // unevaluated expressions
 
   // Leading label: "x =", "Area =", "AB ="
