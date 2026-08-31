@@ -66,10 +66,19 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
 
   const stripHeight = 30;
   const stripTop = pageHeight - margin - stripHeight;
-  const workSpace = 22;
+
+  // Auto-fit: the whole sheet should be one page per student wherever the prompts allow it,
+  // so work boxes shrink to share whatever room is left after the questions themselves.
+  const allPromptLines = sheet.items.map(
+    (q) => pdf.splitTextToSize(fmt(q?.prompt_text || ''), textWidth) as string[],
+  );
+  const promptHeight = allPromptLines.reduce((t, lines) => t + lines.length * 5 + 4, 0);
+  const gaps = sheet.items.length * 8;
+  const room = stripTop - 4 - y - promptHeight - gaps;
+  const workSpace = Math.max(11, Math.min(22, room / Math.max(1, sheet.items.length)));
 
   sheet.items.forEach((q, idx) => {
-    const promptLines = pdf.splitTextToSize(fmt(q?.prompt_text || ''), textWidth) as string[];
+    const promptLines = allPromptLines[idx];
     const blockHeight = promptLines.length * 5 + workSpace + 6;
 
     if (y + blockHeight > stripTop - 4) {
@@ -89,6 +98,7 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
     pdf.rect(margin + 8, y, textWidth - 8, workSpace);
     y += workSpace + 8;
   });
+
 
   // ---- Detachable answer strip: plain numbers, one CHECK total ----
   pdf.setDrawColor(120);
