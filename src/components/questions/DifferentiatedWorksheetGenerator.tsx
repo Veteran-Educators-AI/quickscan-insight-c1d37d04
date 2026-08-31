@@ -26,7 +26,6 @@ import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
-  BAND_GLYPH,
   drawBandGlyph,
   defaultComposition,
   formatShortfallMessage,
