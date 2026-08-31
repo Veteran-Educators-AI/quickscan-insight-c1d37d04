@@ -28,12 +28,15 @@ import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDE
 import {
   computeSetChecks,
   defaultComposition,
+  deriveSetRanges,
   formatShortfallMessage,
   selectBandedQuestions,
-  SET_RANGES,
+  setCommonOverlap,
   TopicResolutionError,
   type BandShortfall,
 } from '@/lib/bandedWorksheet';
+import { SetAssignmentDialog } from './SetAssignmentDialog';
+
 
 import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
 import jsPDF from 'jspdf';
@@ -327,6 +330,8 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   // Banked single-sheet mode (one document, four bands, glyphs only)
   const [bandedMode, setBandedMode] = useState(false);
   const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [setAssignmentOpen, setSetAssignmentOpen] = useState(false);
+
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   const [unresolvedTopics, setUnresolvedTopics] = useState<string[]>([]);
   
@@ -2385,7 +2390,9 @@ const toggleStudent = (studentId: string) => {
 
       // All four CHECK totals are computed and stored with the worksheet; only the
       // one matching a student's assigned set is ever printed (set assignment is a later step).
-      const setChecks = computeSetChecks(items);
+      const derivedRanges = deriveSetRanges(items.length);
+      const setChecks = computeSetChecks(items, derivedRanges);
+
 
       const pdf = buildBandedSheetPdf({
         items,
@@ -2414,7 +2421,7 @@ const toggleStudent = (studentId: string) => {
           settings: {
             mode: 'banded-single-sheet',
             composition,
-            setRanges: SET_RANGES,
+            setRanges: derivedRanges,
             setChecks,
           } as never,
         });
@@ -4326,6 +4333,36 @@ const toggleStudent = (studentId: string) => {
                     })()} across the four bands
                   </span>
                 </div>
+                {(() => {
+                  const total = parseInt(bandedItemCount) || 10;
+                  const r = deriveSetRanges(total);
+                  const ov = setCommonOverlap(r);
+                  return (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>
+                        Sets: {[1, 2, 3, 4].map((s) => `${s}) ${r[s][0]}–${r[s][1]}`).join('   ')}
+                      </p>
+                      <p className={ov ? '' : 'text-destructive'}>
+                        {ov ? `Every set contains items ${ov[0]}–${ov[1]}.` : 'These ranges share no common item.'}
+                      </p>
+                    </div>
+                  );
+                })()}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedClassId}
+                    onClick={() => setSetAssignmentOpen(true)}
+                  >
+                    <Users className="h-4 w-4 mr-2" /> Set assignment &amp; placement (teacher only)
+                  </Button>
+                  {!selectedClassId && (
+                    <span className="text-xs text-muted-foreground">Select a class first.</span>
+                  )}
+                </div>
+
                 {unresolvedTopics.length > 0 && (
                   <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
                     <p className="font-medium flex items-center gap-2 text-destructive">
@@ -4704,6 +4741,15 @@ const toggleStudent = (studentId: string) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Teacher-only surface: never rendered on a class-facing or projected view. */}
+      <SetAssignmentDialog
+        open={setAssignmentOpen}
+        onOpenChange={setSetAssignmentOpen}
+        classId={selectedClassId}
+        className={classes.find((c) => c.id === selectedClassId)?.name}
+      />
     </Dialog>
+
   );
 }

@@ -293,15 +293,46 @@ export function formatShortfallMessage(shortfalls: BandShortfall[]): string {
 
 // ===================== Detachable answer strip =====================
 
-/** Fixed set ranges (1-indexed, inclusive) over the sheet's items. */
-export const SET_RANGES: Record<number, [number, number]> = {
-  1: [1, 6],
-  2: [2, 8],
-  3: [4, 9],
-  4: [5, 10],
-};
+export type SetRangeMap = Record<number, [number, number]>;
 
 export const SET_NUMBERS = [1, 2, 3, 4] as const;
+
+/**
+ * Derives the four set ranges (1-indexed, inclusive) for a sheet of `total` items.
+ *
+ * Properties preserved for every count:
+ *  - the four ranges are the same length and ascend across the sheet,
+ *  - set 1 starts at item 1 and set 4 ends at the last item, so the sheet is spanned,
+ *  - the intersection of all four is non-empty (window length >= half the sheet + 1).
+ *
+ * The 10-item case derives to exactly 1-6 / 2-8 / 4-9 / 5-10.
+ */
+export function deriveSetRanges(total: number): SetRangeMap {
+  const n = Math.max(4, Math.floor(total));
+  // 60% window, but never so short that the four sets stop sharing a common item.
+  const len = Math.max(Math.round(n * 0.6), Math.floor(n / 2) + 1);
+  const span = n - len; // total drift from set 1 to set 4
+  const map: SetRangeMap = {} as SetRangeMap;
+  SET_NUMBERS.forEach((set, i) => {
+    // Starts drift forward, ends drift forward slightly faster, so set 1 begins at
+    // item 1, set 4 ends at the last item, and the middle sets straddle the centre.
+    const start = 1 + Math.round((i * span) / 3);
+    const end = Math.min(n, len + Math.ceil((i * span) / 3));
+    map[set] = [start, Math.max(start, end)];
+  });
+  return map;
+}
+
+/** The item range every set contains, or null if the sets share nothing. */
+export function setCommonOverlap(ranges: SetRangeMap): [number, number] | null {
+  const from = Math.max(...SET_NUMBERS.map((s) => ranges[s][0]));
+  const to = Math.min(...SET_NUMBERS.map((s) => ranges[s][1]));
+  return from <= to ? [from, to] : null;
+}
+
+/** Back-compatible constant: the documented 10-item ranges. */
+export const SET_RANGES: SetRangeMap = deriveSetRanges(10);
+
 
 /**
  * Tolerant numeric parse of a stored answer.
@@ -362,12 +393,16 @@ function tidy(n: number): number {
 }
 
 /**
- * Computes the CHECK total for all four sets. A set whose range contains any
- * non-numeric (or missing) answer yields `null`, which prints as a dash.
+ * Computes the CHECK total for all four sets. Ranges default to the ones derived
+ * from the sheet's own item count. A set whose range contains any non-numeric
+ * (or missing) answer yields `null`, which prints as a dash.
  */
-export function computeSetChecks(items: Pick<BankedQuestion, 'answer_text'>[]): SetCheckValue[] {
+export function computeSetChecks(
+  items: Pick<BankedQuestion, 'answer_text'>[],
+  ranges: SetRangeMap = deriveSetRanges(items.length),
+): SetCheckValue[] {
   return SET_NUMBERS.map((set) => {
-    const [from, to] = SET_RANGES[set];
+    const [from, to] = ranges[set];
     let total = 0;
     for (let i = from; i <= to; i++) {
       const item = items[i - 1];
@@ -380,8 +415,81 @@ export function computeSetChecks(items: Pick<BankedQuestion, 'answer_text'>[]): 
   });
 }
 
+
 /** Formats a CHECK total for print. Non-numeric sets print an em dash. */
 export function formatCheckValue(total: number | null): string {
   if (total === null) return '\u2014';
   return String(tidy(total));
+}
+
+// ===================== Band-stop placement =====================
+
+/**
+ * Deterministic answer comparison against the stored key. Numeric answers compare
+ * numerically (so "12.5 cm" matches "12.5"); anything else compares as case- and
+ * whitespace-insensitive text. This never judges a student's method, working or
+ * justification — only whether the entered answer equals the stored one.
+ */
+export function answersMatch(entered: string | null | undefined, stored: string | null | undefined): boolean {
+  if (entered == null || stored == null) return false;
+  const a = String(entered).trim();
+  const b = String(stored).trim();
+  if (!a || !b) return false;
+  const na = parseNumericAnswer(a);
+  const nb = parseNumericAnswer(b);
+  if (na !== null && nb !== null) return Math.abs(na - nb) < 1e-9;
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[.,;]+$/, '');
+  return norm(a) === norm(b);
+}
+
+export interface BandStopResult {
+  /** Highest band answered correctly within the student's own range, or null if none. */
+  bandReached: QuestionBand | null;
+  /** Suggested set for the next cycle. Null when nothing in range was correct. */
+  suggestedSet: number | null;
+  /** Items inside the student's range that were answered correctly. */
+  correctItemNumbers: number[];
+  /** Bands the student's range actually contained — a band never seen is never "failed". */
+  bandsInRange: QuestionBand[];
+}
+
+export const BAND_TO_SET: Record<QuestionBand, number> = {
+  foundation: 1,
+  core: 2,
+  extension: 3,
+  depth: 4,
+};
+
+/**
+ * Computes the highest band answered correctly, considering ONLY the items inside
+ * the student's assigned range. `answers` is keyed by 1-indexed item number.
+ */
+export function computeBandStop(
+  items: Pick<BankedQuestion, 'band' | 'answer_text'>[],
+  range: [number, number],
+  answers: Record<string, string>,
+): BandStopResult {
+  const [from, to] = range;
+  const correctItemNumbers: number[] = [];
+  const bandsInRange = new Set<QuestionBand>();
+  let highestIdx = -1;
+
+  for (let i = from; i <= to; i++) {
+    const item = items[i - 1];
+    if (!item) continue;
+    const band = (item.band || 'core') as QuestionBand;
+    bandsInRange.add(band);
+    if (answersMatch(answers[String(i)], item.answer_text)) {
+      correctItemNumbers.push(i);
+      highestIdx = Math.max(highestIdx, BANDS.indexOf(band));
+    }
+  }
+
+  const bandReached = highestIdx >= 0 ? BANDS[highestIdx] : null;
+  return {
+    bandReached,
+    suggestedSet: bandReached ? BAND_TO_SET[bandReached] : null,
+    correctItemNumbers,
+    bandsInRange: BANDS.filter((b) => bandsInRange.has(b)),
+  };
 }

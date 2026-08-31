@@ -534,6 +534,74 @@ export type Database = {
           },
         ]
       }
+      banded_set_assignments: {
+        Row: {
+          answers: Json
+          assigned_set: number
+          class_id: string
+          created_at: string
+          id: string
+          item_count: number
+          student_id: string
+          teacher_id: string
+          updated_at: string
+          worksheet_id: string | null
+        }
+        Insert: {
+          answers?: Json
+          assigned_set?: number
+          class_id: string
+          created_at?: string
+          id?: string
+          item_count?: number
+          student_id: string
+          teacher_id: string
+          updated_at?: string
+          worksheet_id?: string | null
+        }
+        Update: {
+          answers?: Json
+          assigned_set?: number
+          class_id?: string
+          created_at?: string
+          id?: string
+          item_count?: number
+          student_id?: string
+          teacher_id?: string
+          updated_at?: string
+          worksheet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banded_set_assignments_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banded_set_assignments_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banded_set_assignments_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banded_set_assignments_worksheet_id_fkey"
+            columns: ["worksheet_id"]
+            isOneToOne: false
+            referencedRelation: "worksheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batch_queue: {
         Row: {
           batch_id: string | null
