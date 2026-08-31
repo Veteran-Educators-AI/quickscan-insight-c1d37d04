@@ -106,17 +106,45 @@ export interface BandedSelectionResult {
   availableByBand: Record<QuestionBand, number>;
 }
 
+export interface BandedSelectionOptions {
+  /** Topic ids to restrict selection to. */
+  topicIds?: string[];
+  /** Topic names to restrict selection to; resolved to ids for this teacher. */
+  topicNames?: string[];
+}
+
+/** Resolves topic names to topic ids for a teacher. Unknown names are ignored. */
+export async function resolveTopicIds(teacherId: string, topicNames: string[]): Promise<string[]> {
+  if (!topicNames || topicNames.length === 0) return [];
+  const { data, error } = await supabase
+    .from('topics')
+    .select('id, name')
+    .eq('teacher_id', teacherId)
+    .in('name', topicNames);
+  if (error) throw error;
+  return ((data || []) as { id: string }[]).map((t) => t.id);
+}
+
 /**
- * Selects banked questions per band.
+ * Selects banked questions per band, optionally restricted to selected topics.
  * De-duplication: at most one question per non-null `answer_group`, applied globally
  * across the whole sheet (a group claimed by one band is unavailable to the others).
+ * Shortfall counts are computed after topic filtering, so "needed vs available"
+ * always means available *within the selected topics*.
  */
 export async function selectBandedQuestions(
   teacherId: string,
   composition: BandComposition,
-  topicIds?: string[],
+  options?: string[] | BandedSelectionOptions,
 ): Promise<BandedSelectionResult> {
-  let query = supabase
+  const opts: BandedSelectionOptions = Array.isArray(options) ? { topicIds: options } : (options || {});
+  const resolvedIds = [
+    ...(opts.topicIds || []),
+    ...(opts.topicNames && opts.topicNames.length > 0 ? await resolveTopicIds(teacherId, opts.topicNames) : []),
+  ];
+  const topicIds = Array.from(new Set(resolvedIds));
+
+  const query = supabase
     .from('questions')
     .select('id, band, answer_group, prompt_text, answer_text, prompt_image_url, answer_image_url, difficulty, question_topics(topic_id)')
     .eq('teacher_id', teacherId)
@@ -128,10 +156,11 @@ export async function selectBandedQuestions(
   if (error) throw error;
 
   const rows = ((data || []) as any[]).filter((r) => {
-    if (!topicIds || topicIds.length === 0) return true;
+    if (topicIds.length === 0) return true;
     const links: { topic_id: string }[] = r.question_topics || [];
     return links.some((l) => topicIds.includes(l.topic_id));
   });
+
 
   const availableByBand = { foundation: 0, core: 0, extension: 0, depth: 0 } as Record<QuestionBand, number>;
   const byBand: Record<QuestionBand, BankedQuestion[]> = {
