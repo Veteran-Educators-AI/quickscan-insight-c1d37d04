@@ -334,6 +334,8 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [includeStudentQR, setIncludeStudentQR] = useState(true);
   const [onlyWithoutDiagnostic, setOnlyWithoutDiagnostic] = useState(false);
   const [marginSize, setMarginSize] = useState<'small' | 'medium' | 'large'>('medium');
+  // Off by default: prints one flat sheet-wide list of standard codes on the student sheet.
+  const [showStandardsFooter, setShowStandardsFooter] = useState(false);
 
   // Banded variant mode: four ten-item sheet variants (A-D) drawn from the question bank
   const [bandedMode, setBandedMode] = useState(false);
@@ -2427,7 +2429,7 @@ const toggleStudent = (studentId: string) => {
             sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
           };
         });
-        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText, showStandardsFooter });
         classSet.save(`class-set-${new Date().toISOString().split('T')[0]}.pdf`);
       } else {
         // No roster picked: still give the teacher one blank-named copy of each variant.
@@ -2438,7 +2440,7 @@ const toggleStudent = (studentId: string) => {
           check: v.check,
           sortKey: v.variant,
         }));
-        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText, showStandardsFooter });
         classSet.save(`variants-${new Date().toISOString().split('T')[0]}.pdf`);
       }
 
