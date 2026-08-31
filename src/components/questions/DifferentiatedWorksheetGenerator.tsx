@@ -321,6 +321,11 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [includeStudentQR, setIncludeStudentQR] = useState(true);
   const [onlyWithoutDiagnostic, setOnlyWithoutDiagnostic] = useState(false);
   const [marginSize, setMarginSize] = useState<'small' | 'medium' | 'large'>('medium');
+
+  // Banked single-sheet mode (one document, four bands, glyphs only)
+  const [bandedMode, setBandedMode] = useState(false);
+  const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   
   // Storyboard art settings for non-math subjects
   const [includeStoryboardArt, setIncludeStoryboardArt] = useState(false);
