@@ -26,19 +26,27 @@ import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
-  computeSetChecks,
-  defaultComposition,
-  deriveSetRanges,
+  BANDS,
+  DEFAULT_ANCHOR_BANDS,
+  DEFAULT_VARIANT_MIX,
+  VARIANTS,
+  VARYING_ITEM_COUNT,
+  buildVariants,
+  fetchBandPools,
   formatShortfallMessage,
-  selectBandedQuestions,
-  setCommonOverlap,
+  mixTotal,
+  wholeSheetTotals,
   TopicResolutionError,
+  type BandMix,
   type BandShortfall,
+  type QuestionBand,
+  type VariantLetter,
 } from '@/lib/bandedWorksheet';
 import { SetAssignmentDialog } from './SetAssignmentDialog';
 
 
-import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
+import { buildAnswerKeysPdf, buildClassSetPdf } from '@/lib/bandedWorksheetPdf';
+
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
 
