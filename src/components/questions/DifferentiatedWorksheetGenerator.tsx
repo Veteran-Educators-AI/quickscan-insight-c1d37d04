@@ -29,6 +29,7 @@ import {
   defaultComposition,
   formatShortfallMessage,
   selectBandedQuestions,
+  TopicResolutionError,
   type BandShortfall,
 } from '@/lib/bandedWorksheet';
 import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
@@ -324,6 +325,7 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [bandedMode, setBandedMode] = useState(false);
   const [bandedItemCount, setBandedItemCount] = useState('10');
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
+  const [unresolvedTopics, setUnresolvedTopics] = useState<string[]>([]);
   
   // Storyboard art settings for non-math subjects
   const [includeStoryboardArt, setIncludeStoryboardArt] = useState(false);
@@ -2346,6 +2348,7 @@ const toggleStudent = (studentId: string) => {
   const generateBandedSingleSheet = async () => {
     if (!user) return;
     setBandShortfalls([]);
+    setUnresolvedTopics([]);
     setIsGenerating(true);
     setGenerationProgress(0);
     setGenerationStatus('Selecting banked questions...');
@@ -2353,9 +2356,13 @@ const toggleStudent = (studentId: string) => {
     try {
       const total = parseInt(bandedItemCount) || 10;
       const composition = defaultComposition(total);
-      const { items, shortfalls } = await selectBandedQuestions(user.id, composition, {
-        topicNames: selectedTopics,
-      });
+      // Topics selected => the filter is mandatory and any unresolved name blocks generation.
+      // No topics selected => filtering is legitimately not requested.
+      const { items, shortfalls } = await selectBandedQuestions(
+        user.id,
+        composition,
+        selectedTopics.length > 0 ? { topicNames: selectedTopics } : {},
+      );
 
       if (shortfalls.length > 0) {
         setBandShortfalls(shortfalls);
@@ -2396,6 +2403,15 @@ const toggleStudent = (studentId: string) => {
       setGenerationProgress(100);
     } catch (error) {
       console.error('Banded sheet error:', error);
+      if (error instanceof TopicResolutionError) {
+        setUnresolvedTopics(error.unmatched);
+        toast({
+          title: 'Topics could not be matched',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
+      }
       toast({
         title: 'Generation failed',
         description: error instanceof Error ? error.message : 'Could not build the banded worksheet.',
@@ -4274,6 +4290,22 @@ const toggleStudent = (studentId: string) => {
                     })()} across the four bands
                   </span>
                 </div>
+                {unresolvedTopics.length > 0 && (
+                  <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
+                    <p className="font-medium flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-4 w-4" /> Topics could not be matched
+                    </p>
+                    <ul className="mt-1 ml-6 list-disc text-destructive">
+                      {unresolvedTopics.map((n) => (
+                        <li key={n}>{n}</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs mt-2 text-muted-foreground">
+                      No worksheet was created. A sheet titled with these topics would not have been
+                      limited to them, so generation was blocked instead.
+                    </p>
+                  </div>
+                )}
                 {bandShortfalls.length > 0 && (
                   <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
                     <p className="font-medium flex items-center gap-2 text-destructive">
