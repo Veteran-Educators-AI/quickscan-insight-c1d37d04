@@ -4374,26 +4374,28 @@ const toggleStudent = (studentId: string) => {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>
             Cancel
           </Button>
+          {!bandedMode && (
+            <Button
+              variant="outline"
+              onClick={generatePreview}
+              disabled={isGenerating || selectedCount === 0}
+            >
+              {isGenerating && !showPreview ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview
+                </>
+              )}
+            </Button>
+          )}
           <Button
-            variant="outline"
-            onClick={generatePreview}
-            disabled={isGenerating || selectedCount === 0}
-          >
-            {isGenerating && !showPreview ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Eye className="h-4 w-4 mr-2" />
-                Preview
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={generateDifferentiatedWorksheets}
-            disabled={isGenerating || selectedCount === 0}
+            onClick={bandedMode ? generateBandedSingleSheet : generateDifferentiatedWorksheets}
+            disabled={isGenerating || (!bandedMode && selectedCount === 0)}
             className="bg-purple-600 hover:bg-purple-700"
           >
             {isGenerating ? (
@@ -4404,10 +4406,13 @@ const toggleStudent = (studentId: string) => {
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                Generate {selectedCount} Worksheet{selectedCount !== 1 ? 's' : ''}
+                {bandedMode
+                  ? `Generate Single Sheet (${bandedItemCount} items)`
+                  : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
               </>
             )}
           </Button>
+
         </DialogFooter>
       </DialogContent>
 
