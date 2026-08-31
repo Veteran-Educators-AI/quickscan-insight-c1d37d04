@@ -97,5 +97,60 @@ export function buildBandedSheetPdf({
     y += workSpace + 8;
   });
 
+  // ---- Detachable answer strip, foot of the sheet ----
+  const stripHeight = 34;
+  const stripTop = pageHeight - margin - stripHeight;
+  if (y > stripTop - 4) {
+    pdf.addPage();
+  }
+
+  // Dashed cut line separating the strip from the body.
+  pdf.setDrawColor(120);
+  pdf.setLineWidth(0.3);
+  pdf.setLineDashPattern([2, 1.6], 0);
+  pdf.line(margin, stripTop, pageWidth - margin, stripTop);
+  pdf.setLineDashPattern([], 0);
+
+  let sy = stripTop + 8;
+  pdf.setTextColor(0);
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('ANSWER STRIP', margin, sy);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text('ID ______', margin + 38, sy);
+  pdf.text('SET  1   2   3   4', margin + 70, sy);
+  sy += 7;
+
+  // Two rows of five: number, the item's band mark, then the answer rule.
+  // The mark is the same vector shape as the item, scaled down for the strip.
+  const stripGlyphSize = 1.25;
+  const perRow = 5;
+  const colWidth = contentWidth / perRow;
+  pdf.setFontSize(10);
+  items.forEach((q, idx) => {
+    const row = Math.floor(idx / perRow);
+    const col = idx % perRow;
+    const x = margin + col * colWidth;
+    const ry = sy + row * 7;
+    pdf.setTextColor(0);
+    pdf.text(`${idx + 1}`, x, ry);
+    const numW = pdf.getTextWidth(`${idx + 1}`);
+    drawBandGlyph(pdf as never, q.band, x + numW + 3.4, ry - 1.1, stripGlyphSize);
+    pdf.setTextColor(0);
+    pdf.text('____', x + numW + 4.4, ry);
+  });
+  sy += Math.ceil(items.length / perRow) * 7 + 3;
+
+  // CHECK: only the assigned set's total prints. Never all four — a student must
+  // not be able to compare them and infer which item range each set covers.
+  const assignedCheck = assignedSet
+    ? setChecks?.find((c) => c.set === assignedSet)
+    : undefined;
+  const checkValue = assignedCheck ? formatCheckValue(assignedCheck.total) : '';
+  pdf.setTextColor(0);
+  pdf.setFontSize(10);
+  pdf.text(`CHECK: your completed answers should total  ${checkValue || '______'}`, margin, sy);
+
   return pdf;
+
 }
