@@ -4,9 +4,16 @@ import {
   drawBandGlyph,
   formatCheckValue,
   ITEMS_PER_SHEET,
+  VARIANTS,
   type BankedQuestion,
   type VariantSheet,
 } from './bandedWorksheet';
+import {
+  crossVariantCoverage,
+  itemStandards,
+  sheetStandardCodes,
+  variantCoverage,
+} from './bandedStandardsCoverage';
 
 export interface StudentSheet {
   /** Pre-printed on the sheet header. */
@@ -22,10 +29,17 @@ export interface SheetRenderOptions {
   title: string;
   marginSize?: 'small' | 'medium' | 'large';
   formatText?: (text: string) => string;
+  /**
+   * Prints a single flat, sheet-wide line of NYS standard codes above the answer
+   * strip. Default OFF. Codes only — never per item, so their order cannot be read
+   * back against the item order to infer which items are harder.
+   */
+  showStandardsFooter?: boolean;
 }
 
 const marginFor = (size: SheetRenderOptions['marginSize']) =>
   size === 'small' ? 15 : size === 'large' ? 25 : 19;
+
 
 /**
  * Renders one student sheet onto the current page of `pdf`.
