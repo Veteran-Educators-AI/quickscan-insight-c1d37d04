@@ -26,12 +26,15 @@ import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
+  computeSetChecks,
   defaultComposition,
   formatShortfallMessage,
   selectBandedQuestions,
+  SET_RANGES,
   TopicResolutionError,
   type BandShortfall,
 } from '@/lib/bandedWorksheet';
+
 import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
