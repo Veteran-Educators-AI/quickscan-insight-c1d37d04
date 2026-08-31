@@ -26,19 +26,27 @@ import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
-  computeSetChecks,
-  defaultComposition,
-  deriveSetRanges,
+  BANDS,
+  DEFAULT_ANCHOR_BANDS,
+  DEFAULT_VARIANT_MIX,
+  VARIANTS,
+  VARYING_ITEM_COUNT,
+  buildVariants,
+  fetchBandPools,
   formatShortfallMessage,
-  selectBandedQuestions,
-  setCommonOverlap,
+  mixTotal,
+  wholeSheetTotals,
   TopicResolutionError,
+  type BandMix,
   type BandShortfall,
+  type QuestionBand,
+  type VariantLetter,
 } from '@/lib/bandedWorksheet';
 import { SetAssignmentDialog } from './SetAssignmentDialog';
 
 
-import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
+import { buildAnswerKeysPdf, buildClassSetPdf } from '@/lib/bandedWorksheetPdf';
+
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
 
@@ -327,10 +335,13 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [onlyWithoutDiagnostic, setOnlyWithoutDiagnostic] = useState(false);
   const [marginSize, setMarginSize] = useState<'small' | 'medium' | 'large'>('medium');
 
-  // Banked single-sheet mode (one document, four bands, glyphs only)
+  // Banded variant mode: four ten-item sheet variants (A-D) drawn from the question bank
   const [bandedMode, setBandedMode] = useState(false);
-  const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [variantMixes, setVariantMixes] = useState<Record<VariantLetter, BandMix>>(() =>
+    JSON.parse(JSON.stringify(DEFAULT_VARIANT_MIX)),
+  );
   const [setAssignmentOpen, setSetAssignmentOpen] = useState(false);
+
 
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   const [unresolvedTopics, setUnresolvedTopics] = useState<string[]>([]);
@@ -2349,11 +2360,11 @@ const toggleStudent = (studentId: string) => {
   };
 
   // ============================================================
-  // BANKED SINGLE SHEET (one document, four bands, glyphs only)
-  // Items come from the `questions` bank filtered on the `band` enum.
-  // No AI generation, no band names / level letters on the student sheet.
+  // FOUR SHEET VARIANTS (A-D), ten items each, drawn from the question bank.
+  // Every variant shares the same four anchor items in the same positions; the
+  // other six vary by band mix. Student copies carry no band marks at all.
   // ============================================================
-  const generateBandedSingleSheet = async () => {
+  const generateBandedVariantSet = async () => {
     if (!user) return;
     setBandShortfalls([]);
     setUnresolvedTopics([]);
@@ -2362,16 +2373,13 @@ const toggleStudent = (studentId: string) => {
     setGenerationStatus('Selecting banked questions...');
 
     try {
-      const total = parseInt(bandedItemCount) || 10;
-      const composition = defaultComposition(total);
       // Topics selected => the filter is mandatory and any unresolved name blocks generation.
-      // No topics selected => filtering is legitimately not requested.
-      const { items, shortfalls } = await selectBandedQuestions(
+      const pools = await fetchBandPools(
         user.id,
-        composition,
         selectedTopics.length > 0 ? { topicNames: selectedTopics } : {},
       );
 
+      const { variants, shortfalls } = buildVariants(pools, DEFAULT_ANCHOR_BANDS, variantMixes);
       if (shortfalls.length > 0) {
         setBandShortfalls(shortfalls);
         toast({
@@ -2383,25 +2391,62 @@ const toggleStudent = (studentId: string) => {
       }
 
       setGenerationProgress(40);
-      setGenerationStatus('Building worksheet...');
+      setGenerationStatus('Building the class set...');
 
       // Title only names topics when the items were actually filtered to them.
       const title = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
 
-      // All four CHECK totals are computed and stored with the worksheet; only the
-      // one matching a student's assigned set is ever printed (set assignment is a later step).
-      const derivedRanges = deriveSetRanges(items.length);
-      const setChecks = computeSetChecks(items, derivedRanges);
+      // Variant assignment for the class set. Existing assignments win; anyone not yet
+      // assigned starts on Variant B and can be moved in the assignment dialog.
+      const roster = students.filter((s) => s.selected).length > 0
+        ? students.filter((s) => s.selected)
+        : students;
+      let assignedVariant: Record<string, VariantLetter> = {};
+      if (selectedClassId && roster.length > 0) {
+        const { data: rows } = await supabase
+          .from('banded_set_assignments')
+          .select('student_id, assigned_set')
+          .eq('teacher_id', user.id)
+          .eq('class_id', selectedClassId);
+        ((rows || []) as { student_id: string; assigned_set: number }[]).forEach((r) => {
+          assignedVariant[r.student_id] = VARIANTS[Math.min(3, Math.max(0, (r.assigned_set || 1) - 1))];
+        });
+      }
 
+      const byLetter = (letter: VariantLetter) => variants.find((v) => v.variant === letter)!;
 
-      const pdf = buildBandedSheetPdf({
-        items,
-        title,
-        marginSize,
-        formatText: formatPdfText,
-        setChecks,
-        assignedSet: null,
-      });
+      if (roster.length > 0) {
+        const sheets = roster.map((s) => {
+          const letter = assignedVariant[s.id] || 'B';
+          const v = byLetter(letter);
+          return {
+            studentName: `${s.first_name} ${s.last_name}`,
+            variant: letter,
+            items: v.items,
+            check: v.check,
+            sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+          };
+        });
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        classSet.save(`class-set-${new Date().toISOString().split('T')[0]}.pdf`);
+      } else {
+        // No roster picked: still give the teacher one blank-named copy of each variant.
+        const sheets = variants.map((v) => ({
+          studentName: '______________________________',
+          variant: v.variant,
+          items: v.items,
+          check: v.check,
+          sortKey: v.variant,
+        }));
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        classSet.save(`variants-${new Date().toISOString().split('T')[0]}.pdf`);
+      }
+
+      setGenerationProgress(75);
+      setGenerationStatus('Building the four answer keys...');
+
+      const keys = buildAnswerKeysPdf(variants, { title, marginSize, formatText: formatPdfText });
+      keys.save(`answer-keys-${new Date().toISOString().split('T')[0]}.pdf`);
 
       setGenerationProgress(90);
 
@@ -2409,43 +2454,48 @@ const toggleStudent = (studentId: string) => {
         await supabase.from('worksheets').insert({
           teacher_id: user.id,
           title,
-          questions: items.map((q, idx) => ({
-            number: idx + 1,
-            questionId: q.id,
-            band: q.band,
-            answerGroup: q.answer_group,
-            prompt: q.prompt_text,
-            answer: q.answer_text,
-          })) as never,
+          questions: variants.flatMap((v) =>
+            v.items.map((q, idx) => ({
+              variant: v.variant,
+              number: idx + 1,
+              questionId: q.id,
+              band: q.band,
+              answerGroup: q.answer_group,
+              prompt: q.prompt_text,
+              answer: q.answer_text,
+              isAnchor: v.anchorPositions.includes(idx + 1),
+            })),
+          ) as never,
           topics: (selectedTopics.length > 0 ? selectedTopics : []) as never,
           settings: {
-            mode: 'banded-single-sheet',
-            composition,
-            setRanges: derivedRanges,
-            setChecks,
+            mode: 'banded-variants',
+            anchorPositions: variants[0].anchorPositions,
+            anchorBands: DEFAULT_ANCHOR_BANDS,
+            variantMixes,
+            variantTotals: Object.fromEntries(variants.map((v) => [v.variant, v.totals])),
+            variantChecks: Object.fromEntries(variants.map((v) => [v.variant, v.check])),
           } as never,
         });
       } catch (persistError) {
-        console.error('Could not store banded worksheet metadata:', persistError);
+        console.error('Could not store variant worksheet metadata:', persistError);
       }
 
-      const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-
       trackFeature({
-        featureName: 'Generate Banded Single Sheet',
+        featureName: 'Generate Banded Variant Set',
         category: 'worksheets',
         action: 'generated',
-        metadata: { itemCount: items.length, composition },
+        metadata: { variantMixes, studentCount: roster.length },
       });
 
       toast({
-        title: 'Worksheet created',
-        description: `One sheet with ${items.length} banked items.`,
+        title: 'Class set + answer keys ready',
+        description: roster.length > 0
+          ? `${roster.length} sheets in one PDF, ordered by surname, plus the four answer keys.`
+          : 'One copy of each variant, plus the four answer keys.',
       });
       setGenerationProgress(100);
     } catch (error) {
-      console.error('Banded sheet error:', error);
+      console.error('Variant set error:', error);
       if (error instanceof TopicResolutionError) {
         setUnresolvedTopics(error.unmatched);
         toast({
@@ -2457,7 +2507,7 @@ const toggleStudent = (studentId: string) => {
       }
       toast({
         title: 'Generation failed',
-        description: error instanceof Error ? error.message : 'Could not build the banded worksheet.',
+        description: error instanceof Error ? error.message : 'Could not build the four variants.',
         variant: 'destructive',
       });
     } finally {
@@ -2465,6 +2515,7 @@ const toggleStudent = (studentId: string) => {
       setGenerationStatus('');
     }
   };
+
 
 
   // Generate preview data (questions only, no PDF)
@@ -4298,15 +4349,16 @@ const toggleStudent = (studentId: string) => {
             </Card>
           )}
 
-          {/* Banked single-sheet mode */}
+          {/* Four sheet variants (A-D) */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Single banded sheet</CardTitle>
+                  <CardTitle className="text-base">Four sheet variants (A–D)</CardTitle>
                   <CardDescription>
-                    One worksheet drawn from your question bank, ordered foundation → depth. Items are
-                    marked only by a small grey glyph in the right margin.
+                    Ten items each, drawn from your question bank. All four share the same four anchor
+                    items in the same positions; the other six vary by band mix. Student copies carry
+                    no band marks — the four answer keys are the teacher's copy.
                   </CardDescription>
                 </div>
                 <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); setBandShortfalls([]); }} />
@@ -4314,40 +4366,66 @@ const toggleStudent = (studentId: string) => {
             </CardHeader>
             {bandedMode && (
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm">Items</Label>
-                  <Select value={bandedItemCount} onValueChange={(v) => { setBandedItemCount(v); setBandShortfalls([]); }}>
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {['8', '10', '12', '16', '20'].map((n) => (
-                        <SelectItem key={n} value={n}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <span className="text-xs text-muted-foreground">
-                    {(() => {
-                      const c = defaultComposition(parseInt(bandedItemCount) || 10);
-                      return `${c.foundation} / ${c.core} / ${c.extension} / ${c.depth}`;
-                    })()} across the four bands
-                  </span>
+                <p className="text-xs text-muted-foreground">
+                  Anchor items: {DEFAULT_ANCHOR_BANDS.join(', ')} — at items {[1, 4, 7, 10].join(', ')} on every variant.
+                </p>
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2">Variant</th>
+                        {BANDS.map((b) => (
+                          <th key={b} className="text-left p-2 capitalize">{b}</th>
+                        ))}
+                        <th className="text-left p-2">Varying</th>
+                        <th className="text-left p-2">Whole sheet (F/C/E/D)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {VARIANTS.map((letter) => {
+                        const mix = variantMixes[letter];
+                        const total = mixTotal(mix);
+                        const totals = wholeSheetTotals(DEFAULT_ANCHOR_BANDS, mix);
+                        return (
+                          <tr key={letter} className="border-b last:border-0">
+                            <td className="p-2 font-medium">{letter}</td>
+                            {BANDS.map((b) => (
+                              <td key={b} className="p-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={6}
+                                  className="h-7 w-14 text-xs"
+                                  value={String(mix[b])}
+                                  onChange={(e) => {
+                                    const value = Math.max(0, Math.min(6, parseInt(e.target.value) || 0));
+                                    setBandShortfalls([]);
+                                    setVariantMixes((prev) => ({
+                                      ...prev,
+                                      [letter]: { ...prev[letter], [b as QuestionBand]: value },
+                                    }));
+                                  }}
+                                />
+                              </td>
+                            ))}
+                            <td className={`p-2 ${total === VARYING_ITEM_COUNT ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
+                              {total} / {VARYING_ITEM_COUNT}
+                            </td>
+                            <td className="p-2 text-muted-foreground">
+                              {BANDS.map((b) => totals[b]).join(' / ')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                {(() => {
-                  const total = parseInt(bandedItemCount) || 10;
-                  const r = deriveSetRanges(total);
-                  const ov = setCommonOverlap(r);
-                  return (
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>
-                        Sets: {[1, 2, 3, 4].map((s) => `${s}) ${r[s][0]}–${r[s][1]}`).join('   ')}
-                      </p>
-                      <p className={ov ? '' : 'text-destructive'}>
-                        {ov ? `Every set contains items ${ov[0]}–${ov[1]}.` : 'These ranges share no common item.'}
-                      </p>
-                    </div>
-                  );
-                })()}
+                {VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT) && (
+                  <p className="text-xs text-destructive">
+                    Each variant's varying items must total exactly {VARYING_ITEM_COUNT} (plus the 4 shared anchors = 10).
+                  </p>
+                )}
+
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
@@ -4356,7 +4434,7 @@ const toggleStudent = (studentId: string) => {
                     disabled={!selectedClassId}
                     onClick={() => setSetAssignmentOpen(true)}
                   >
-                    <Users className="h-4 w-4 mr-2" /> Set assignment &amp; placement (teacher only)
+                    <Users className="h-4 w-4 mr-2" /> Variant assignment &amp; placement (teacher only)
                   </Button>
                   {!selectedClassId && (
                     <span className="text-xs text-muted-foreground">Select a class first.</span>
@@ -4447,8 +4525,12 @@ const toggleStudent = (studentId: string) => {
             </Button>
           )}
           <Button
-            onClick={bandedMode ? generateBandedSingleSheet : generateDifferentiatedWorksheets}
-            disabled={isGenerating || (!bandedMode && selectedCount === 0)}
+            onClick={bandedMode ? generateBandedVariantSet : generateDifferentiatedWorksheets}
+            disabled={
+              isGenerating ||
+              (!bandedMode && selectedCount === 0) ||
+              (bandedMode && VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT))
+            }
             className="bg-purple-600 hover:bg-purple-700"
           >
             {isGenerating ? (
@@ -4460,11 +4542,12 @@ const toggleStudent = (studentId: string) => {
               <>
                 <Download className="h-4 w-4 mr-2" />
                 {bandedMode
-                  ? `Generate Single Sheet (${bandedItemCount} items)`
+                  ? 'Generate Class Set + 4 Answer Keys'
                   : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
               </>
             )}
           </Button>
+
 
         </DialogFooter>
       </DialogContent>

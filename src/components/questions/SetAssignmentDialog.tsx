@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Printer, FileDown, Check, Lock } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Loader2, Printer, FileDown, Check, Lock, Layers } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,17 +13,17 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { sanitizeForPDF, fixEncodingCorruption } from '@/lib/mathRenderer';
 import {
-  BAND_TO_SET,
-  SET_NUMBERS,
+  BAND_TO_VARIANT,
+  VARIANTS,
   computeBandStop,
-  computeSetChecks,
-  deriveSetRanges,
-  setCommonOverlap,
+  computeVariantCheck,
+  variantFromIndex,
+  variantIndex,
   type BankedQuestion,
   type QuestionBand,
-  type SetRangeMap,
+  type VariantLetter,
 } from '@/lib/bandedWorksheet';
-import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
+import { buildAnswerKeysPdf, buildClassSetPdf, buildStudentSheetPdf } from '@/lib/bandedWorksheetPdf';
 
 const formatPdfText = (text: string) => sanitizeForPDF(fixEncodingCorruption(text));
 
@@ -40,15 +40,18 @@ interface RosterStudent {
   last_name: string;
 }
 
-interface BandedWorksheetRow {
+interface VariantWorksheetRow {
   id: string;
   title: string;
   created_at: string;
-  items: BankedQuestion[];
+  /** Items per variant letter. */
+  variants: Record<VariantLetter, BankedQuestion[]>;
+  anchorPositions: number[];
 }
 
 interface AssignmentRow {
   student_id: string;
+  /** 1-4, mapping to variants A-D. */
   assigned_set: number;
   answers: Record<string, string>;
 }
@@ -60,15 +63,11 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [students, setStudents] = useState<RosterStudent[]>([]);
-  const [worksheets, setWorksheets] = useState<BandedWorksheetRow[]>([]);
+  const [worksheets, setWorksheets] = useState<VariantWorksheetRow[]>([]);
   const [worksheetId, setWorksheetId] = useState<string>('');
   const [assignments, setAssignments] = useState<Record<string, AssignmentRow>>({});
 
   const worksheet = worksheets.find((w) => w.id === worksheetId) || null;
-  const items = worksheet?.items ?? [];
-  const ranges: SetRangeMap = useMemo(() => deriveSetRanges(items.length || 10), [items.length]);
-  const overlap = useMemo(() => setCommonOverlap(ranges), [ranges]);
-  const setChecks = useMemo(() => computeSetChecks(items, ranges), [items, ranges]);
 
   const load = useCallback(async () => {
     if (!user || !classId) return;
@@ -91,26 +90,37 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
 
       setStudents((studentRes.data || []) as RosterStudent[]);
 
-      const banded = ((worksheetRes.data || []) as Record<string, unknown>[])
-        .filter((w) => (w.settings as { mode?: string } | null)?.mode === 'banded-single-sheet')
-        .map((w) => ({
-          id: w.id as string,
-          title: (w.title as string) || 'Practice',
-          created_at: w.created_at as string,
-          items: (((w.questions as unknown[]) || []) as Record<string, unknown>[]).map((q) => ({
-            id: (q.questionId as string) || '',
-            band: ((q.band as QuestionBand) || 'core') as QuestionBand,
-            answer_group: (q.answerGroup as string) ?? null,
-            prompt_text: (q.prompt as string) ?? null,
-            answer_text: (q.answer as string) ?? null,
-            prompt_image_url: null,
-            answer_image_url: null,
-            difficulty: null,
-          })),
-        }))
-        .filter((w) => w.items.length > 0);
-      setWorksheets(banded);
-      setWorksheetId((prev) => (prev && banded.some((w) => w.id === prev) ? prev : banded[0]?.id || ''));
+      const parsed = ((worksheetRes.data || []) as Record<string, unknown>[])
+        .filter((w) => (w.settings as { mode?: string } | null)?.mode === 'banded-variants')
+        .map((w) => {
+          const settings = (w.settings || {}) as { anchorPositions?: number[] };
+          const variants: Record<VariantLetter, BankedQuestion[]> = { A: [], B: [], C: [], D: [] };
+          (((w.questions as unknown[]) || []) as Record<string, unknown>[]).forEach((q) => {
+            const letter = (q.variant as VariantLetter) || 'A';
+            if (!VARIANTS.includes(letter)) return;
+            variants[letter].push({
+              id: (q.questionId as string) || '',
+              band: ((q.band as QuestionBand) || 'core') as QuestionBand,
+              answer_group: (q.answerGroup as string) ?? null,
+              prompt_text: (q.prompt as string) ?? null,
+              answer_text: (q.answer as string) ?? null,
+              prompt_image_url: null,
+              answer_image_url: null,
+              difficulty: null,
+            });
+          });
+          return {
+            id: w.id as string,
+            title: (w.title as string) || 'Practice',
+            created_at: w.created_at as string,
+            variants,
+            anchorPositions: settings.anchorPositions || [1, 4, 7, 10],
+          };
+        })
+        .filter((w) => VARIANTS.every((v) => w.variants[v].length > 0));
+
+      setWorksheets(parsed);
+      setWorksheetId((prev) => (prev && parsed.some((w) => w.id === prev) ? prev : parsed[0]?.id || ''));
 
       const map: Record<string, AssignmentRow> = {};
       ((assignmentRes.data || []) as Record<string, unknown>[]).forEach((a) => {
@@ -122,7 +132,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
       });
       setAssignments(map);
     } catch (error) {
-      console.error('Set assignment load failed:', error);
+      console.error('Variant assignment load failed:', error);
       toast({ title: 'Could not load the roster', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -133,15 +143,18 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     if (open) load();
   }, [open, load]);
 
-  const rangeFor = (set: number): [number, number] => ranges[set] || [1, items.length || 10];
-  const assignedSetFor = (studentId: string) => assignments[studentId]?.assigned_set ?? 1;
+  const variantFor = (studentId: string): VariantLetter =>
+    variantFromIndex(assignments[studentId]?.assigned_set ?? 1);
 
-  const setStudentSet = (studentId: string, set: number) => {
+  const itemsFor = (studentId: string): BankedQuestion[] =>
+    worksheet ? worksheet.variants[variantFor(studentId)] : [];
+
+  const setStudentVariant = (studentId: string, letter: VariantLetter) => {
     setAssignments((prev) => ({
       ...prev,
       [studentId]: {
         student_id: studentId,
-        assigned_set: set,
+        assigned_set: variantIndex(letter),
         answers: prev[studentId]?.answers || {},
       },
     }));
@@ -166,8 +179,8 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
         class_id: classId,
         student_id: s.id,
         worksheet_id: worksheetId || null,
-        assigned_set: assignedSetFor(s.id),
-        item_count: items.length || 10,
+        assigned_set: variantIndex(variantFor(s.id)),
+        item_count: itemsFor(s.id).length || 10,
         answers: (assignments[s.id]?.answers || {}) as never,
       }));
       if (rows.length === 0) return;
@@ -175,67 +188,105 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
         .from('banded_set_assignments')
         .upsert(rows, { onConflict: 'teacher_id,class_id,student_id' });
       if (error) throw error;
-      toast({ title: 'Saved', description: 'Set assignments and entered answers stored.' });
+      toast({ title: 'Saved', description: 'Variant assignments and entered answers stored.' });
     } catch (error) {
-      console.error('Saving set assignments failed:', error);
+      console.error('Saving variant assignments failed:', error);
       toast({ title: 'Could not save', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
-  /** Teacher-only printable cards: student name and item range only. No set number, band or rank. */
+  /** Teacher-only printable cards: student name and variant letter only. No bands, mix or rank. */
   const printCards = () => {
     if (students.length === 0) return;
     const cards = students
-      .map((s) => {
-        const [from, to] = rangeFor(assignedSetFor(s.id));
-        return `<div class="card"><div class="name">${s.first_name} ${s.last_name}</div><div class="range">Items ${from} to ${to}</div></div>`;
-      })
+      .map(
+        (s) =>
+          `<div class="card"><div class="name">${s.first_name} ${s.last_name}</div><div class="variant">Variant ${variantFor(s.id)}</div></div>`,
+      )
       .join('');
     const win = window.open('', '_blank', 'width=900,height=1100');
     if (!win) {
       toast({ title: 'Pop-up blocked', description: 'Allow pop-ups to print the cards.', variant: 'destructive' });
       return;
     }
-    win.document.write(`<!doctype html><html><head><title>Item cards</title><style>
+    win.document.write(`<!doctype html><html><head><title>Variant cards</title><style>
       @page { size: letter; margin: 0.5in; }
       body { font-family: Helvetica, Arial, sans-serif; margin: 0; }
       .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
       .card { border: 1px solid #999; border-radius: 6px; padding: 12px 14px; page-break-inside: avoid; }
       .name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
-      .range { font-size: 12px; }
+      .variant { font-size: 12px; }
     </style></head><body><div class="grid">${cards}</div>
     <script>window.onload = function(){ window.print(); }</script></body></html>`);
     win.document.close();
   };
 
   const downloadSheet = (student: RosterStudent) => {
+    const items = itemsFor(student.id);
     if (items.length === 0) return;
-    const assignedSet = assignedSetFor(student.id);
-    const pdf = buildBandedSheetPdf({
-      items,
-      title: worksheet?.title || 'Practice',
-      formatText: formatPdfText,
-      setChecks,
-      assignedSet,
-    });
+    const pdf = buildStudentSheetPdf(
+      {
+        studentName: `${student.first_name} ${student.last_name}`,
+        variant: variantFor(student.id),
+        items,
+        check: computeVariantCheck(items),
+      },
+      { title: worksheet?.title || 'Practice', formatText: formatPdfText },
+    );
     pdf.save(`sheet-${student.last_name}-${student.first_name}.pdf`.toLowerCase().replace(/\s+/g, '-'));
   };
 
-  // ---- Band-stop report: deterministic key comparison, restricted to each student's range ----
+  /** One PDF, one sheet per student, ordered by surname. The main output. */
+  const downloadClassSet = () => {
+    if (!worksheet || students.length === 0) return;
+    const sheets = students.map((s) => {
+      const items = worksheet.variants[variantFor(s.id)];
+      return {
+        studentName: `${s.first_name} ${s.last_name}`,
+        variant: variantFor(s.id),
+        items,
+        check: computeVariantCheck(items),
+        sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+      };
+    });
+    const pdf = buildClassSetPdf(sheets, { title: worksheet.title, formatText: formatPdfText });
+    pdf.save(`class-set-${worksheet.title.replace(/\s+/g, '-').toLowerCase()}.pdf`);
+    toast({ title: 'Class set ready', description: `${sheets.length} sheets, ordered by surname.` });
+  };
+
+  const downloadAnswerKeys = () => {
+    if (!worksheet) return;
+    const variants = VARIANTS.map((letter) => {
+      const items = worksheet.variants[letter];
+      const totals = { foundation: 0, core: 0, extension: 0, depth: 0 };
+      items.forEach((q) => { totals[q.band] += 1; });
+      return {
+        variant: letter,
+        items,
+        anchorPositions: worksheet.anchorPositions,
+        totals,
+        check: computeVariantCheck(items),
+      };
+    });
+    const pdf = buildAnswerKeysPdf(variants, { title: worksheet.title, formatText: formatPdfText });
+    pdf.save(`answer-keys-${worksheet.title.replace(/\s+/g, '-').toLowerCase()}.pdf`);
+  };
+
+  // ---- Placement report: deterministic key comparison over the student's own variant ----
   const report = students.map((s) => {
-    const assignedSet = assignedSetFor(s.id);
-    const stop = computeBandStop(items, rangeFor(assignedSet), assignments[s.id]?.answers || {});
-    return { student: s, assignedSet, ...stop };
+    const items = itemsFor(s.id);
+    const stop = computeBandStop(items, assignments[s.id]?.answers || {});
+    return { student: s, currentVariant: variantFor(s.id), ...stop };
   });
 
-  const [pendingSuggestions, setPendingSuggestions] = useState<Record<string, number>>({});
+  const [pendingSuggestions, setPendingSuggestions] = useState<Record<string, VariantLetter>>({});
 
   const stageAllSuggestions = () => {
-    const staged: Record<string, number> = {};
+    const staged: Record<string, VariantLetter> = {};
     report.forEach((r) => {
-      if (r.suggestedSet && r.suggestedSet !== r.assignedSet) staged[r.student.id] = r.suggestedSet;
+      if (r.suggestedVariant && r.suggestedVariant !== r.currentVariant) staged[r.student.id] = r.suggestedVariant;
     });
     setPendingSuggestions(staged);
     toast({
@@ -244,8 +295,8 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     });
   };
 
-  const acceptSuggestion = (studentId: string, set: number) => {
-    setStudentSet(studentId, set);
+  const acceptSuggestion = (studentId: string, letter: VariantLetter) => {
+    setStudentVariant(studentId, letter);
     setPendingSuggestions((prev) => {
       const next = { ...prev };
       delete next[studentId];
@@ -259,10 +310,10 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Set assignment &amp; placement{className ? ` — ${className}` : ''}</DialogTitle>
+          <DialogTitle>Variant assignment &amp; placement{className ? ` — ${className}` : ''}</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
             <Lock className="h-3.5 w-3.5" />
-            Teacher-only. Set assignments are never shown on a class-facing or projected screen.
+            Teacher-only. Variant assignments are never shown on a class-facing or projected screen.
           </DialogDescription>
         </DialogHeader>
 
@@ -272,7 +323,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
           </div>
         ) : worksheets.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6">
-            No banded single sheet has been generated yet. Create one first, then come back to assign sets.
+            No variant set has been generated yet. Build the four variants first, then come back to assign them.
           </p>
         ) : (
           <div className="space-y-4">
@@ -285,40 +336,31 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                 <SelectContent>
                   {worksheets.map((w) => (
                     <SelectItem key={w.id} value={w.id}>
-                      {w.title} · {w.items.length} items · {new Date(w.created_at).toLocaleDateString()}
+                      {w.title} · 4 variants · {new Date(w.created_at).toLocaleDateString()}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Badge variant="outline">
-                {overlap ? `Common items ${overlap[0]}–${overlap[1]}` : 'No common items'}
-              </Badge>
-            </div>
-
-            {!overlap && (
-              <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm text-destructive">
-                These ranges no longer share a common item. Every set must contain the common band so the
-                sheets stay comparable — adjust the item count before assigning sets.
-              </div>
-            )}
-
-            <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
-              {SET_NUMBERS.map((s) => (
-                <span key={s}>Set {s}: items {rangeFor(s)[0]}–{rangeFor(s)[1]}</span>
-              ))}
+              <Badge variant="outline">Anchors at items {worksheet?.anchorPositions.join(', ')}</Badge>
             </div>
 
             <Tabs defaultValue="roster">
               <TabsList>
                 <TabsTrigger value="roster">Roster</TabsTrigger>
                 <TabsTrigger value="answers">Enter answers</TabsTrigger>
-                <TabsTrigger value="report">Band-stop report</TabsTrigger>
+                <TabsTrigger value="report">Placement report</TabsTrigger>
               </TabsList>
 
               <TabsContent value="roster" className="space-y-3">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={downloadClassSet} disabled={students.length === 0}>
+                    <Layers className="h-4 w-4 mr-2" /> Print class set (one PDF)
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={downloadAnswerKeys}>
+                    <FileDown className="h-4 w-4 mr-2" /> Four answer keys
+                  </Button>
                   <Button variant="outline" size="sm" onClick={printCards} disabled={students.length === 0}>
-                    <Printer className="h-4 w-4 mr-2" /> Print item cards
+                    <Printer className="h-4 w-4 mr-2" /> Print variant cards
                   </Button>
                 </div>
                 <div className="border rounded-lg overflow-y-auto max-h-[45vh]">
@@ -326,39 +368,36 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                     <TableHeader>
                       <TableRow>
                         <TableHead>Student</TableHead>
-                        <TableHead className="w-[130px]">Set</TableHead>
-                        <TableHead className="w-[130px]">Items</TableHead>
+                        <TableHead className="w-[150px]">Variant</TableHead>
                         <TableHead className="w-[110px]">Sheet</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {students.map((s) => {
-                        const set = assignedSetFor(s.id);
-                        const [from, to] = rangeFor(set);
-                        return (
-                          <TableRow key={s.id}>
-                            <TableCell className="text-sm">{s.first_name} {s.last_name}</TableCell>
-                            <TableCell>
-                              <Select value={String(set)} onValueChange={(v) => setStudentSet(s.id, parseInt(v))}>
-                                <SelectTrigger className="h-8 w-[90px]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {SET_NUMBERS.map((n) => (
-                                    <SelectItem key={n} value={String(n)}>Set {n}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{from} to {to}</TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="sm" onClick={() => downloadSheet(s)}>
-                                <FileDown className="h-4 w-4 mr-1" /> PDF
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {students.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="text-sm">{s.first_name} {s.last_name}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={variantFor(s.id)}
+                              onValueChange={(v) => setStudentVariant(s.id, v as VariantLetter)}
+                            >
+                              <SelectTrigger className="h-8 w-[110px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {VARIANTS.map((letter) => (
+                                  <SelectItem key={letter} value={letter}>Variant {letter}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" onClick={() => downloadSheet(s)}>
+                              <FileDown className="h-4 w-4 mr-1" /> PDF
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -367,17 +406,19 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
               <TabsContent value="answers" className="space-y-3">
                 <p className="text-xs text-muted-foreground">
                   Enter what the student wrote on the answer strip. Each entry is compared directly against
-                  the stored answer key — nothing here judges method or working.
+                  the stored answer key for their own variant — nothing here judges method or working.
                 </p>
                 <div className="border rounded-lg overflow-y-auto max-h-[45vh] divide-y">
                   {students.map((s) => {
-                    const [from, to] = rangeFor(assignedSetFor(s.id));
-                    const numbers = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+                    const count = itemsFor(s.id).length;
                     return (
                       <div key={s.id} className="p-3 space-y-2">
-                        <p className="text-sm font-medium">{s.first_name} {s.last_name}</p>
+                        <p className="text-sm font-medium">
+                          {s.first_name} {s.last_name}
+                          <span className="ml-2 text-xs text-muted-foreground">Variant {variantFor(s.id)}</span>
+                        </p>
                         <div className="flex flex-wrap gap-2">
-                          {numbers.map((n) => (
+                          {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
                             <div key={n} className="flex items-center gap-1">
                               <span className="text-xs text-muted-foreground w-5 text-right">{n}</span>
                               <Input
@@ -397,8 +438,9 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
               <TabsContent value="report" className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground max-w-xl">
-                    Highest band answered correctly, computed only over each student's own item range. A band
-                    that was not in range is never counted as missed. Suggestions are never applied on their own.
+                    Highest band answered correctly, computed only over the items on that student's own
+                    variant. A band they never saw is never counted as missed. Suggestions are never applied
+                    on their own.
                   </p>
                   <Button variant="outline" size="sm" onClick={stageAllSuggestions}>
                     Stage all for review
@@ -410,29 +452,29 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                       <TableRow>
                         <TableHead>Student</TableHead>
                         <TableHead>Band reached</TableHead>
-                        <TableHead>Current set</TableHead>
-                        <TableHead>Suggested set</TableHead>
+                        <TableHead>Current variant</TableHead>
+                        <TableHead>Suggested variant</TableHead>
                         <TableHead className="w-[150px]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {report.map((r) => {
                         const staged = pendingSuggestions[r.student.id];
-                        const suggestion = staged ?? r.suggestedSet;
-                        const differs = suggestion != null && suggestion !== r.assignedSet;
+                        const suggestion = staged ?? r.suggestedVariant;
+                        const differs = suggestion != null && suggestion !== r.currentVariant;
                         return (
                           <TableRow key={r.student.id}>
                             <TableCell className="text-sm">{r.student.first_name} {r.student.last_name}</TableCell>
                             <TableCell className="text-sm">{bandLabel(r.bandReached)}</TableCell>
-                            <TableCell className="text-sm">Set {r.assignedSet}</TableCell>
+                            <TableCell className="text-sm">Variant {r.currentVariant}</TableCell>
                             <TableCell className="text-sm">
-                              {suggestion ? `Set ${suggestion}` : '—'}
+                              {suggestion ? `Variant ${suggestion}` : '—'}
                               {staged ? <Badge variant="outline" className="ml-2">staged</Badge> : null}
                             </TableCell>
                             <TableCell>
                               {differs ? (
                                 <div className="flex gap-1">
-                                  <Button size="sm" variant="outline" onClick={() => acceptSuggestion(r.student.id, suggestion as number)}>
+                                  <Button size="sm" variant="outline" onClick={() => acceptSuggestion(r.student.id, suggestion as VariantLetter)}>
                                     <Check className="h-3.5 w-3.5 mr-1" /> Accept
                                   </Button>
                                   {staged ? (
@@ -462,8 +504,8 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                   </Table>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Mapping: foundation → Set {BAND_TO_SET.foundation}, core → Set {BAND_TO_SET.core},
-                  extension → Set {BAND_TO_SET.extension}, depth → Set {BAND_TO_SET.depth}.
+                  Mapping: foundation → Variant {BAND_TO_VARIANT.foundation}, core → Variant {BAND_TO_VARIANT.core},
+                  extension → Variant {BAND_TO_VARIANT.extension}, depth → Variant {BAND_TO_VARIANT.depth}.
                 </p>
               </TabsContent>
             </Tabs>

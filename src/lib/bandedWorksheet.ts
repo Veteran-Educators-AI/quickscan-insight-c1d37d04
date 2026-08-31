@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 export const BANDS = ['foundation', 'core', 'extension', 'depth'] as const;
 export type QuestionBand = typeof BANDS[number];
 
-/** Right-margin glyphs. Never accompanied by a band name on the student sheet. */
+/** Teacher-facing only. The student sheet carries no band marks at all. */
 export const BAND_GLYPH: Record<QuestionBand, string> = {
   foundation: '\u25CF', // ●
   core: '\u25B2',       // ▲
@@ -23,6 +23,7 @@ export const BAND_GLYPH_SIZE_MM = 1.6;
  * The standard-14 PDF fonts use WinAnsiEncoding and cannot encode the
  * geometric-shapes code points in BAND_GLYPH, so the PDF path never uses text.
  * (x, y) is the right-margin anchor and the vertical centre of the mark.
+ * Used on the teacher answer keys only.
  */
 export function drawBandGlyph(
   pdf: {
@@ -36,19 +37,18 @@ export function drawBandGlyph(
   x: number,
   y: number,
   size: number = BAND_GLYPH_SIZE_MM,
+  rgb: [number, number, number] = BAND_GLYPH_RGB,
 ): void {
-  pdf.setFillColor(...BAND_GLYPH_RGB);
+  pdf.setFillColor(...rgb);
   const h = size / 2;
   // right-aligned: shapes occupy [x - size, x]
   const cx = x - h;
 
   switch (band) {
     case 'foundation':
-      // Filled circle. Radius trimmed so its area matches the square roughly.
       pdf.circle(cx, y, h * 0.92, 'F');
       break;
     case 'core': {
-      // Filled triangle, apex up. Slightly taller to match visual weight.
       const th = size * 1.05;
       pdf.triangle(cx, y - th / 2, cx - h * 1.08, y + th / 2, cx + h * 1.08, y + th / 2, 'F');
       break;
@@ -57,7 +57,6 @@ export function drawBandGlyph(
       pdf.rect(cx - h * 0.9, y - h * 0.9, size * 0.9, size * 0.9, 'F');
       break;
     case 'depth': {
-      // Square rotated 45 degrees (diamond).
       const d = h * 1.15;
       pdf.lines([[d, d], [-d, d], [-d, -d]], cx, y - d, [1, 1], 'F', true);
       break;
@@ -77,33 +76,10 @@ export interface BankedQuestion {
   difficulty: number | null;
 }
 
-export interface BandComposition {
-  foundation: number;
-  core: number;
-  extension: number;
-  depth: number;
-}
-
-/** Default composition: a 10-item sheet is 3 foundation / 3 core / 2 extension / 2 depth. */
-export function defaultComposition(total: number): BandComposition {
-  const foundation = Math.max(1, Math.round(total * 0.3));
-  const core = Math.max(1, Math.round(total * 0.3));
-  const remaining = Math.max(0, total - foundation - core);
-  const extension = Math.ceil(remaining / 2);
-  const depth = remaining - extension;
-  return { foundation, core, extension, depth };
-}
-
 export interface BandShortfall {
   band: QuestionBand;
   available: number;
   needed: number;
-}
-
-export interface BandedSelectionResult {
-  items: BankedQuestion[];
-  shortfalls: BandShortfall[];
-  availableByBand: Record<QuestionBand, number>;
 }
 
 export interface BandedSelectionOptions {
@@ -114,11 +90,8 @@ export interface BandedSelectionOptions {
 }
 
 export interface TopicResolution {
-  /** Ids matched, in no particular order. */
   ids: string[];
-  /** Names that matched a topic row. */
   matched: string[];
-  /** Names that could not be matched to any topic. */
   unmatched: string[];
 }
 
@@ -161,21 +134,16 @@ export async function resolveTopicIds(teacherId: string, topicNames: string[]): 
 }
 
 /**
- * Selects banked questions per band, optionally restricted to selected topics.
- * De-duplication: at most one question per non-null `answer_group`, applied globally
- * across the whole sheet (a group claimed by one band is unavailable to the others).
- * Shortfall counts are computed after topic filtering, so "needed vs available"
- * always means available *within the selected topics*.
- *
- * Throws `TopicResolutionError` when topic names were supplied and any of them failed
- * to resolve — a partially or fully failed filter must never degrade to "use everything".
+ * Loads the banked questions for this teacher, optionally restricted to topics, and
+ * groups them per band. Throws `TopicResolutionError` when topic names were supplied
+ * and any of them failed to resolve — a failed filter must never degrade to
+ * "use everything".
  */
-export async function selectBandedQuestions(
+export async function fetchBandPools(
   teacherId: string,
-  composition: BandComposition,
-  options?: string[] | BandedSelectionOptions,
-): Promise<BandedSelectionResult> {
-  const opts: BandedSelectionOptions = Array.isArray(options) ? { topicIds: options } : (options || {});
+  options?: BandedSelectionOptions,
+): Promise<Record<QuestionBand, BankedQuestion[]>> {
+  const opts = options || {};
   const askedForNames = Boolean(opts.topicNames && opts.topicNames.length > 0);
   const askedForIds = Boolean(opts.topicIds && opts.topicIds.length > 0);
 
@@ -186,102 +154,49 @@ export async function selectBandedQuestions(
     resolvedIds = [...resolvedIds, ...resolution.ids];
   }
 
-  // null => filtering not requested. [] can never reach the picker.
   const topicIds = askedForNames || askedForIds ? Array.from(new Set(resolvedIds)) : null;
   if (topicIds && topicIds.length === 0) throw new TopicResolutionError(opts.topicNames || []);
 
-  const query = supabase
+  const { data, error } = await supabase
     .from('questions')
     .select('id, band, answer_group, prompt_text, answer_text, prompt_image_url, answer_image_url, difficulty, question_topics(topic_id)')
     .eq('teacher_id', teacherId)
     .not('answer_text', 'is', null)
     .neq('answer_text', '')
     .order('created_at', { ascending: false });
-
-  const { data, error } = await query;
   if (error) throw error;
 
-  return pickBandedQuestions((data || []) as any[], composition, topicIds);
+  return groupByBand((data || []) as unknown[], topicIds);
 }
 
-
-/**
- * Pure selection: topic filtering, banding, answer_group dedup and shortfall counts.
- * Exposed separately so the selection can be exercised against real rows without a session.
- */
-export function pickBandedQuestions(
-  allRows: any[],
-  composition: BandComposition,
-  /** `null`/omitted = filtering not requested. A non-null array is always applied, even if empty. */
+/** Pure: topic filtering plus band grouping. Exposed so selection can be tested without a session. */
+export function groupByBand(
+  allRows: unknown[],
   topicIds: string[] | null = null,
-): BandedSelectionResult {
-  if (topicIds && topicIds.length === 0) {
-    // "Filter to nothing" is a caller bug, not a licence to use the whole bank.
-    throw new TopicResolutionError([]);
-  }
-  const rows = allRows.filter((r) => {
-    if (!topicIds) return true;
-    const links: { topic_id: string }[] = r.question_topics || [];
-    return links.some((l) => topicIds.includes(l.topic_id));
+): Record<QuestionBand, BankedQuestion[]> {
+  if (topicIds && topicIds.length === 0) throw new TopicResolutionError([]);
+  const pools: Record<QuestionBand, BankedQuestion[]> = { foundation: [], core: [], extension: [], depth: [] };
+
+  (allRows as Record<string, unknown>[]).forEach((r) => {
+    if (topicIds) {
+      const links = (r.question_topics as { topic_id: string }[]) || [];
+      if (!links.some((l) => topicIds.includes(l.topic_id))) return;
+    }
+    const band = ((r.band as QuestionBand) || 'core') as QuestionBand;
+    if (!BANDS.includes(band)) return;
+    pools[band].push({
+      id: r.id as string,
+      band,
+      answer_group: (r.answer_group as string) ?? null,
+      prompt_text: (r.prompt_text as string) ?? null,
+      answer_text: (r.answer_text as string) ?? null,
+      prompt_image_url: (r.prompt_image_url as string) ?? null,
+      answer_image_url: (r.answer_image_url as string) ?? null,
+      difficulty: (r.difficulty as number) ?? null,
+    });
   });
 
-  const availableByBand = { foundation: 0, core: 0, extension: 0, depth: 0 } as Record<QuestionBand, number>;
-  const byBand: Record<QuestionBand, BankedQuestion[]> = {
-    foundation: [], core: [], extension: [], depth: [],
-  };
-
-  for (const r of rows) {
-    const band = (r.band || 'core') as QuestionBand;
-    if (!BANDS.includes(band)) continue;
-    byBand[band].push({
-      id: r.id,
-      band,
-      answer_group: r.answer_group ?? null,
-      prompt_text: r.prompt_text ?? null,
-      answer_text: r.answer_text ?? null,
-      prompt_image_url: r.prompt_image_url ?? null,
-      answer_image_url: r.answer_image_url ?? null,
-      difficulty: r.difficulty ?? null,
-    });
-  }
-
-  // Available count after answer_group dedup, computed per band.
-  for (const band of BANDS) {
-    const seen = new Set<string>();
-    let count = 0;
-    for (const q of byBand[band]) {
-      if (q.answer_group) {
-        if (seen.has(q.answer_group)) continue;
-        seen.add(q.answer_group);
-      }
-      count++;
-    }
-    availableByBand[band] = count;
-  }
-
-  const usedGroups = new Set<string>();
-  const items: BankedQuestion[] = [];
-  const shortfalls: BandShortfall[] = [];
-
-  for (const band of BANDS) {
-    const needed = composition[band];
-    if (needed <= 0) continue;
-    const picked: BankedQuestion[] = [];
-    for (const q of byBand[band]) {
-      if (picked.length >= needed) break;
-      if (q.answer_group) {
-        if (usedGroups.has(q.answer_group)) continue;
-        usedGroups.add(q.answer_group);
-      }
-      picked.push(q);
-    }
-    if (picked.length < needed) {
-      shortfalls.push({ band, available: picked.length, needed });
-    }
-    items.push(...picked);
-  }
-
-  return { items, shortfalls, availableByBand };
+  return pools;
 }
 
 export function formatShortfallMessage(shortfalls: BandShortfall[]): string {
@@ -291,48 +206,176 @@ export function formatShortfallMessage(shortfalls: BandShortfall[]): string {
     .join(' ');
 }
 
-// ===================== Detachable answer strip =====================
+// ===================== The four sheet variants =====================
 
-export type SetRangeMap = Record<number, [number, number]>;
+export const VARIANTS = ['A', 'B', 'C', 'D'] as const;
+export type VariantLetter = typeof VARIANTS[number];
 
-export const SET_NUMBERS = [1, 2, 3, 4] as const;
+export const ITEMS_PER_SHEET = 10;
+
+/** Positions (1-indexed) the shared anchor items occupy on every variant. */
+export const ANCHOR_POSITIONS = [1, 4, 7, 10] as const;
+
+/** Default anchor bands: 1 foundation, 2 core, 1 extension — in anchor-position order. */
+export const DEFAULT_ANCHOR_BANDS: QuestionBand[] = ['foundation', 'core', 'core', 'extension'];
+
+export type BandMix = Record<QuestionBand, number>;
+
+/** Band mix for the 6 varying items of each variant. Ascending gradient A → D. */
+export const DEFAULT_VARIANT_MIX: Record<VariantLetter, BandMix> = {
+  A: { foundation: 4, core: 2, extension: 0, depth: 0 },
+  B: { foundation: 2, core: 3, extension: 1, depth: 0 },
+  C: { foundation: 1, core: 2, extension: 2, depth: 1 },
+  D: { foundation: 0, core: 1, extension: 2, depth: 3 },
+};
+
+export const VARYING_ITEM_COUNT = 6;
+
+export const emptyMix = (): BandMix => ({ foundation: 0, core: 0, extension: 0, depth: 0 });
+
+export const mixTotal = (mix: BandMix): number => BANDS.reduce((n, b) => n + (mix[b] || 0), 0);
+
+/** Whole-sheet band totals = anchor bands + the variant's varying mix. */
+export function wholeSheetTotals(anchorBands: QuestionBand[], mix: BandMix): BandMix {
+  const totals = emptyMix();
+  anchorBands.forEach((b) => { totals[b] += 1; });
+  BANDS.forEach((b) => { totals[b] += mix[b] || 0; });
+  return totals;
+}
+
+export interface VariantSheet {
+  variant: VariantLetter;
+  /** Ten items in sheet order. Anchor items sit at ANCHOR_POSITIONS. */
+  items: BankedQuestion[];
+  /** Positions of the shared anchors on this sheet. */
+  anchorPositions: number[];
+  /** Whole-sheet band totals. */
+  totals: BandMix;
+  /** Sum of the ten numeric answers, or null when any answer is non-numeric. */
+  check: number | null;
+}
+
+export interface VariantBuildResult {
+  variants: VariantSheet[];
+  /** The four shared anchor items, in anchor-position order. */
+  anchors: BankedQuestion[];
+  shortfalls: BandShortfall[];
+}
 
 /**
- * Derives the four set ranges (1-indexed, inclusive) for a sheet of `total` items.
- *
- * Properties preserved for every count:
- *  - the four ranges are the same length and ascend across the sheet,
- *  - set 1 starts at item 1 and set 4 ends at the last item, so the sheet is spanned,
- *  - the intersection of all four is non-empty (window length >= half the sheet + 1).
- *
- * The 10-item case derives to exactly 1-6 / 2-8 / 4-9 / 5-10.
+ * Peak per-band demand for a single sheet: the anchors plus the largest varying
+ * requirement of any one variant. Items may be reused across variants, so the bank
+ * only has to satisfy the worst single sheet.
  */
-export function deriveSetRanges(total: number): SetRangeMap {
-  const n = Math.max(4, Math.floor(total));
-  // 60% window, but never so short that the four sets stop sharing a common item.
-  const len = Math.max(Math.round(n * 0.6), Math.floor(n / 2) + 1);
-  const span = n - len; // total drift from set 1 to set 4
-  const map: SetRangeMap = {} as SetRangeMap;
-  SET_NUMBERS.forEach((set, i) => {
-    // Starts drift forward, ends drift forward slightly faster, so set 1 begins at
-    // item 1, set 4 ends at the last item, and the middle sets straddle the centre.
-    const start = 1 + Math.round((i * span) / 3);
-    const end = Math.min(n, len + Math.ceil((i * span) / 3));
-    map[set] = [start, Math.max(start, end)];
+export function requiredByBand(
+  anchorBands: QuestionBand[] = DEFAULT_ANCHOR_BANDS,
+  mixes: Record<VariantLetter, BandMix> = DEFAULT_VARIANT_MIX,
+): BandMix {
+  const req = emptyMix();
+  anchorBands.forEach((b) => { req[b] += 1; });
+  BANDS.forEach((b) => {
+    req[b] += Math.max(...VARIANTS.map((v) => mixes[v][b] || 0));
   });
-  return map;
+  return req;
 }
 
-/** The item range every set contains, or null if the sets share nothing. */
-export function setCommonOverlap(ranges: SetRangeMap): [number, number] | null {
-  const from = Math.max(...SET_NUMBERS.map((s) => ranges[s][0]));
-  const to = Math.min(...SET_NUMBERS.map((s) => ranges[s][1]));
-  return from <= to ? [from, to] : null;
+/**
+ * Builds the four variants: one shared set of anchor items in fixed positions, plus
+ * six varying items per variant. `answer_group` de-duplication is applied within each
+ * variant (anchors included) so no sheet ever carries the same answer twice; across
+ * variants repetition is allowed and irrelevant.
+ */
+export function buildVariants(
+  pools: Record<QuestionBand, BankedQuestion[]>,
+  anchorBands: QuestionBand[] = DEFAULT_ANCHOR_BANDS,
+  mixes: Record<VariantLetter, BandMix> = DEFAULT_VARIANT_MIX,
+): VariantBuildResult {
+  const req = requiredByBand(anchorBands, mixes);
+  const shortfalls: BandShortfall[] = [];
+  BANDS.forEach((b) => {
+    const available = countDistinctAnswers(pools[b] || []);
+    if (available < req[b]) shortfalls.push({ band: b, available, needed: req[b] });
+  });
+  if (shortfalls.length > 0) return { variants: [], anchors: [], shortfalls };
+
+  // ---- Anchors: drawn once, reused on all four variants ----
+  const anchorGroups = new Set<string>();
+  const anchorIds = new Set<string>();
+  const anchors: BankedQuestion[] = anchorBands.map((band) => {
+    const pick = (pools[band] || []).find(
+      (q) => !anchorIds.has(q.id) && !(q.answer_group && anchorGroups.has(q.answer_group)),
+    );
+    if (!pick) throw new Error(`Not enough ${band} items to draw the shared anchors.`);
+    anchorIds.add(pick.id);
+    if (pick.answer_group) anchorGroups.add(pick.answer_group);
+    return pick;
+  });
+
+  // Rotating cursor per band so the variants do not all reuse the same varying items.
+  const cursor: BandMix = emptyMix();
+
+  const variants: VariantSheet[] = VARIANTS.map((letter) => {
+    const mix = mixes[letter];
+    const usedIds = new Set(anchorIds);
+    const usedGroups = new Set(anchorGroups);
+    const varying: BankedQuestion[] = [];
+
+    BANDS.forEach((band) => {
+      const need = mix[band] || 0;
+      const pool = pools[band] || [];
+      for (let taken = 0; taken < need; ) {
+        let found: BankedQuestion | null = null;
+        for (let i = 0; i < pool.length; i++) {
+          const q = pool[(cursor[band] + i) % pool.length];
+          if (usedIds.has(q.id)) continue;
+          if (q.answer_group && usedGroups.has(q.answer_group)) continue;
+          found = q;
+          cursor[band] = (cursor[band] + i + 1) % pool.length;
+          break;
+        }
+        if (!found) throw new Error(`Not enough distinct ${band} items for variant ${letter}.`);
+        usedIds.add(found.id);
+        if (found.answer_group) usedGroups.add(found.answer_group);
+        varying.push(found);
+        taken++;
+      }
+    });
+
+    // Lay out the sheet: anchors at their fixed positions, varying items filling the rest
+    // in ascending band order.
+    const items: BankedQuestion[] = new Array(ITEMS_PER_SHEET);
+    ANCHOR_POSITIONS.forEach((pos, i) => { items[pos - 1] = anchors[i]; });
+    let vi = 0;
+    for (let pos = 1; pos <= ITEMS_PER_SHEET; pos++) {
+      if (items[pos - 1]) continue;
+      items[pos - 1] = varying[vi++];
+    }
+
+    return {
+      variant: letter,
+      items,
+      anchorPositions: [...ANCHOR_POSITIONS],
+      totals: wholeSheetTotals(anchorBands, mix),
+      check: computeVariantCheck(items),
+    };
+  });
+
+  return { variants, anchors, shortfalls: [] };
 }
 
-/** Back-compatible constant: the documented 10-item ranges. */
-export const SET_RANGES: SetRangeMap = deriveSetRanges(10);
-
+/** Distinct-answer count: at most one question per non-null answer_group. */
+function countDistinctAnswers(list: BankedQuestion[]): number {
+  const seen = new Set<string>();
+  let n = 0;
+  for (const q of list) {
+    if (q.answer_group) {
+      if (seen.has(q.answer_group)) continue;
+      seen.add(q.answer_group);
+    }
+    n++;
+  }
+  return n;
+}
 
 /**
  * Tolerant numeric parse of a stored answer.
@@ -380,43 +423,27 @@ export function parseNumericAnswer(raw: string | null | undefined): number | nul
   return Number.isFinite(n) ? n : null;
 }
 
-
-export interface SetCheckValue {
-  set: number;
-  /** Sum of the numeric answers in the set's range, or null when any answer is non-numeric. */
-  total: number | null;
-}
-
 /** Rounds away float noise from summing decimal answers. */
 function tidy(n: number): number {
   return Math.round(n * 1e6) / 1e6;
 }
 
 /**
- * Computes the CHECK total for all four sets. Ranges default to the ones derived
- * from the sheet's own item count. A set whose range contains any non-numeric
- * (or missing) answer yields `null`, which prints as a dash.
+ * The single CHECK total for a variant: the sum of its ten numeric answers.
+ * Any non-numeric (or missing) answer yields null, which prints as a dash.
  */
-export function computeSetChecks(
-  items: Pick<BankedQuestion, 'answer_text'>[],
-  ranges: SetRangeMap = deriveSetRanges(items.length),
-): SetCheckValue[] {
-  return SET_NUMBERS.map((set) => {
-    const [from, to] = ranges[set];
-    let total = 0;
-    for (let i = from; i <= to; i++) {
-      const item = items[i - 1];
-      if (!item) return { set, total: null }; // range extends past the sheet
-      const n = parseNumericAnswer(item.answer_text);
-      if (n === null) return { set, total: null };
-      total += n;
-    }
-    return { set, total: tidy(total) };
-  });
+export function computeVariantCheck(items: Pick<BankedQuestion, 'answer_text'>[]): number | null {
+  let total = 0;
+  for (const item of items) {
+    if (!item) return null;
+    const n = parseNumericAnswer(item.answer_text);
+    if (n === null) return null;
+    total += n;
+  }
+  return tidy(total);
 }
 
-
-/** Formats a CHECK total for print. Non-numeric sets print an em dash. */
+/** Formats a CHECK total for print. A non-numeric variant prints an em dash. */
 export function formatCheckValue(total: number | null): string {
   if (total === null) return '\u2014';
   return String(tidy(total));
@@ -443,53 +470,52 @@ export function answersMatch(entered: string | null | undefined, stored: string 
 }
 
 export interface BandStopResult {
-  /** Highest band answered correctly within the student's own range, or null if none. */
+  /** Highest band answered correctly on the student's own variant, or null if none. */
   bandReached: QuestionBand | null;
-  /** Suggested set for the next cycle. Null when nothing in range was correct. */
-  suggestedSet: number | null;
-  /** Items inside the student's range that were answered correctly. */
+  /** Suggested variant for the next cycle. Null when nothing was correct. */
+  suggestedVariant: VariantLetter | null;
   correctItemNumbers: number[];
-  /** Bands the student's range actually contained — a band never seen is never "failed". */
-  bandsInRange: QuestionBand[];
+  /** Bands the student's own variant actually contained — a band never seen is never "failed". */
+  bandsSeen: QuestionBand[];
 }
 
-export const BAND_TO_SET: Record<QuestionBand, number> = {
-  foundation: 1,
-  core: 2,
-  extension: 3,
-  depth: 4,
+export const BAND_TO_VARIANT: Record<QuestionBand, VariantLetter> = {
+  foundation: 'A',
+  core: 'B',
+  extension: 'C',
+  depth: 'D',
 };
 
+export const variantIndex = (letter: VariantLetter): number => VARIANTS.indexOf(letter) + 1;
+export const variantFromIndex = (index: number): VariantLetter => VARIANTS[Math.min(3, Math.max(0, index - 1))];
+
 /**
- * Computes the highest band answered correctly, considering ONLY the items inside
- * the student's assigned range. `answers` is keyed by 1-indexed item number.
+ * Computes the highest band answered correctly over the items on the student's own
+ * variant. `answers` is keyed by 1-indexed item number on that variant.
  */
 export function computeBandStop(
-  items: Pick<BankedQuestion, 'band' | 'answer_text'>[],
-  range: [number, number],
+  variantItems: Pick<BankedQuestion, 'band' | 'answer_text'>[],
   answers: Record<string, string>,
 ): BandStopResult {
-  const [from, to] = range;
   const correctItemNumbers: number[] = [];
-  const bandsInRange = new Set<QuestionBand>();
+  const seen = new Set<QuestionBand>();
   let highestIdx = -1;
 
-  for (let i = from; i <= to; i++) {
-    const item = items[i - 1];
-    if (!item) continue;
+  variantItems.forEach((item, i) => {
+    if (!item) return;
     const band = (item.band || 'core') as QuestionBand;
-    bandsInRange.add(band);
-    if (answersMatch(answers[String(i)], item.answer_text)) {
-      correctItemNumbers.push(i);
+    seen.add(band);
+    if (answersMatch(answers[String(i + 1)], item.answer_text)) {
+      correctItemNumbers.push(i + 1);
       highestIdx = Math.max(highestIdx, BANDS.indexOf(band));
     }
-  }
+  });
 
   const bandReached = highestIdx >= 0 ? BANDS[highestIdx] : null;
   return {
     bandReached,
-    suggestedSet: bandReached ? BAND_TO_SET[bandReached] : null,
+    suggestedVariant: bandReached ? BAND_TO_VARIANT[bandReached] : null,
     correctItemNumbers,
-    bandsInRange: BANDS.filter((b) => bandsInRange.has(b)),
+    bandsSeen: BANDS.filter((b) => seen.has(b)),
   };
 }
