@@ -4333,6 +4333,36 @@ const toggleStudent = (studentId: string) => {
                     })()} across the four bands
                   </span>
                 </div>
+                {(() => {
+                  const total = parseInt(bandedItemCount) || 10;
+                  const r = deriveSetRanges(total);
+                  const ov = setCommonOverlap(r);
+                  return (
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>
+                        Sets: {[1, 2, 3, 4].map((s) => `${s}) ${r[s][0]}–${r[s][1]}`).join('   ')}
+                      </p>
+                      <p className={ov ? '' : 'text-destructive'}>
+                        {ov ? `Every set contains items ${ov[0]}–${ov[1]}.` : 'These ranges share no common item.'}
+                      </p>
+                    </div>
+                  );
+                })()}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedClassId}
+                    onClick={() => setSetAssignmentOpen(true)}
+                  >
+                    <Users className="h-4 w-4 mr-2" /> Set assignment &amp; placement (teacher only)
+                  </Button>
+                  {!selectedClassId && (
+                    <span className="text-xs text-muted-foreground">Select a class first.</span>
+                  )}
+                </div>
+
                 {unresolvedTopics.length > 0 && (
                   <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
                     <p className="font-medium flex items-center gap-2 text-destructive">
