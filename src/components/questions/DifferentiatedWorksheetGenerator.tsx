@@ -2388,7 +2388,9 @@ const toggleStudent = (studentId: string) => {
 
       // All four CHECK totals are computed and stored with the worksheet; only the
       // one matching a student's assigned set is ever printed (set assignment is a later step).
-      const setChecks = computeSetChecks(items);
+      const derivedRanges = deriveSetRanges(items.length);
+      const setChecks = computeSetChecks(items, derivedRanges);
+
 
       const pdf = buildBandedSheetPdf({
         items,
