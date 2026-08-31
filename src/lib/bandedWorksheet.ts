@@ -162,7 +162,7 @@ export async function fetchBandPools(
 
   const { data, error } = await supabase
     .from('questions')
-    .select('id, band, answer_group, prompt_text, answer_text, prompt_image_url, answer_image_url, difficulty, question_topics(topic_id)')
+    .select('id, band, answer_group, prompt_text, answer_text, prompt_image_url, answer_image_url, difficulty, question_topics(topic_id, topics(name))')
     .eq('teacher_id', teacherId)
     .not('answer_text', 'is', null)
     .neq('answer_text', '')
