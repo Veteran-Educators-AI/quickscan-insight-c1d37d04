@@ -67,37 +67,58 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
   const stripHeight = 30;
   const stripTop = pageHeight - margin - stripHeight;
 
-  // Auto-fit: the whole sheet should be one page per student wherever the prompts allow it,
-  // so work boxes shrink to share whatever room is left after the questions themselves.
+  // Ten items with usable working space do not fit on one side of letter paper, so a
+  // sheet is a deterministic two-page (duplex) handout: items 1-5, then 6-10 plus the
+  // detachable strip. Work boxes auto-fit whatever room the prompts leave on each page.
   const allPromptLines = sheet.items.map(
     (q) => pdf.splitTextToSize(fmt(q?.prompt_text || ''), textWidth) as string[],
   );
-  const promptHeight = allPromptLines.reduce((t, lines) => t + lines.length * 5 + 4, 0);
-  const gaps = sheet.items.length * 8;
-  const room = stripTop - 4 - y - promptHeight - gaps;
-  const workSpace = Math.max(11, Math.min(22, room / Math.max(1, sheet.items.length)));
+  const perPage = Math.ceil(sheet.items.length / 2) || 1;
+  const pages = [sheet.items.slice(0, perPage), sheet.items.slice(perPage)].filter((p) => p.length > 0);
 
-  sheet.items.forEach((q, idx) => {
-    const promptLines = allPromptLines[idx];
-    const blockHeight = promptLines.length * 5 + workSpace + 6;
+  pages.forEach((pageItems, pageIdx) => {
+    const isLast = pageIdx === pages.length - 1;
+    const bottom = isLast ? stripTop - 4 : pageHeight - margin;
 
-    if (y + blockHeight > stripTop - 4) {
+    if (pageIdx > 0) {
       pdf.addPage();
       y = margin;
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0);
+      pdf.text(fmt(sheet.studentName), margin, y);
+      pdf.text(`Variant ${sheet.variant}`, pageWidth - margin, y, { align: 'right' });
+      pdf.setFont('helvetica', 'normal');
+      y += 8;
     }
 
-    pdf.setFontSize(11);
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(0);
-    pdf.text(`${idx + 1}.`, margin, y);
-    pdf.text(promptLines, margin + 8, y);
-    y += promptLines.length * 5 + 4;
+    const offset = pageIdx * perPage;
+    const promptHeight = pageItems.reduce(
+      (t, _q, i) => t + allPromptLines[offset + i].length * 5 + 4,
+      0,
+    );
+    const gaps = pageItems.length * 7;
+    const room = bottom - y - promptHeight - gaps;
+    const workSpace = Math.max(12, Math.min(30, room / Math.max(1, pageItems.length)));
 
-    pdf.setDrawColor(200);
-    pdf.setLineWidth(0.3);
-    pdf.rect(margin + 8, y, textWidth - 8, workSpace);
-    y += workSpace + 8;
+    pageItems.forEach((q, i) => {
+      const idx = offset + i;
+      const promptLines = allPromptLines[idx];
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(0);
+      pdf.text(`${idx + 1}.`, margin, y);
+      pdf.text(promptLines, margin + 8, y);
+      y += promptLines.length * 5 + 4;
+
+      pdf.setDrawColor(200);
+      pdf.setLineWidth(0.3);
+      pdf.rect(margin + 8, y, textWidth - 8, workSpace);
+      y += workSpace + 7;
+    });
   });
+
 
 
   // ---- Detachable answer strip: plain numbers, one CHECK total ----
