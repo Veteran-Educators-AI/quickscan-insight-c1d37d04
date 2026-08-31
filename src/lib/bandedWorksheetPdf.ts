@@ -293,7 +293,14 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
         pdf.text('[ANCHOR]', margin + 36, y);
         pdf.setFont('helvetica', 'normal');
       }
+      // Standard column: every distinct standard for the item, or "Untagged" in words.
+      pdf.text(
+        `Standard: ${itemStandards(q).map((s) => s.code).join(', ')}`,
+        margin + 60,
+        y,
+      );
       y += 5;
+
 
       pdf.setFontSize(10);
       pdf.setTextColor(60);
