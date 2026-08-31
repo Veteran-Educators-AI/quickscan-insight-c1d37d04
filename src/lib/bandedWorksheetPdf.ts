@@ -123,7 +123,7 @@ export function buildBandedSheetPdf({
 
   // Two rows of five: number, the item's band mark, then the answer rule.
   // The mark is the same vector shape as the item, scaled down for the strip.
-  const stripGlyphSize = 1.25;
+  const stripGlyphSize = 1.5;
   const perRow = 5;
   const colWidth = contentWidth / perRow;
   pdf.setFontSize(10);
