@@ -390,12 +390,16 @@ function tidy(n: number): number {
 }
 
 /**
- * Computes the CHECK total for all four sets. A set whose range contains any
- * non-numeric (or missing) answer yields `null`, which prints as a dash.
+ * Computes the CHECK total for all four sets. Ranges default to the ones derived
+ * from the sheet's own item count. A set whose range contains any non-numeric
+ * (or missing) answer yields `null`, which prints as a dash.
  */
-export function computeSetChecks(items: Pick<BankedQuestion, 'answer_text'>[]): SetCheckValue[] {
+export function computeSetChecks(
+  items: Pick<BankedQuestion, 'answer_text'>[],
+  ranges: SetRangeMap = deriveSetRanges(items.length),
+): SetCheckValue[] {
   return SET_NUMBERS.map((set) => {
-    const [from, to] = SET_RANGES[set];
+    const [from, to] = ranges[set];
     let total = 0;
     for (let i = from; i <= to; i++) {
       const item = items[i - 1];
@@ -407,6 +411,7 @@ export function computeSetChecks(items: Pick<BankedQuestion, 'answer_text'>[]): 
     return { set, total: tidy(total) };
   });
 }
+
 
 /** Formats a CHECK total for print. Non-numeric sets print an em dash. */
 export function formatCheckValue(total: number | null): string {
