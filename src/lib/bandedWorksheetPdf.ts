@@ -58,8 +58,9 @@ export function buildBandedSheetPdf({
   pdf.setFont('helvetica', 'normal');
   pdf.text('Name: ______________________________', margin, y);
   pdf.text('Date: ______________', margin + contentWidth * 0.52, y);
-  pdf.text('Set: ______', pageWidth - margin - 24, y + 8);
+  pdf.text(assignedSet ? `Set: ${assignedSet}` : 'Set: ______', pageWidth - margin - 24, y + 8);
   y += 14;
+
 
   pdf.setLineWidth(0.5);
   pdf.line(margin, y, pageWidth - margin, y);
