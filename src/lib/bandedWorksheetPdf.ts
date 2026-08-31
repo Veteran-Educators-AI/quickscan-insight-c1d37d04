@@ -4,9 +4,16 @@ import {
   drawBandGlyph,
   formatCheckValue,
   ITEMS_PER_SHEET,
+  VARIANTS,
   type BankedQuestion,
   type VariantSheet,
 } from './bandedWorksheet';
+import {
+  crossVariantCoverage,
+  itemStandards,
+  sheetStandardCodes,
+  variantCoverage,
+} from './bandedStandardsCoverage';
 
 export interface StudentSheet {
   /** Pre-printed on the sheet header. */
@@ -22,10 +29,17 @@ export interface SheetRenderOptions {
   title: string;
   marginSize?: 'small' | 'medium' | 'large';
   formatText?: (text: string) => string;
+  /**
+   * Prints a single flat, sheet-wide line of NYS standard codes above the answer
+   * strip. Default OFF. Codes only — never per item, so their order cannot be read
+   * back against the item order to infer which items are harder.
+   */
+  showStandardsFooter?: boolean;
 }
 
 const marginFor = (size: SheetRenderOptions['marginSize']) =>
   size === 'small' ? 15 : size === 'large' ? 25 : 19;
+
 
 /**
  * Renders one student sheet onto the current page of `pdf`.
@@ -64,8 +78,18 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
   pdf.line(margin, y, pageWidth - margin, y);
   y += 10;
 
-  const stripHeight = 30;
-  const stripTop = pageHeight - margin - stripHeight;
+  const footerCodes = opts.showStandardsFooter ? sheetStandardCodes(sheet.items) : [];
+  pdf.setFontSize(8);
+  const footerLines =
+    footerCodes.length > 0
+      ? (pdf.splitTextToSize(`Standards: ${footerCodes.join(', ')}`, contentWidth) as string[])
+      : [];
+  const footerHeight = footerLines.length > 0 ? footerLines.length * 4 + 3 : 0;
+  const stripTop = pageHeight - margin - 30;
+  const footerTop = stripTop - footerHeight;
+
+
+
 
   // Ten items with usable working space do not fit on one side of letter paper, so a
   // sheet is a deterministic two-page (duplex) handout: items 1-5, then 6-10 plus the
@@ -78,7 +102,8 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
 
   pages.forEach((pageItems, pageIdx) => {
     const isLast = pageIdx === pages.length - 1;
-    const bottom = isLast ? stripTop - 4 : pageHeight - margin;
+    const bottom = isLast ? footerTop - 4 : pageHeight - margin;
+
 
     if (pageIdx > 0) {
       pdf.addPage();
@@ -118,6 +143,15 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
       y += workSpace + 7;
     });
   });
+
+  // ---- Optional standards footer: one flat sheet-wide list of codes, never per item ----
+  if (footerLines.length > 0) {
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(90);
+    footerLines.forEach((line, i) => pdf.text(line, margin, footerTop + 4 + i * 4));
+    pdf.setTextColor(0);
+  }
 
 
 
@@ -187,11 +221,13 @@ const bandName = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
 
 /**
  * The teacher-facing answer keys: one key per variant. Each item shows its number,
- * the band shape AND the band name in words, the answer, and an ANCHOR mark on the
- * four items common to every variant. Whole-sheet band totals and the variant's
- * CHECK total sit at the top of each key.
+ * the band shape AND the band name in words, the NYS standard, the answer, and an
+ * ANCHOR mark on the four items common to every variant. Whole-sheet band totals and
+ * the variant's CHECK total sit at the top of each key, a standards-coverage block
+ * sits under it, and a cross-variant coverage page closes the document.
  */
 export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOptions): jsPDF {
+
   const fmt = opts.formatText || ((t: string) => t);
   const pdf = new jsPDF('p', 'mm', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -257,7 +293,14 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
         pdf.text('[ANCHOR]', margin + 36, y);
         pdf.setFont('helvetica', 'normal');
       }
+      // Standard column: every distinct standard for the item, or "Untagged" in words.
+      pdf.text(
+        `Standard: ${itemStandards(q).map((s) => s.code).join(', ')}`,
+        margin + 60,
+        y,
+      );
       y += 5;
+
 
       pdf.setFontSize(10);
       pdf.setTextColor(60);
@@ -277,6 +320,42 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
       y += 3.5;
     });
 
+    // ---- Standards coverage for this variant ----
+    const coverage = variantCoverage(v);
+    if (y + 14 + coverage.length * 5 > pageHeight - margin - 12) {
+      pdf.addPage();
+      y = margin;
+    }
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(0.4);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 6;
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.text(`Standards covered — Variant ${v.variant}`, margin, y);
+    y += 5.5;
+    pdf.setFontSize(8.5);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Standard', margin, y);
+    pdf.text('Topic', margin + 32, y);
+    pdf.text('Items', margin + contentWidth - 46, y);
+    pdf.text('Bands', margin + contentWidth - 34, y);
+    y += 4.5;
+    pdf.setFont('helvetica', 'normal');
+    coverage.forEach((row) => {
+      if (y > pageHeight - margin - 12) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(row.code, margin, y);
+      const topic = pdf.splitTextToSize(fmt(row.topicName), contentWidth - 82) as string[];
+      pdf.text(topic[0] || '', margin + 32, y);
+      pdf.text(`${row.count}`, margin + contentWidth - 46, y);
+      pdf.text(row.bands.map(bandName).join(', '), margin + contentWidth - 34, y);
+      y += 4.5;
+    });
+
     pdf.setFontSize(8);
     pdf.setTextColor(150);
     pdf.text(
@@ -287,6 +366,84 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
     );
     pdf.setTextColor(0);
   });
+
+  // ---- Cross-variant coverage page: the administrator-facing artifact ----
+  const anchorItems = variants[0]
+    ? variants[0].anchorPositions.map((p) => variants[0].items[p - 1]).filter(Boolean)
+    : [];
+  const cross = crossVariantCoverage(variants, anchorItems);
+
+  pdf.addPage();
+  let cy = margin;
+  pdf.setFontSize(15);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(0);
+  pdf.text('Standards Coverage — All Four Variants', margin, cy);
+  cy += 7;
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(fmt(opts.title), margin, cy);
+  cy += 5.5;
+  pdf.setFontSize(9);
+  pdf.text(
+    'Item counts per standard for each variant. "Anchor" marks standards carried by the four items common to every variant — every student answered those regardless of variant.',
+    margin,
+    cy,
+    { maxWidth: contentWidth },
+  );
+  cy += 10;
+
+  const colStd = margin;
+  const colTopic = margin + 30;
+  const colVarStart = margin + contentWidth - 62;
+  const colStep = 10;
+  const colAnchor = margin + contentWidth - 20;
+
+  pdf.setFontSize(8.5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Standard', colStd, cy);
+  pdf.text('Topic', colTopic, cy);
+  VARIANTS.forEach((letter, i) => pdf.text(letter, colVarStart + i * colStep, cy));
+  pdf.text('Anchor', colAnchor, cy);
+  cy += 3;
+  pdf.setDrawColor(0);
+  pdf.setLineWidth(0.3);
+  pdf.line(margin, cy, pageWidth - margin, cy);
+  cy += 4.5;
+
+  pdf.setFont('helvetica', 'normal');
+  cross.rows.forEach((row) => {
+    if (cy > pageHeight - margin - 24) {
+      pdf.addPage();
+      cy = margin;
+    }
+    pdf.text(row.code, colStd, cy);
+    const topic = pdf.splitTextToSize(fmt(row.topicName), colVarStart - colTopic - 4) as string[];
+    pdf.text(topic[0] || '', colTopic, cy);
+    VARIANTS.forEach((letter, i) =>
+      pdf.text(`${row.perVariant[letter] || 0}`, colVarStart + i * colStep, cy),
+    );
+    pdf.text(row.onAnchor ? 'Yes' : '—', colAnchor, cy);
+    cy += 4.6;
+  });
+
+  cy += 4;
+  pdf.line(margin, cy, pageWidth - margin, cy);
+  cy += 6;
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(9.5);
+  pdf.text(`Distinct standards covered: ${cross.distinctStandards}`, margin, cy);
+  cy += 5;
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Covered at all four bands: ${cross.atEveryBand}`, margin, cy);
+  cy += 5;
+  pdf.text(`Covered at a single band only: ${cross.atOneBandOnly}`, margin, cy);
+
+  pdf.setFontSize(8);
+  pdf.setTextColor(150);
+  pdf.text('Teacher / administrator copy', pageWidth / 2, pageHeight - 10, { align: 'center' });
+  pdf.setTextColor(0);
+
 
   return pdf;
 }
