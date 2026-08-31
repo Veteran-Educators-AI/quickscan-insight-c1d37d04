@@ -181,8 +181,8 @@ export function groupByBand(
   const pools: Record<QuestionBand, BankedQuestion[]> = { foundation: [], core: [], extension: [], depth: [] };
 
   (allRows as Record<string, unknown>[]).forEach((r) => {
+    const links = (r.question_topics as { topic_id: string; topics?: { name?: string } | null }[]) || [];
     if (topicIds) {
-      const links = (r.question_topics as { topic_id: string }[]) || [];
       if (!links.some((l) => topicIds.includes(l.topic_id))) return;
     }
     const band = ((r.band as QuestionBand) || 'core') as QuestionBand;
@@ -196,7 +196,11 @@ export function groupByBand(
       prompt_image_url: (r.prompt_image_url as string) ?? null,
       answer_image_url: (r.answer_image_url as string) ?? null,
       difficulty: (r.difficulty as number) ?? null,
+      topicNames: Array.from(
+        new Set(links.map((l) => l.topics?.name).filter((n): n is string => Boolean(n))),
+      ),
     });
+
   });
 
   return pools;
