@@ -28,12 +28,15 @@ import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDE
 import {
   computeSetChecks,
   defaultComposition,
+  deriveSetRanges,
   formatShortfallMessage,
   selectBandedQuestions,
-  SET_RANGES,
+  setCommonOverlap,
   TopicResolutionError,
   type BandShortfall,
 } from '@/lib/bandedWorksheet';
+import { SetAssignmentDialog } from './SetAssignmentDialog';
+
 
 import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
 import jsPDF from 'jspdf';
