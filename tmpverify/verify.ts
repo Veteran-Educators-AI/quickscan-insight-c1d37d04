@@ -9,7 +9,7 @@ console.log('topics used:', topics.map((n,i)=>`${n}`).join(' | '));
 
 let n = 0;
 const mk = (band: any, topicNames: string[], ans: string): BankedQuestion => ({
-  id: `q${++n}`, band, answer_group: `g${n}`, prompt_text: `Question ${n} on ${band}`,
+  id: `q${++n}`, band, answer_group: `g${n}`, prompt_text: `Question ${n}: find the missing value.`,
   answer_text: ans, prompt_image_url: null, answer_image_url: null, difficulty: null, topicNames,
 });
 const pools: any = { foundation: [], core: [], extension: [], depth: [] };
