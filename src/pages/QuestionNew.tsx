@@ -739,7 +739,10 @@ export default function QuestionNew() {
           answer_text: assessmentMode === 'teacher' ? (answerText || null) : null,
           answer_image_url: assessmentMode === 'teacher' ? answerImageUrl : null,
           difficulty: parseInt(difficulty),
+          band,
+          answer_group: answerGroup.trim() || null,
           assessment_mode: assessmentMode,
+        })
         })
         .select()
         .single();
