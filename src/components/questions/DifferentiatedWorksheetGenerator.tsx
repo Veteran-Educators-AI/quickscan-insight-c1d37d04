@@ -26,12 +26,12 @@ import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
-  drawBandGlyph,
   defaultComposition,
   formatShortfallMessage,
   selectBandedQuestions,
   type BandShortfall,
 } from '@/lib/bandedWorksheet';
+import { buildBandedSheetPdf } from '@/lib/bandedWorksheetPdf';
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
 
@@ -2370,63 +2370,13 @@ const toggleStudent = (studentId: string) => {
       setGenerationProgress(40);
       setGenerationStatus('Building worksheet...');
 
-      const pdf = new jsPDF('p', 'mm', 'letter');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = marginSize === 'small' ? 15 : marginSize === 'large' ? 25 : 19;
-      const contentWidth = pageWidth - margin * 2;
-      const glyphX = pageWidth - margin - 3;
-      const textWidth = contentWidth - 10;
-
-      let y = margin;
-
-      // Sheet header: topic title, then Name / Date / Set. No band or level info.
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0);
       // Title only names topics when the items were actually filtered to them.
-      const topicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
-      pdf.text(formatPdfText(topicsLabel.length > 60 ? `${topicsLabel.substring(0, 57)}...` : topicsLabel), pageWidth / 2, y, { align: 'center' });
-      y += 10;
-
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Name: ______________________________', margin, y);
-      pdf.text('Date: ______________', margin + contentWidth * 0.52, y);
-      pdf.text('Set: ______', pageWidth - margin - 24, y + 8);
-      y += 14;
-
-      pdf.setLineWidth(0.5);
-      pdf.line(margin, y, pageWidth - margin, y);
-      y += 10;
-
-      const workSpace = 26;
-
-      items.forEach((q, idx) => {
-        const promptLines = pdf.splitTextToSize(formatPdfText(q.prompt_text || ''), textWidth) as string[];
-        const blockHeight = promptLines.length * 5 + workSpace + 6;
-
-        if (y + blockHeight > pageHeight - margin) {
-          pdf.addPage();
-          y = margin;
-        }
-
-        pdf.setFontSize(11);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(0);
-        pdf.text(`${idx + 1}.`, margin, y);
-        pdf.text(promptLines, margin + 8, y);
-
-        // Right-margin band mark: vector shape, light grey, no label and no text glyph.
-        drawBandGlyph(pdf as any, q.band, glyphX, y - 1.2);
-
-        y += promptLines.length * 5 + 4;
-
-        // Answer work area
-        pdf.setDrawColor(200);
-        pdf.setLineWidth(0.3);
-        pdf.rect(margin + 8, y, textWidth, workSpace);
-        y += workSpace + 8;
+      const title = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
+      const pdf = buildBandedSheetPdf({
+        items,
+        title,
+        marginSize,
+        formatText: formatPdfText,
       });
 
       setGenerationProgress(90);
