@@ -1,5 +1,10 @@
 import jsPDF from 'jspdf';
-import { drawBandGlyph, type BankedQuestion } from './bandedWorksheet';
+import {
+  drawBandGlyph,
+  formatCheckValue,
+  type BankedQuestion,
+  type SetCheckValue,
+} from './bandedWorksheet';
 
 export interface BandedSheetOptions {
   items: BankedQuestion[];
@@ -8,6 +13,13 @@ export interface BandedSheetOptions {
   marginSize?: 'small' | 'medium' | 'large';
   /** Text sanitizer for the PDF's WinAnsi fonts. */
   formatText?: (text: string) => string;
+  /** All four CHECK totals. Only the assigned set's value is ever printed. */
+  setChecks?: SetCheckValue[];
+  /**
+   * The set assigned to this copy. Null/undefined (set assignment does not exist yet)
+   * leaves the Set field and the CHECK line blank.
+   */
+  assignedSet?: number | null;
 }
 
 /**
@@ -15,7 +27,15 @@ export interface BandedSheetOptions {
  * Band identity is conveyed ONLY by a light-grey vector mark in the right margin —
  * no band name, level letter, level description or level colour appears anywhere.
  */
-export function buildBandedSheetPdf({ items, title, marginSize = 'medium', formatText }: BandedSheetOptions): jsPDF {
+export function buildBandedSheetPdf({
+  items,
+  title,
+  marginSize = 'medium',
+  formatText,
+  setChecks,
+  assignedSet,
+}: BandedSheetOptions): jsPDF {
+
   const fmt = formatText || ((t: string) => t);
   const pdf = new jsPDF('p', 'mm', 'letter');
   const pageWidth = pdf.internal.pageSize.getWidth();
