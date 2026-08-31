@@ -554,6 +554,8 @@ export default function QuestionNew() {
   const [answerImage, setAnswerImage] = useState<File | null>(null);
   const [isExtractingAnswer, setIsExtractingAnswer] = useState(false);
   const [difficulty, setDifficulty] = useState('2');
+  const [band, setBand] = useState<'foundation' | 'core' | 'extension' | 'depth'>('core');
+  const [answerGroup, setAnswerGroup] = useState('');
   const [rubricSteps, setRubricSteps] = useState<RubricStep[]>([
     { description: '', points: 1 },
   ]);
