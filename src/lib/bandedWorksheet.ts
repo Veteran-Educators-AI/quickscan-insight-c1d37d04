@@ -155,12 +155,23 @@ export async function selectBandedQuestions(
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = ((data || []) as any[]).filter((r) => {
+  return pickBandedQuestions((data || []) as any[], composition, topicIds);
+}
+
+/**
+ * Pure selection: topic filtering, banding, answer_group dedup and shortfall counts.
+ * Exposed separately so the selection can be exercised against real rows without a session.
+ */
+export function pickBandedQuestions(
+  allRows: any[],
+  composition: BandComposition,
+  topicIds: string[] = [],
+): BandedSelectionResult {
+  const rows = allRows.filter((r) => {
     if (topicIds.length === 0) return true;
     const links: { topic_id: string }[] = r.question_topics || [];
     return links.some((l) => topicIds.includes(l.topic_id));
   });
-
 
   const availableByBand = { foundation: 0, core: 0, extension: 0, depth: 0 } as Record<QuestionBand, number>;
   const byBand: Record<QuestionBand, BankedQuestion[]> = {
