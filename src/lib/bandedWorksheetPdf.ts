@@ -1,78 +1,78 @@
 import jsPDF from 'jspdf';
 import {
+  BANDS,
   drawBandGlyph,
   formatCheckValue,
+  ITEMS_PER_SHEET,
   type BankedQuestion,
-  type SetCheckValue,
+  type VariantSheet,
 } from './bandedWorksheet';
 
-export interface BandedSheetOptions {
+export interface StudentSheet {
+  /** Pre-printed on the sheet header. */
+  studentName: string;
+  /** Variant letter A-D. */
+  variant: string;
   items: BankedQuestion[];
-  /** Sheet title. Must never claim a topic scope the items do not have. */
-  title: string;
-  marginSize?: 'small' | 'medium' | 'large';
-  /** Text sanitizer for the PDF's WinAnsi fonts. */
-  formatText?: (text: string) => string;
-  /** All four CHECK totals. Only the assigned set's value is ever printed. */
-  setChecks?: SetCheckValue[];
-  /**
-   * The set assigned to this copy. Null/undefined (set assignment does not exist yet)
-   * leaves the Set field and the CHECK line blank.
-   */
-  assignedSet?: number | null;
+  /** Sum of the variant's ten numeric answers, or null for a dash. */
+  check: number | null;
 }
 
-/**
- * Builds the student-facing banded single sheet.
- * Band identity is conveyed ONLY by a light-grey vector mark in the right margin —
- * no band name, level letter, level description or level colour appears anywhere.
- */
-export function buildBandedSheetPdf({
-  items,
-  title,
-  marginSize = 'medium',
-  formatText,
-  setChecks,
-  assignedSet,
-}: BandedSheetOptions): jsPDF {
+export interface SheetRenderOptions {
+  title: string;
+  marginSize?: 'small' | 'medium' | 'large';
+  formatText?: (text: string) => string;
+}
 
-  const fmt = formatText || ((t: string) => t);
-  const pdf = new jsPDF('p', 'mm', 'letter');
+const marginFor = (size: SheetRenderOptions['marginSize']) =>
+  size === 'small' ? 15 : size === 'large' ? 25 : 19;
+
+/**
+ * Renders one student sheet onto the current page of `pdf`.
+ * The student copy carries NO band marks, names, level letters, descriptions or colours —
+ * plain numbered questions, a pre-printed name, the date rule and the variant letter.
+ */
+function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOptions): void {
+  const fmt = opts.formatText || ((t: string) => t);
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = marginSize === 'small' ? 15 : marginSize === 'large' ? 25 : 19;
+  const margin = marginFor(opts.marginSize);
   const contentWidth = pageWidth - margin * 2;
-  const glyphX = pageWidth - margin - 1;
-  const textWidth = contentWidth - 14;
+  const textWidth = contentWidth - 10;
 
   let y = margin;
 
-  // Sheet header: title, then Name / Date / Set. No band or level info.
   pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(0);
-  pdf.text(fmt(title.length > 60 ? `${title.substring(0, 57)}...` : title), pageWidth / 2, y, { align: 'center' });
+  const title = opts.title.length > 60 ? `${opts.title.substring(0, 57)}...` : opts.title;
+  pdf.text(fmt(title), pageWidth / 2, y, { align: 'center' });
   y += 10;
 
   pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(fmt(`Name: ${sheet.studentName}`), margin, y);
   pdf.setFont('helvetica', 'normal');
-  pdf.text('Name: ______________________________', margin, y);
   pdf.text('Date: ______________', margin + contentWidth * 0.52, y);
-  pdf.text(assignedSet ? `Set: ${assignedSet}` : 'Set: ______', pageWidth - margin - 24, y + 8);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text(`Variant ${sheet.variant}`, pageWidth - margin, y + 8, { align: 'right' });
+  pdf.setFont('helvetica', 'normal');
   y += 14;
 
-
+  pdf.setDrawColor(0);
   pdf.setLineWidth(0.5);
   pdf.line(margin, y, pageWidth - margin, y);
   y += 10;
 
-  const workSpace = 26;
+  const stripHeight = 30;
+  const stripTop = pageHeight - margin - stripHeight;
+  const workSpace = 22;
 
-  items.forEach((q, idx) => {
-    const promptLines = pdf.splitTextToSize(fmt(q.prompt_text || ''), textWidth) as string[];
+  sheet.items.forEach((q, idx) => {
+    const promptLines = pdf.splitTextToSize(fmt(q?.prompt_text || ''), textWidth) as string[];
     const blockHeight = promptLines.length * 5 + workSpace + 6;
 
-    if (y + blockHeight > pageHeight - margin) {
+    if (y + blockHeight > stripTop - 4) {
       pdf.addPage();
       y = margin;
     }
@@ -82,29 +82,15 @@ export function buildBandedSheetPdf({
     pdf.setTextColor(0);
     pdf.text(`${idx + 1}.`, margin, y);
     pdf.text(promptLines, margin + 8, y);
-
-    // Right-margin band mark: filled vector shape in light grey, vertically
-    // centred on the item's first line. Never text — the standard-14 PDF fonts
-    // use WinAnsiEncoding and cannot encode the geometric-shapes code points.
-    drawBandGlyph(pdf as never, q.band, glyphX, y - 1.2);
-
     y += promptLines.length * 5 + 4;
 
-    // Answer work area
     pdf.setDrawColor(200);
     pdf.setLineWidth(0.3);
-    pdf.rect(margin + 8, y, textWidth, workSpace);
+    pdf.rect(margin + 8, y, textWidth - 8, workSpace);
     y += workSpace + 8;
   });
 
-  // ---- Detachable answer strip, foot of the sheet ----
-  const stripHeight = 34;
-  const stripTop = pageHeight - margin - stripHeight;
-  if (y > stripTop - 4) {
-    pdf.addPage();
-  }
-
-  // Dashed cut line separating the strip from the body.
+  // ---- Detachable answer strip: plain numbers, one CHECK total ----
   pdf.setDrawColor(120);
   pdf.setLineWidth(0.3);
   pdf.setLineDashPattern([2, 1.6], 0);
@@ -117,40 +103,159 @@ export function buildBandedSheetPdf({
   pdf.setFont('helvetica', 'bold');
   pdf.text('ANSWER STRIP', margin, sy);
   pdf.setFont('helvetica', 'normal');
-  pdf.text('ID ______', margin + 38, sy);
-  pdf.text('SET  1   2   3   4', margin + 70, sy);
+  pdf.text(fmt(sheet.studentName), margin + 38, sy);
+  pdf.text(`Variant ${sheet.variant}`, pageWidth - margin, sy, { align: 'right' });
   sy += 7;
 
-  // Two rows of five: number, the item's band mark, then the answer rule.
-  // The mark is the same vector shape as the item, scaled down for the strip.
-  const stripGlyphSize = 1.5;
   const perRow = 5;
   const colWidth = contentWidth / perRow;
-  pdf.setFontSize(10);
-  items.forEach((q, idx) => {
+  sheet.items.forEach((_q, idx) => {
     const row = Math.floor(idx / perRow);
     const col = idx % perRow;
     const x = margin + col * colWidth;
     const ry = sy + row * 7;
-    pdf.setTextColor(0);
     pdf.text(`${idx + 1}`, x, ry);
     const numW = pdf.getTextWidth(`${idx + 1}`);
-    drawBandGlyph(pdf as never, q.band, x + numW + 3.4, ry - 1.1, stripGlyphSize);
-    pdf.setTextColor(0);
-    pdf.text('____', x + numW + 4.4, ry);
+    pdf.text('______', x + numW + 3, ry);
   });
-  sy += Math.ceil(items.length / perRow) * 7 + 3;
+  sy += Math.ceil(sheet.items.length / perRow) * 7 + 3;
 
-  // CHECK: only the assigned set's total prints. Never all four — a student must
-  // not be able to compare them and infer which item range each set covers.
-  const assignedCheck = assignedSet
-    ? setChecks?.find((c) => c.set === assignedSet)
-    : undefined;
-  const checkValue = assignedCheck ? formatCheckValue(assignedCheck.total) : '';
-  pdf.setTextColor(0);
   pdf.setFontSize(10);
-  pdf.text(`CHECK: your completed answers should total  ${checkValue || '______'}`, margin, sy);
+  pdf.text(
+    `CHECK: your completed answers should total  ${formatCheckValue(sheet.check)}`,
+    margin,
+    sy,
+  );
+}
+
+/** Builds a single student sheet as its own PDF. */
+export function buildStudentSheetPdf(sheet: StudentSheet, opts: SheetRenderOptions): jsPDF {
+  const pdf = new jsPDF('p', 'mm', 'letter');
+  renderStudentSheet(pdf, sheet, opts);
+  return pdf;
+}
+
+/**
+ * The class set: ONE PDF, one sheet per student, each with that student's name
+ * pre-printed and their assigned variant's items. Pages are ordered by surname.
+ */
+export function buildClassSetPdf(
+  sheets: (StudentSheet & { sortKey: string })[],
+  opts: SheetRenderOptions,
+): jsPDF {
+  const ordered = [...sheets].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const pdf = new jsPDF('p', 'mm', 'letter');
+  ordered.forEach((sheet, i) => {
+    if (i > 0) pdf.addPage();
+    renderStudentSheet(pdf, sheet, opts);
+  });
+  return pdf;
+}
+
+const bandName = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
+
+/**
+ * The teacher-facing answer keys: one key per variant. Each item shows its number,
+ * the band shape AND the band name in words, the answer, and an ANCHOR mark on the
+ * four items common to every variant. Whole-sheet band totals and the variant's
+ * CHECK total sit at the top of each key.
+ */
+export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOptions): jsPDF {
+  const fmt = opts.formatText || ((t: string) => t);
+  const pdf = new jsPDF('p', 'mm', 'letter');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = marginFor(opts.marginSize);
+  const contentWidth = pageWidth - margin * 2;
+
+  variants.forEach((v, vi) => {
+    if (vi > 0) pdf.addPage();
+    let y = margin;
+
+    pdf.setFontSize(15);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.text(fmt(`Answer Key — Variant ${v.variant}`), margin, y);
+    y += 7;
+
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(fmt(opts.title), margin, y);
+    y += 6;
+
+    const totals = BANDS.map((b) => `${bandName(b)} ${v.totals[b]}`).join('   ·   ');
+    pdf.text(`Band totals: ${totals}`, margin, y);
+    y += 5.5;
+    pdf.text(`CHECK total (sum of the ten answers): ${formatCheckValue(v.check)}`, margin, y);
+    y += 5.5;
+    pdf.text(
+      `Anchor items (common to all four variants): ${v.anchorPositions.join(', ')}`,
+      margin,
+      y,
+    );
+    y += 8;
+
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(0.4);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 7;
+
+    v.items.forEach((q, idx) => {
+      const number = idx + 1;
+      const isAnchor = v.anchorPositions.includes(number);
+      const promptLines = pdf.splitTextToSize(fmt(q?.prompt_text || ''), contentWidth - 46) as string[];
+      const answerLines = pdf.splitTextToSize(fmt(q?.answer_text || ''), contentWidth - 46) as string[];
+      const blockHeight = (promptLines.length + answerLines.length) * 4.6 + 8;
+
+      if (y + blockHeight > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${number}.`, margin, y);
+
+      // Band shape (teacher copy) followed by the band name in words.
+      drawBandGlyph(pdf as never, q.band, margin + 12, y - 1.2, 2, [90, 96, 106]);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(bandName(q.band), margin + 14, y);
+      if (isAnchor) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('[ANCHOR]', margin + 36, y);
+        pdf.setFont('helvetica', 'normal');
+      }
+      y += 5;
+
+      pdf.setFontSize(10);
+      pdf.setTextColor(60);
+      promptLines.slice(0, 6).forEach((line) => {
+        pdf.text(line, margin + 8, y);
+        y += 4.6;
+      });
+
+      pdf.setTextColor(0, 110, 0);
+      pdf.setFont('helvetica', 'bold');
+      answerLines.slice(0, 4).forEach((line, i) => {
+        pdf.text(i === 0 ? `Answer: ${line}` : line, margin + 8, y);
+        y += 4.6;
+      });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(0);
+      y += 3.5;
+    });
+
+    pdf.setFontSize(8);
+    pdf.setTextColor(150);
+    pdf.text(
+      `Teacher copy · Variant ${v.variant} · ${ITEMS_PER_SHEET} items`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' },
+    );
+    pdf.setTextColor(0);
+  });
 
   return pdf;
-
 }
