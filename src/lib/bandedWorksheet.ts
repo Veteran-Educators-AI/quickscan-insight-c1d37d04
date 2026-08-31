@@ -418,3 +418,75 @@ export function formatCheckValue(total: number | null): string {
   if (total === null) return '\u2014';
   return String(tidy(total));
 }
+
+// ===================== Band-stop placement =====================
+
+/**
+ * Deterministic answer comparison against the stored key. Numeric answers compare
+ * numerically (so "12.5 cm" matches "12.5"); anything else compares as case- and
+ * whitespace-insensitive text. This never judges a student's method, working or
+ * justification — only whether the entered answer equals the stored one.
+ */
+export function answersMatch(entered: string | null | undefined, stored: string | null | undefined): boolean {
+  if (entered == null || stored == null) return false;
+  const a = String(entered).trim();
+  const b = String(stored).trim();
+  if (!a || !b) return false;
+  const na = parseNumericAnswer(a);
+  const nb = parseNumericAnswer(b);
+  if (na !== null && nb !== null) return Math.abs(na - nb) < 1e-9;
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[.,;]+$/, '');
+  return norm(a) === norm(b);
+}
+
+export interface BandStopResult {
+  /** Highest band answered correctly within the student's own range, or null if none. */
+  bandReached: QuestionBand | null;
+  /** Suggested set for the next cycle. Null when nothing in range was correct. */
+  suggestedSet: number | null;
+  /** Items inside the student's range that were answered correctly. */
+  correctItemNumbers: number[];
+  /** Bands the student's range actually contained — a band never seen is never "failed". */
+  bandsInRange: QuestionBand[];
+}
+
+export const BAND_TO_SET: Record<QuestionBand, number> = {
+  foundation: 1,
+  core: 2,
+  extension: 3,
+  depth: 4,
+};
+
+/**
+ * Computes the highest band answered correctly, considering ONLY the items inside
+ * the student's assigned range. `answers` is keyed by 1-indexed item number.
+ */
+export function computeBandStop(
+  items: Pick<BankedQuestion, 'band' | 'answer_text'>[],
+  range: [number, number],
+  answers: Record<string, string>,
+): BandStopResult {
+  const [from, to] = range;
+  const correctItemNumbers: number[] = [];
+  const bandsInRange = new Set<QuestionBand>();
+  let highestIdx = -1;
+
+  for (let i = from; i <= to; i++) {
+    const item = items[i - 1];
+    if (!item) continue;
+    const band = (item.band || 'core') as QuestionBand;
+    bandsInRange.add(band);
+    if (answersMatch(answers[String(i)], item.answer_text)) {
+      correctItemNumbers.push(i);
+      highestIdx = Math.max(highestIdx, BANDS.indexOf(band));
+    }
+  }
+
+  const bandReached = highestIdx >= 0 ? BANDS[highestIdx] : null;
+  return {
+    bandReached,
+    suggestedSet: bandReached ? BAND_TO_SET[bandReached] : null,
+    correctItemNumbers,
+    bandsInRange: BANDS.filter((b) => bandsInRange.has(b)),
+  };
+}
