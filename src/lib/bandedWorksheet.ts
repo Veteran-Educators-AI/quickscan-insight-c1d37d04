@@ -212,10 +212,15 @@ export async function selectBandedQuestions(
 export function pickBandedQuestions(
   allRows: any[],
   composition: BandComposition,
-  topicIds: string[] = [],
+  /** `null`/omitted = filtering not requested. A non-null array is always applied, even if empty. */
+  topicIds: string[] | null = null,
 ): BandedSelectionResult {
+  if (topicIds && topicIds.length === 0) {
+    // "Filter to nothing" is a caller bug, not a licence to use the whole bank.
+    throw new TopicResolutionError([]);
+  }
   const rows = allRows.filter((r) => {
-    if (topicIds.length === 0) return true;
+    if (!topicIds) return true;
     const links: { topic_id: string }[] = r.question_topics || [];
     return links.some((l) => topicIds.includes(l.topic_id));
   });
