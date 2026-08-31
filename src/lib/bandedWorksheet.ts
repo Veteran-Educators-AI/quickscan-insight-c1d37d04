@@ -316,16 +316,17 @@ export function parseNumericAnswer(raw: string | null | undefined): number | nul
   let s = String(raw).trim();
   if (!s) return null;
 
-  // Reject anything that reads as more than one value.
+  // Normalise canonical thousands grouping first, so "1,200.50" is not mistaken
+  // for the list "1, 200.50" by the multiple-value guards below.
+  s = s.replace(/(?<=\d)(,)(?=\d{3}(\D|$))/g, '');
+
+  // Reject anything that reads as more than one value, a range, or an expression.
   if (/\b(or|and|to)\b/i.test(s)) return null;
-  if (/[,;]\s*[-+$(]?\d/.test(s)) return null; // "3, 5" (a thousands separator has no space)
-  if (/\d\s*[-–]\s*\d/.test(s) && !/^[-+]/.test(s)) {
-    // "3-5" is a range, not a number. A leading sign is fine.
-    return null;
-  }
-  if (/[/÷]/.test(s)) return null;   // fractions / ratios are not unambiguous
+  if (/[,;]/.test(s)) return null;              // "3, 5" — a real separator is now gone
+  if (/\d\s*[-–]\s*\d/.test(s)) return null;    // "3-5" is a range
+  if (/[/÷]/.test(s)) return null;              // fractions / ratios are not unambiguous
   if (/[<>≤≥±~≈]/.test(s)) return null;
-  if (/[+*^√π]/.test(s)) return null; // unevaluated expressions
+  if (/\d\s*[+*^]|[√π]/.test(s)) return null;   // unevaluated expressions ("2 + 3", "2√3")
 
   // Leading label: "x =", "Area =", "AB ="
   s = s.replace(/^[^=]{0,24}=\s*/, '').trim();
@@ -334,19 +335,20 @@ export function parseNumericAnswer(raw: string | null | undefined): number | nul
   // Leading currency
   s = s.replace(/^[$£€]\s*/, '').trim();
 
-  // Trailing unit words / symbols, incl. squared and cubed marks.
+  // Trailing unit words / symbols, incl. squared and cubed marks written as
+  // ² ³ or as a trailing 2 / 3 ("cm2", "m3"), plus a trailing full stop.
   s = s.replace(
-    /\s*(%|°|degrees?|deg|cm|mm|m|km|in(?:ches)?|ft|feet|yd|units?|sq|square)?\s*[²³]?\s*\.?$/i,
+    /\s*(%|°|degrees?|deg|cm|mm|m|km|in(?:ches)?|ft|feet|yd|units?|sq|square)\s*(?:[²³]|[23])?\s*\.?$/i,
     '',
   ).trim();
-
-  // Thousands separators, but only in the canonical 3-digit grouping.
-  if (/^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+  s = s.replace(/\s*[²³]\s*$/, '').trim();
+  s = s.replace(/\s*\.$/, '').trim();
 
   if (!/^[-+]?(\d+(\.\d+)?|\.\d+)$/.test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
+
 
 export interface SetCheckValue {
   set: number;
