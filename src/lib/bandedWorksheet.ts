@@ -314,8 +314,11 @@ export function deriveSetRanges(total: number): SetRangeMap {
   const span = n - len; // total drift from set 1 to set 4
   const map: SetRangeMap = {} as SetRangeMap;
   SET_NUMBERS.forEach((set, i) => {
+    // Starts drift forward, ends drift forward slightly faster, so set 1 begins at
+    // item 1, set 4 ends at the last item, and the middle sets straddle the centre.
     const start = 1 + Math.round((i * span) / 3);
-    map[set] = [start, Math.min(n, start + len - 1)];
+    const end = Math.min(n, len + Math.ceil((i * span) / 3));
+    map[set] = [start, Math.max(start, end)];
   });
   return map;
 }
