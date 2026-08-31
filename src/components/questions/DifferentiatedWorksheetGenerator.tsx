@@ -4100,6 +4100,26 @@ const toggleStudent = (studentId: string) => {
             </Select>
           </div>
 
+          {/* Optional standards footer on the student sheet — default OFF */}
+          <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="standards-footer" className="text-sm">
+                Print standard codes on student sheets
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Adds one flat, comma-separated list of NYS codes for the whole sheet above the
+                answer strip. Never per item, so difficulty cannot be inferred. Off by default.
+              </p>
+            </div>
+            <Switch
+              id="standards-footer"
+              checked={showStandardsFooter}
+              onCheckedChange={setShowStandardsFooter}
+            />
+          </div>
+
+
+
           <QuestionPreviewPanel
             selectedTopics={selectedTopics}
             customTopics={customTopics}
