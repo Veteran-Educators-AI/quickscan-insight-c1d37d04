@@ -335,10 +335,13 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [onlyWithoutDiagnostic, setOnlyWithoutDiagnostic] = useState(false);
   const [marginSize, setMarginSize] = useState<'small' | 'medium' | 'large'>('medium');
 
-  // Banked single-sheet mode (one document, four bands, glyphs only)
+  // Banded variant mode: four ten-item sheet variants (A-D) drawn from the question bank
   const [bandedMode, setBandedMode] = useState(false);
-  const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [variantMixes, setVariantMixes] = useState<Record<VariantLetter, BandMix>>(() =>
+    JSON.parse(JSON.stringify(DEFAULT_VARIANT_MIX)),
+  );
   const [setAssignmentOpen, setSetAssignmentOpen] = useState(false);
+
 
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   const [unresolvedTopics, setUnresolvedTopics] = useState<string[]>([]);
