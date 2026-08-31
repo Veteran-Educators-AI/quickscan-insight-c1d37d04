@@ -293,15 +293,43 @@ export function formatShortfallMessage(shortfalls: BandShortfall[]): string {
 
 // ===================== Detachable answer strip =====================
 
-/** Fixed set ranges (1-indexed, inclusive) over the sheet's items. */
-export const SET_RANGES: Record<number, [number, number]> = {
-  1: [1, 6],
-  2: [2, 8],
-  3: [4, 9],
-  4: [5, 10],
-};
+export type SetRangeMap = Record<number, [number, number]>;
 
 export const SET_NUMBERS = [1, 2, 3, 4] as const;
+
+/**
+ * Derives the four set ranges (1-indexed, inclusive) for a sheet of `total` items.
+ *
+ * Properties preserved for every count:
+ *  - the four ranges are the same length and ascend across the sheet,
+ *  - set 1 starts at item 1 and set 4 ends at the last item, so the sheet is spanned,
+ *  - the intersection of all four is non-empty (window length >= half the sheet + 1).
+ *
+ * The 10-item case derives to exactly 1-6 / 2-8 / 4-9 / 5-10.
+ */
+export function deriveSetRanges(total: number): SetRangeMap {
+  const n = Math.max(4, Math.floor(total));
+  // 60% window, but never so short that the four sets stop sharing a common item.
+  const len = Math.max(Math.round(n * 0.6), Math.floor(n / 2) + 1);
+  const span = n - len; // total drift from set 1 to set 4
+  const map: SetRangeMap = {} as SetRangeMap;
+  SET_NUMBERS.forEach((set, i) => {
+    const start = 1 + Math.round((i * span) / 3);
+    map[set] = [start, Math.min(n, start + len - 1)];
+  });
+  return map;
+}
+
+/** The item range every set contains, or null if the sets share nothing. */
+export function setCommonOverlap(ranges: SetRangeMap): [number, number] | null {
+  const from = Math.max(...SET_NUMBERS.map((s) => ranges[s][0]));
+  const to = Math.min(...SET_NUMBERS.map((s) => ranges[s][1]));
+  return from <= to ? [from, to] : null;
+}
+
+/** Back-compatible constant: the documented 10-item ranges. */
+export const SET_RANGES: SetRangeMap = deriveSetRanges(10);
+
 
 /**
  * Tolerant numeric parse of a stored answer.
