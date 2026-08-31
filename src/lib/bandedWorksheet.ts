@@ -290,3 +290,98 @@ export function formatShortfallMessage(shortfalls: BandShortfall[]): string {
     .map((s) => `${label(s.band)}: ${s.available} available, ${s.needed} needed.`)
     .join(' ');
 }
+
+// ===================== Detachable answer strip =====================
+
+/** Fixed set ranges (1-indexed, inclusive) over the sheet's items. */
+export const SET_RANGES: Record<number, [number, number]> = {
+  1: [1, 6],
+  2: [2, 8],
+  3: [4, 9],
+  4: [5, 10],
+};
+
+export const SET_NUMBERS = [1, 2, 3, 4] as const;
+
+/**
+ * Tolerant numeric parse of a stored answer.
+ * Strips surrounding whitespace, a leading label ("x =", "Area ="), thousands
+ * separators, a leading currency symbol and a trailing unit ("cm", "cm²", "units").
+ * Anything still ambiguous (ranges, multiple values, fractions, prose, "5 or 6")
+ * returns null so the CHECK line degrades to a dash rather than printing a wrong total.
+ * A wrong total is worse than none: a student who sums correctly would think they are wrong.
+ */
+export function parseNumericAnswer(raw: string | null | undefined): number | null {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+
+  // Normalise canonical thousands grouping first, so "1,200.50" is not mistaken
+  // for the list "1, 200.50" by the multiple-value guards below.
+  s = s.replace(/(?<=\d)(,)(?=\d{3}(\D|$))/g, '');
+
+  // Reject anything that reads as more than one value, a range, or an expression.
+  if (/\b(or|and|to)\b/i.test(s)) return null;
+  if (/[,;]/.test(s)) return null;              // "3, 5" — a real separator is now gone
+  if (/\d\s*[-–]\s*\d/.test(s)) return null;    // "3-5" is a range
+  if (/[/÷]/.test(s)) return null;              // fractions / ratios are not unambiguous
+  if (/[<>≤≥±~≈]/.test(s)) return null;
+  if (/\d\s*[+*^]|[√π]/.test(s)) return null;   // unevaluated expressions ("2 + 3", "2√3")
+
+  // Leading label: "x =", "Area =", "AB ="
+  s = s.replace(/^[^=]{0,24}=\s*/, '').trim();
+  if (!s) return null;
+
+  // Leading currency
+  s = s.replace(/^[$£€]\s*/, '').trim();
+
+  // Trailing unit words / symbols, incl. squared and cubed marks written as
+  // ² ³ or as a trailing 2 / 3 ("cm2", "m3"), plus a trailing full stop.
+  s = s.replace(
+    /\s*(%|°|degrees?|deg|cm|mm|m|km|in(?:ches)?|ft|feet|yd|units?|sq|square)\s*(?:[²³]|[23])?\s*\.?$/i,
+    '',
+  ).trim();
+  s = s.replace(/\s*[²³]\s*$/, '').trim();
+  s = s.replace(/\s*\.$/, '').trim();
+
+  if (!/^[-+]?(\d+(\.\d+)?|\.\d+)$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+
+export interface SetCheckValue {
+  set: number;
+  /** Sum of the numeric answers in the set's range, or null when any answer is non-numeric. */
+  total: number | null;
+}
+
+/** Rounds away float noise from summing decimal answers. */
+function tidy(n: number): number {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+/**
+ * Computes the CHECK total for all four sets. A set whose range contains any
+ * non-numeric (or missing) answer yields `null`, which prints as a dash.
+ */
+export function computeSetChecks(items: Pick<BankedQuestion, 'answer_text'>[]): SetCheckValue[] {
+  return SET_NUMBERS.map((set) => {
+    const [from, to] = SET_RANGES[set];
+    let total = 0;
+    for (let i = from; i <= to; i++) {
+      const item = items[i - 1];
+      if (!item) return { set, total: null }; // range extends past the sheet
+      const n = parseNumericAnswer(item.answer_text);
+      if (n === null) return { set, total: null };
+      total += n;
+    }
+    return { set, total: tidy(total) };
+  });
+}
+
+/** Formats a CHECK total for print. Non-numeric sets print an em dash. */
+export function formatCheckValue(total: number | null): string {
+  if (total === null) return '\u2014';
+  return String(tidy(total));
+}
