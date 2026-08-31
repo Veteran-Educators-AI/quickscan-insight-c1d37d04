@@ -27,8 +27,7 @@ import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord 
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
 import {
   BAND_GLYPH,
-  BAND_GLYPH_FONT_SIZE,
-  BAND_GLYPH_RGB,
+  drawBandGlyph,
   defaultComposition,
   formatShortfallMessage,
   selectBandedQuestions,
@@ -2355,7 +2354,9 @@ const toggleStudent = (studentId: string) => {
     try {
       const total = parseInt(bandedItemCount) || 10;
       const composition = defaultComposition(total);
-      const { items, shortfalls } = await selectBandedQuestions(user.id, composition);
+      const { items, shortfalls } = await selectBandedQuestions(user.id, composition, {
+        topicNames: selectedTopics,
+      });
 
       if (shortfalls.length > 0) {
         setBandShortfalls(shortfalls);
@@ -2384,6 +2385,7 @@ const toggleStudent = (studentId: string) => {
       pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(0);
+      // Title only names topics when the items were actually filtered to them.
       const topicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
       pdf.text(formatPdfText(topicsLabel.length > 60 ? `${topicsLabel.substring(0, 57)}...` : topicsLabel), pageWidth / 2, y, { align: 'center' });
       y += 10;
@@ -2416,11 +2418,8 @@ const toggleStudent = (studentId: string) => {
         pdf.text(`${idx + 1}.`, margin, y);
         pdf.text(promptLines, margin + 8, y);
 
-        // Right-margin band glyph: 8pt, light grey, no label.
-        pdf.setFontSize(BAND_GLYPH_FONT_SIZE);
-        pdf.setTextColor(...BAND_GLYPH_RGB);
-        pdf.text(BAND_GLYPH[q.band], glyphX, y, { align: 'right' });
-        pdf.setTextColor(0);
+        // Right-margin band mark: vector shape, light grey, no label and no text glyph.
+        drawBandGlyph(pdf as any, q.band, glyphX, y - 1.2);
 
         y += promptLines.length * 5 + 4;
 
