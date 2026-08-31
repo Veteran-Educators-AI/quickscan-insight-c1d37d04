@@ -78,8 +78,12 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
   pdf.line(margin, y, pageWidth - margin, y);
   y += 10;
 
-  const stripHeight = 30;
-  const stripTop = pageHeight - margin - stripHeight;
+  const footerCodes = opts.showStandardsFooter ? sheetStandardCodes(sheet.items) : [];
+  const footerHeight = footerCodes.length > 0 ? 7 : 0;
+  const stripHeight = 30 + footerHeight;
+  const stripTop = pageHeight - margin - stripHeight + footerHeight;
+  const footerTop = pageHeight - margin - stripHeight;
+
 
   // Ten items with usable working space do not fit on one side of letter paper, so a
   // sheet is a deterministic two-page (duplex) handout: items 1-5, then 6-10 plus the
