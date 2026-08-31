@@ -15,6 +15,57 @@ export const BAND_GLYPH_COLOR = '#B9BFC9';
 export const BAND_GLYPH_RGB: [number, number, number] = [185, 191, 201];
 export const BAND_GLYPH_FONT_SIZE = 8;
 
+/** Nominal glyph size in mm for the vector-drawn PDF marks. */
+export const BAND_GLYPH_SIZE_MM = 1.6;
+
+/**
+ * Draws the band mark as a filled vector shape in the PDF.
+ * The standard-14 PDF fonts use WinAnsiEncoding and cannot encode the
+ * geometric-shapes code points in BAND_GLYPH, so the PDF path never uses text.
+ * (x, y) is the right-margin anchor and the vertical centre of the mark.
+ */
+export function drawBandGlyph(
+  pdf: {
+    setFillColor: (r: number, g: number, b: number) => void;
+    circle: (x: number, y: number, r: number, style?: string) => void;
+    triangle: (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, style?: string) => void;
+    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
+    lines: (lines: number[][], x: number, y: number, scale?: number[], style?: string, closed?: boolean) => void;
+  },
+  band: QuestionBand,
+  x: number,
+  y: number,
+  size: number = BAND_GLYPH_SIZE_MM,
+): void {
+  pdf.setFillColor(...BAND_GLYPH_RGB);
+  const h = size / 2;
+  // right-aligned: shapes occupy [x - size, x]
+  const cx = x - h;
+
+  switch (band) {
+    case 'foundation':
+      // Filled circle. Radius trimmed so its area matches the square roughly.
+      pdf.circle(cx, y, h * 0.92, 'F');
+      break;
+    case 'core': {
+      // Filled triangle, apex up. Slightly taller to match visual weight.
+      const th = size * 1.05;
+      pdf.triangle(cx, y - th / 2, cx - h * 1.08, y + th / 2, cx + h * 1.08, y + th / 2, 'F');
+      break;
+    }
+    case 'extension':
+      pdf.rect(cx - h * 0.9, y - h * 0.9, size * 0.9, size * 0.9, 'F');
+      break;
+    case 'depth': {
+      // Square rotated 45 degrees (diamond).
+      const d = h * 1.15;
+      pdf.lines([[d, d], [-d, d], [-d, -d]], cx, y - d, [1, 1], 'F', true);
+      break;
+    }
+  }
+}
+
+
 export interface BankedQuestion {
   id: string;
   band: QuestionBand;
