@@ -15,6 +15,57 @@ export const BAND_GLYPH_COLOR = '#B9BFC9';
 export const BAND_GLYPH_RGB: [number, number, number] = [185, 191, 201];
 export const BAND_GLYPH_FONT_SIZE = 8;
 
+/** Nominal glyph size in mm for the vector-drawn PDF marks. */
+export const BAND_GLYPH_SIZE_MM = 1.6;
+
+/**
+ * Draws the band mark as a filled vector shape in the PDF.
+ * The standard-14 PDF fonts use WinAnsiEncoding and cannot encode the
+ * geometric-shapes code points in BAND_GLYPH, so the PDF path never uses text.
+ * (x, y) is the right-margin anchor and the vertical centre of the mark.
+ */
+export function drawBandGlyph(
+  pdf: {
+    setFillColor: (r: number, g: number, b: number) => void;
+    circle: (x: number, y: number, r: number, style?: string) => void;
+    triangle: (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, style?: string) => void;
+    rect: (x: number, y: number, w: number, h: number, style?: string) => void;
+    lines: (lines: number[][], x: number, y: number, scale?: number[], style?: string, closed?: boolean) => void;
+  },
+  band: QuestionBand,
+  x: number,
+  y: number,
+  size: number = BAND_GLYPH_SIZE_MM,
+): void {
+  pdf.setFillColor(...BAND_GLYPH_RGB);
+  const h = size / 2;
+  // right-aligned: shapes occupy [x - size, x]
+  const cx = x - h;
+
+  switch (band) {
+    case 'foundation':
+      // Filled circle. Radius trimmed so its area matches the square roughly.
+      pdf.circle(cx, y, h * 0.92, 'F');
+      break;
+    case 'core': {
+      // Filled triangle, apex up. Slightly taller to match visual weight.
+      const th = size * 1.05;
+      pdf.triangle(cx, y - th / 2, cx - h * 1.08, y + th / 2, cx + h * 1.08, y + th / 2, 'F');
+      break;
+    }
+    case 'extension':
+      pdf.rect(cx - h * 0.9, y - h * 0.9, size * 0.9, size * 0.9, 'F');
+      break;
+    case 'depth': {
+      // Square rotated 45 degrees (diamond).
+      const d = h * 1.15;
+      pdf.lines([[d, d], [-d, d], [-d, -d]], cx, y - d, [1, 1], 'F', true);
+      break;
+    }
+  }
+}
+
+
 export interface BankedQuestion {
   id: string;
   band: QuestionBand;
@@ -55,17 +106,45 @@ export interface BandedSelectionResult {
   availableByBand: Record<QuestionBand, number>;
 }
 
+export interface BandedSelectionOptions {
+  /** Topic ids to restrict selection to. */
+  topicIds?: string[];
+  /** Topic names to restrict selection to; resolved to ids for this teacher. */
+  topicNames?: string[];
+}
+
+/** Resolves topic names to topic ids for a teacher. Unknown names are ignored. */
+export async function resolveTopicIds(teacherId: string, topicNames: string[]): Promise<string[]> {
+  if (!topicNames || topicNames.length === 0) return [];
+  const { data, error } = await supabase
+    .from('topics')
+    .select('id, name')
+    .eq('teacher_id', teacherId)
+    .in('name', topicNames);
+  if (error) throw error;
+  return ((data || []) as { id: string }[]).map((t) => t.id);
+}
+
 /**
- * Selects banked questions per band.
+ * Selects banked questions per band, optionally restricted to selected topics.
  * De-duplication: at most one question per non-null `answer_group`, applied globally
  * across the whole sheet (a group claimed by one band is unavailable to the others).
+ * Shortfall counts are computed after topic filtering, so "needed vs available"
+ * always means available *within the selected topics*.
  */
 export async function selectBandedQuestions(
   teacherId: string,
   composition: BandComposition,
-  topicIds?: string[],
+  options?: string[] | BandedSelectionOptions,
 ): Promise<BandedSelectionResult> {
-  let query = supabase
+  const opts: BandedSelectionOptions = Array.isArray(options) ? { topicIds: options } : (options || {});
+  const resolvedIds = [
+    ...(opts.topicIds || []),
+    ...(opts.topicNames && opts.topicNames.length > 0 ? await resolveTopicIds(teacherId, opts.topicNames) : []),
+  ];
+  const topicIds = Array.from(new Set(resolvedIds));
+
+  const query = supabase
     .from('questions')
     .select('id, band, answer_group, prompt_text, answer_text, prompt_image_url, answer_image_url, difficulty, question_topics(topic_id)')
     .eq('teacher_id', teacherId)
@@ -76,8 +155,20 @@ export async function selectBandedQuestions(
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = ((data || []) as any[]).filter((r) => {
-    if (!topicIds || topicIds.length === 0) return true;
+  return pickBandedQuestions((data || []) as any[], composition, topicIds);
+}
+
+/**
+ * Pure selection: topic filtering, banding, answer_group dedup and shortfall counts.
+ * Exposed separately so the selection can be exercised against real rows without a session.
+ */
+export function pickBandedQuestions(
+  allRows: any[],
+  composition: BandComposition,
+  topicIds: string[] = [],
+): BandedSelectionResult {
+  const rows = allRows.filter((r) => {
+    if (topicIds.length === 0) return true;
     const links: { topic_id: string }[] = r.question_topics || [];
     return links.some((l) => topicIds.includes(l.topic_id));
   });
