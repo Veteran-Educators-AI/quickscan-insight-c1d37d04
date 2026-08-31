@@ -2360,11 +2360,11 @@ const toggleStudent = (studentId: string) => {
   };
 
   // ============================================================
-  // BANKED SINGLE SHEET (one document, four bands, glyphs only)
-  // Items come from the `questions` bank filtered on the `band` enum.
-  // No AI generation, no band names / level letters on the student sheet.
+  // FOUR SHEET VARIANTS (A-D), ten items each, drawn from the question bank.
+  // Every variant shares the same four anchor items in the same positions; the
+  // other six vary by band mix. Student copies carry no band marks at all.
   // ============================================================
-  const generateBandedSingleSheet = async () => {
+  const generateBandedVariantSet = async () => {
     if (!user) return;
     setBandShortfalls([]);
     setUnresolvedTopics([]);
@@ -2373,16 +2373,13 @@ const toggleStudent = (studentId: string) => {
     setGenerationStatus('Selecting banked questions...');
 
     try {
-      const total = parseInt(bandedItemCount) || 10;
-      const composition = defaultComposition(total);
       // Topics selected => the filter is mandatory and any unresolved name blocks generation.
-      // No topics selected => filtering is legitimately not requested.
-      const { items, shortfalls } = await selectBandedQuestions(
+      const pools = await fetchBandPools(
         user.id,
-        composition,
         selectedTopics.length > 0 ? { topicNames: selectedTopics } : {},
       );
 
+      const { variants, shortfalls } = buildVariants(pools, DEFAULT_ANCHOR_BANDS, variantMixes);
       if (shortfalls.length > 0) {
         setBandShortfalls(shortfalls);
         toast({
@@ -2394,25 +2391,62 @@ const toggleStudent = (studentId: string) => {
       }
 
       setGenerationProgress(40);
-      setGenerationStatus('Building worksheet...');
+      setGenerationStatus('Building the class set...');
 
       // Title only names topics when the items were actually filtered to them.
       const title = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
 
-      // All four CHECK totals are computed and stored with the worksheet; only the
-      // one matching a student's assigned set is ever printed (set assignment is a later step).
-      const derivedRanges = deriveSetRanges(items.length);
-      const setChecks = computeSetChecks(items, derivedRanges);
+      // Variant assignment for the class set. Existing assignments win; anyone not yet
+      // assigned starts on Variant B and can be moved in the assignment dialog.
+      const roster = students.filter((s) => s.selected).length > 0
+        ? students.filter((s) => s.selected)
+        : students;
+      let assignedVariant: Record<string, VariantLetter> = {};
+      if (selectedClassId && roster.length > 0) {
+        const { data: rows } = await supabase
+          .from('banded_set_assignments')
+          .select('student_id, assigned_set')
+          .eq('teacher_id', user.id)
+          .eq('class_id', selectedClassId);
+        ((rows || []) as { student_id: string; assigned_set: number }[]).forEach((r) => {
+          assignedVariant[r.student_id] = VARIANTS[Math.min(3, Math.max(0, (r.assigned_set || 1) - 1))];
+        });
+      }
 
+      const byLetter = (letter: VariantLetter) => variants.find((v) => v.variant === letter)!;
 
-      const pdf = buildBandedSheetPdf({
-        items,
-        title,
-        marginSize,
-        formatText: formatPdfText,
-        setChecks,
-        assignedSet: null,
-      });
+      if (roster.length > 0) {
+        const sheets = roster.map((s) => {
+          const letter = assignedVariant[s.id] || 'B';
+          const v = byLetter(letter);
+          return {
+            studentName: `${s.first_name} ${s.last_name}`,
+            variant: letter,
+            items: v.items,
+            check: v.check,
+            sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+          };
+        });
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        classSet.save(`class-set-${new Date().toISOString().split('T')[0]}.pdf`);
+      } else {
+        // No roster picked: still give the teacher one blank-named copy of each variant.
+        const sheets = variants.map((v) => ({
+          studentName: '______________________________',
+          variant: v.variant,
+          items: v.items,
+          check: v.check,
+          sortKey: v.variant,
+        }));
+        const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText });
+        classSet.save(`variants-${new Date().toISOString().split('T')[0]}.pdf`);
+      }
+
+      setGenerationProgress(75);
+      setGenerationStatus('Building the four answer keys...');
+
+      const keys = buildAnswerKeysPdf(variants, { title, marginSize, formatText: formatPdfText });
+      keys.save(`answer-keys-${new Date().toISOString().split('T')[0]}.pdf`);
 
       setGenerationProgress(90);
 
@@ -2420,43 +2454,48 @@ const toggleStudent = (studentId: string) => {
         await supabase.from('worksheets').insert({
           teacher_id: user.id,
           title,
-          questions: items.map((q, idx) => ({
-            number: idx + 1,
-            questionId: q.id,
-            band: q.band,
-            answerGroup: q.answer_group,
-            prompt: q.prompt_text,
-            answer: q.answer_text,
-          })) as never,
+          questions: variants.flatMap((v) =>
+            v.items.map((q, idx) => ({
+              variant: v.variant,
+              number: idx + 1,
+              questionId: q.id,
+              band: q.band,
+              answerGroup: q.answer_group,
+              prompt: q.prompt_text,
+              answer: q.answer_text,
+              isAnchor: v.anchorPositions.includes(idx + 1),
+            })),
+          ) as never,
           topics: (selectedTopics.length > 0 ? selectedTopics : []) as never,
           settings: {
-            mode: 'banded-single-sheet',
-            composition,
-            setRanges: derivedRanges,
-            setChecks,
+            mode: 'banded-variants',
+            anchorPositions: variants[0].anchorPositions,
+            anchorBands: DEFAULT_ANCHOR_BANDS,
+            variantMixes,
+            variantTotals: Object.fromEntries(variants.map((v) => [v.variant, v.totals])),
+            variantChecks: Object.fromEntries(variants.map((v) => [v.variant, v.check])),
           } as never,
         });
       } catch (persistError) {
-        console.error('Could not store banded worksheet metadata:', persistError);
+        console.error('Could not store variant worksheet metadata:', persistError);
       }
 
-      const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-
       trackFeature({
-        featureName: 'Generate Banded Single Sheet',
+        featureName: 'Generate Banded Variant Set',
         category: 'worksheets',
         action: 'generated',
-        metadata: { itemCount: items.length, composition },
+        metadata: { variantMixes, studentCount: roster.length },
       });
 
       toast({
-        title: 'Worksheet created',
-        description: `One sheet with ${items.length} banked items.`,
+        title: 'Class set + answer keys ready',
+        description: roster.length > 0
+          ? `${roster.length} sheets in one PDF, ordered by surname, plus the four answer keys.`
+          : 'One copy of each variant, plus the four answer keys.',
       });
       setGenerationProgress(100);
     } catch (error) {
-      console.error('Banded sheet error:', error);
+      console.error('Variant set error:', error);
       if (error instanceof TopicResolutionError) {
         setUnresolvedTopics(error.unmatched);
         toast({
@@ -2468,7 +2507,7 @@ const toggleStudent = (studentId: string) => {
       }
       toast({
         title: 'Generation failed',
-        description: error instanceof Error ? error.message : 'Could not build the banded worksheet.',
+        description: error instanceof Error ? error.message : 'Could not build the four variants.',
         variant: 'destructive',
       });
     } finally {
@@ -2476,6 +2515,7 @@ const toggleStudent = (studentId: string) => {
       setGenerationStatus('');
     }
   };
+
 
 
   // Generate preview data (questions only, no PDF)
