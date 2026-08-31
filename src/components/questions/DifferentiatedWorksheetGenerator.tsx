@@ -4291,6 +4291,63 @@ const toggleStudent = (studentId: string) => {
             </Card>
           )}
 
+          {/* Banked single-sheet mode */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Single banded sheet</CardTitle>
+                  <CardDescription>
+                    One worksheet drawn from your question bank, ordered foundation → depth. Items are
+                    marked only by a small grey glyph in the right margin.
+                  </CardDescription>
+                </div>
+                <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); setBandShortfalls([]); }} />
+              </div>
+            </CardHeader>
+            {bandedMode && (
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm">Items</Label>
+                  <Select value={bandedItemCount} onValueChange={(v) => { setBandedItemCount(v); setBandShortfalls([]); }}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['8', '10', '12', '16', '20'].map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    {(() => {
+                      const c = defaultComposition(parseInt(bandedItemCount) || 10);
+                      return `${c.foundation} / ${c.core} / ${c.extension} / ${c.depth}`;
+                    })()} across the four bands
+                  </span>
+                </div>
+                {bandShortfalls.length > 0 && (
+                  <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
+                    <p className="font-medium flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-4 w-4" /> Not enough banked questions
+                    </p>
+                    <ul className="mt-1 ml-6 list-disc text-destructive">
+                      {bandShortfalls.map((s) => (
+                        <li key={s.band}>
+                          {s.band.charAt(0).toUpperCase() + s.band.slice(1)}: {s.available} available, {s.needed} needed.
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs mt-2 text-muted-foreground">
+                      Nothing was substituted from another band and nothing was AI-generated. Add banked
+                      questions with a stored answer in these bands, then generate again.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           {/* Time estimator - shown before generation */}
           {!isGenerating && selectedCount > 0 && (
             <GenerationTimeEstimator
