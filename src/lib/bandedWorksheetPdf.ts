@@ -320,6 +320,42 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
       y += 3.5;
     });
 
+    // ---- Standards coverage for this variant ----
+    const coverage = variantCoverage(v);
+    if (y + 14 + coverage.length * 5 > pageHeight - margin - 12) {
+      pdf.addPage();
+      y = margin;
+    }
+    pdf.setDrawColor(0);
+    pdf.setLineWidth(0.4);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 6;
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(0);
+    pdf.text(`Standards covered — Variant ${v.variant}`, margin, y);
+    y += 5.5;
+    pdf.setFontSize(8.5);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Standard', margin, y);
+    pdf.text('Topic', margin + 32, y);
+    pdf.text('Items', margin + contentWidth - 46, y);
+    pdf.text('Bands', margin + contentWidth - 34, y);
+    y += 4.5;
+    pdf.setFont('helvetica', 'normal');
+    coverage.forEach((row) => {
+      if (y > pageHeight - margin - 12) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(row.code, margin, y);
+      const topic = pdf.splitTextToSize(fmt(row.topicName), contentWidth - 82) as string[];
+      pdf.text(topic[0] || '', margin + 32, y);
+      pdf.text(`${row.count}`, margin + contentWidth - 46, y);
+      pdf.text(row.bands.map(bandName).join(', '), margin + contentWidth - 34, y);
+      y += 4.5;
+    });
+
     pdf.setFontSize(8);
     pdf.setTextColor(150);
     pdf.text(
@@ -330,6 +366,84 @@ export function buildAnswerKeysPdf(variants: VariantSheet[], opts: SheetRenderOp
     );
     pdf.setTextColor(0);
   });
+
+  // ---- Cross-variant coverage page: the administrator-facing artifact ----
+  const anchorItems = variants[0]
+    ? variants[0].anchorPositions.map((p) => variants[0].items[p - 1]).filter(Boolean)
+    : [];
+  const cross = crossVariantCoverage(variants, anchorItems);
+
+  pdf.addPage();
+  let cy = margin;
+  pdf.setFontSize(15);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(0);
+  pdf.text('Standards Coverage — All Four Variants', margin, cy);
+  cy += 7;
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(fmt(opts.title), margin, cy);
+  cy += 5.5;
+  pdf.setFontSize(9);
+  pdf.text(
+    'Item counts per standard for each variant. "Anchor" marks standards carried by the four items common to every variant — every student answered those regardless of variant.',
+    margin,
+    cy,
+    { maxWidth: contentWidth },
+  );
+  cy += 10;
+
+  const colStd = margin;
+  const colTopic = margin + 30;
+  const colVarStart = margin + contentWidth - 62;
+  const colStep = 10;
+  const colAnchor = margin + contentWidth - 20;
+
+  pdf.setFontSize(8.5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Standard', colStd, cy);
+  pdf.text('Topic', colTopic, cy);
+  VARIANTS.forEach((letter, i) => pdf.text(letter, colVarStart + i * colStep, cy));
+  pdf.text('Anchor', colAnchor, cy);
+  cy += 3;
+  pdf.setDrawColor(0);
+  pdf.setLineWidth(0.3);
+  pdf.line(margin, cy, pageWidth - margin, cy);
+  cy += 4.5;
+
+  pdf.setFont('helvetica', 'normal');
+  cross.rows.forEach((row) => {
+    if (cy > pageHeight - margin - 24) {
+      pdf.addPage();
+      cy = margin;
+    }
+    pdf.text(row.code, colStd, cy);
+    const topic = pdf.splitTextToSize(fmt(row.topicName), colVarStart - colTopic - 4) as string[];
+    pdf.text(topic[0] || '', colTopic, cy);
+    VARIANTS.forEach((letter, i) =>
+      pdf.text(`${row.perVariant[letter] || 0}`, colVarStart + i * colStep, cy),
+    );
+    pdf.text(row.onAnchor ? 'Yes' : '—', colAnchor, cy);
+    cy += 4.6;
+  });
+
+  cy += 4;
+  pdf.line(margin, cy, pageWidth - margin, cy);
+  cy += 6;
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(9.5);
+  pdf.text(`Distinct standards covered: ${cross.distinctStandards}`, margin, cy);
+  cy += 5;
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Covered at all four bands: ${cross.atEveryBand}`, margin, cy);
+  cy += 5;
+  pdf.text(`Covered at a single band only: ${cross.atOneBandOnly}`, margin, cy);
+
+  pdf.setFontSize(8);
+  pdf.setTextColor(150);
+  pdf.text('Teacher / administrator copy', pageWidth / 2, pageHeight - 10, { align: 'center' });
+  pdf.setTextColor(0);
+
 
   return pdf;
 }
