@@ -79,9 +79,15 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
   y += 10;
 
   const footerCodes = opts.showStandardsFooter ? sheetStandardCodes(sheet.items) : [];
-  const footerHeight = footerCodes.length > 0 ? 7 : 0;
+  pdf.setFontSize(8);
+  const footerLines =
+    footerCodes.length > 0
+      ? (pdf.splitTextToSize(`Standards: ${footerCodes.join(', ')}`, contentWidth) as string[])
+      : [];
+  const footerHeight = footerLines.length > 0 ? footerLines.length * 4 + 3 : 0;
   const stripTop = pageHeight - margin - 30;
   const footerTop = stripTop - footerHeight;
+
 
 
 
