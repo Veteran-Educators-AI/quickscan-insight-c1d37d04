@@ -25,6 +25,15 @@ import { useFeatureTracking } from '@/hooks/useFeatureTracking';
 import { useAdaptiveLevels } from '@/hooks/useAdaptiveLevels';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF, sanitizeForWord } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
+import {
+  BAND_GLYPH,
+  BAND_GLYPH_FONT_SIZE,
+  BAND_GLYPH_RGB,
+  defaultComposition,
+  formatShortfallMessage,
+  selectBandedQuestions,
+  type BandShortfall,
+} from '@/lib/bandedWorksheet';
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
 
@@ -312,6 +321,11 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   const [includeStudentQR, setIncludeStudentQR] = useState(true);
   const [onlyWithoutDiagnostic, setOnlyWithoutDiagnostic] = useState(false);
   const [marginSize, setMarginSize] = useState<'small' | 'medium' | 'large'>('medium');
+
+  // Banked single-sheet mode (one document, four bands, glyphs only)
+  const [bandedMode, setBandedMode] = useState(false);
+  const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   
   // Storyboard art settings for non-math subjects
   const [includeStoryboardArt, setIncludeStoryboardArt] = useState(false);
@@ -2326,6 +2340,126 @@ const toggleStudent = (studentId: string) => {
     }
   };
 
+  // ============================================================
+  // BANKED SINGLE SHEET (one document, four bands, glyphs only)
+  // Items come from the `questions` bank filtered on the `band` enum.
+  // No AI generation, no band names / level letters on the student sheet.
+  // ============================================================
+  const generateBandedSingleSheet = async () => {
+    if (!user) return;
+    setBandShortfalls([]);
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    setGenerationStatus('Selecting banked questions...');
+
+    try {
+      const total = parseInt(bandedItemCount) || 10;
+      const composition = defaultComposition(total);
+      const { items, shortfalls } = await selectBandedQuestions(user.id, composition);
+
+      if (shortfalls.length > 0) {
+        setBandShortfalls(shortfalls);
+        toast({
+          title: 'Not enough banked questions',
+          description: `${formatShortfallMessage(shortfalls)} Add banked questions in these bands (with a stored answer) and try again. Nothing was substituted or generated.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setGenerationProgress(40);
+      setGenerationStatus('Building worksheet...');
+
+      const pdf = new jsPDF('p', 'mm', 'letter');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = marginSize === 'small' ? 15 : marginSize === 'large' ? 25 : 19;
+      const contentWidth = pageWidth - margin * 2;
+      const glyphX = pageWidth - margin - 3;
+      const textWidth = contentWidth - 10;
+
+      let y = margin;
+
+      // Sheet header: topic title, then Name / Date / Set. No band or level info.
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0);
+      const topicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
+      pdf.text(formatPdfText(topicsLabel.length > 60 ? `${topicsLabel.substring(0, 57)}...` : topicsLabel), pageWidth / 2, y, { align: 'center' });
+      y += 10;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Name: ______________________________', margin, y);
+      pdf.text('Date: ______________', margin + contentWidth * 0.52, y);
+      pdf.text('Set: ______', pageWidth - margin - 24, y + 8);
+      y += 14;
+
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 10;
+
+      const workSpace = 26;
+
+      items.forEach((q, idx) => {
+        const promptLines = pdf.splitTextToSize(formatPdfText(q.prompt_text || ''), textWidth) as string[];
+        const blockHeight = promptLines.length * 5 + workSpace + 6;
+
+        if (y + blockHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(0);
+        pdf.text(`${idx + 1}.`, margin, y);
+        pdf.text(promptLines, margin + 8, y);
+
+        // Right-margin band glyph: 8pt, light grey, no label.
+        pdf.setFontSize(BAND_GLYPH_FONT_SIZE);
+        pdf.setTextColor(...BAND_GLYPH_RGB);
+        pdf.text(BAND_GLYPH[q.band], glyphX, y, { align: 'right' });
+        pdf.setTextColor(0);
+
+        y += promptLines.length * 5 + 4;
+
+        // Answer work area
+        pdf.setDrawColor(200);
+        pdf.setLineWidth(0.3);
+        pdf.rect(margin + 8, y, textWidth, workSpace);
+        y += workSpace + 8;
+      });
+
+      setGenerationProgress(90);
+      const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      trackFeature({
+        featureName: 'Generate Banded Single Sheet',
+        category: 'worksheets',
+        action: 'generated',
+        metadata: { itemCount: items.length, composition },
+      });
+
+      toast({
+        title: 'Worksheet created',
+        description: `One sheet with ${items.length} banked items.`,
+      });
+      setGenerationProgress(100);
+    } catch (error) {
+      console.error('Banded sheet error:', error);
+      toast({
+        title: 'Generation failed',
+        description: error instanceof Error ? error.message : 'Could not build the banded worksheet.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+      setGenerationStatus('');
+    }
+  };
+
+
   // Generate preview data (questions only, no PDF)
   const generatePreview = async () => {
     const selectedStudents = students.filter(s => s.selected);
@@ -4157,6 +4291,63 @@ const toggleStudent = (studentId: string) => {
             </Card>
           )}
 
+          {/* Banked single-sheet mode */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Single banded sheet</CardTitle>
+                  <CardDescription>
+                    One worksheet drawn from your question bank, ordered foundation → depth. Items are
+                    marked only by a small grey glyph in the right margin.
+                  </CardDescription>
+                </div>
+                <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); setBandShortfalls([]); }} />
+              </div>
+            </CardHeader>
+            {bandedMode && (
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm">Items</Label>
+                  <Select value={bandedItemCount} onValueChange={(v) => { setBandedItemCount(v); setBandShortfalls([]); }}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['8', '10', '12', '16', '20'].map((n) => (
+                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    {(() => {
+                      const c = defaultComposition(parseInt(bandedItemCount) || 10);
+                      return `${c.foundation} / ${c.core} / ${c.extension} / ${c.depth}`;
+                    })()} across the four bands
+                  </span>
+                </div>
+                {bandShortfalls.length > 0 && (
+                  <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm">
+                    <p className="font-medium flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-4 w-4" /> Not enough banked questions
+                    </p>
+                    <ul className="mt-1 ml-6 list-disc text-destructive">
+                      {bandShortfalls.map((s) => (
+                        <li key={s.band}>
+                          {s.band.charAt(0).toUpperCase() + s.band.slice(1)}: {s.available} available, {s.needed} needed.
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs mt-2 text-muted-foreground">
+                      Nothing was substituted from another band and nothing was AI-generated. Add banked
+                      questions with a stored answer in these bands, then generate again.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+
           {/* Time estimator - shown before generation */}
           {!isGenerating && selectedCount > 0 && (
             <GenerationTimeEstimator
@@ -4183,26 +4374,28 @@ const toggleStudent = (studentId: string) => {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>
             Cancel
           </Button>
+          {!bandedMode && (
+            <Button
+              variant="outline"
+              onClick={generatePreview}
+              disabled={isGenerating || selectedCount === 0}
+            >
+              {isGenerating && !showPreview ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Preview
+                </>
+              )}
+            </Button>
+          )}
           <Button
-            variant="outline"
-            onClick={generatePreview}
-            disabled={isGenerating || selectedCount === 0}
-          >
-            {isGenerating && !showPreview ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Eye className="h-4 w-4 mr-2" />
-                Preview
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={generateDifferentiatedWorksheets}
-            disabled={isGenerating || selectedCount === 0}
+            onClick={bandedMode ? generateBandedSingleSheet : generateDifferentiatedWorksheets}
+            disabled={isGenerating || (!bandedMode && selectedCount === 0)}
             className="bg-purple-600 hover:bg-purple-700"
           >
             {isGenerating ? (
@@ -4213,10 +4406,13 @@ const toggleStudent = (studentId: string) => {
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                Generate {selectedCount} Worksheet{selectedCount !== 1 ? 's' : ''}
+                {bandedMode
+                  ? `Generate Single Sheet (${bandedItemCount} items)`
+                  : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
               </>
             )}
           </Button>
+
         </DialogFooter>
       </DialogContent>
 
