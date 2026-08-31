@@ -743,7 +743,6 @@ export default function QuestionNew() {
           answer_group: answerGroup.trim() || null,
           assessment_mode: assessmentMode,
         })
-        })
         .select()
         .single();
 
