@@ -2326,6 +2326,121 @@ const toggleStudent = (studentId: string) => {
     }
   };
 
+  // ============================================================
+  // BANKED SINGLE SHEET (one document, four bands, glyphs only)
+  // Items come from the `questions` bank filtered on the `band` enum.
+  // No AI generation, no band names / level letters on the student sheet.
+  // ============================================================
+  const generateBandedSingleSheet = async () => {
+    if (!user) return;
+    setBandShortfalls([]);
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    setGenerationStatus('Selecting banked questions...');
+
+    try {
+      const total = parseInt(bandedItemCount) || 10;
+      const composition = defaultComposition(total);
+      const { items, shortfalls } = await selectBandedQuestions(user.id, composition);
+
+      if (shortfalls.length > 0) {
+        setBandShortfalls(shortfalls);
+        toast({
+          title: 'Not enough banked questions',
+          description: `${formatShortfallMessage(shortfalls)} Add banked questions in these bands (with a stored answer) and try again. Nothing was substituted or generated.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setGenerationProgress(40);
+      setGenerationStatus('Building worksheet...');
+
+      const pdf = new jsPDF('p', 'mm', 'letter');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = marginSize === 'small' ? 15 : marginSize === 'large' ? 25 : 19;
+      const contentWidth = pageWidth - margin * 2;
+      const glyphX = pageWidth - margin - 3;
+      const textWidth = contentWidth - 10;
+
+      let y = margin;
+
+      // Sheet header: topic title, then Name / Date / Set. No band or level info.
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(0);
+      const topicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
+      pdf.text(formatPdfText(topicsLabel.length > 60 ? `${topicsLabel.substring(0, 57)}...` : topicsLabel), pageWidth / 2, y, { align: 'center' });
+      y += 10;
+
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Name: ______________________________', margin, y);
+      pdf.text('Date: ______________', margin + contentWidth * 0.52, y);
+      pdf.text('Set: ______', pageWidth - margin - 24, y + 8);
+      y += 14;
+
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 10;
+
+      const workSpace = 26;
+
+      items.forEach((q, idx) => {
+        const promptLines = pdf.splitTextToSize(formatPdfText(q.prompt_text || ''), textWidth) as string[];
+        const blockHeight = promptLines.length * 5 + workSpace + 6;
+
+        if (y + blockHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(0);
+        pdf.text(`${idx + 1}.`, margin, y);
+        pdf.text(promptLines, margin + 8, y);
+
+        // Right-margin band glyph: 8pt, light grey, no label.
+        pdf.setFontSize(BAND_GLYPH_FONT_SIZE);
+        pdf.setTextColor(...BAND_GLYPH_RGB);
+        pdf.text(BAND_GLYPH[q.band], glyphX, y, { align: 'right' });
+        pdf.setTextColor(0);
+
+        y += promptLines.length * 5 + 4;
+
+        // Answer work area
+        pdf.setDrawColor(200);
+        pdf.setLineWidth(0.3);
+        pdf.rect(margin + 8, y, textWidth, workSpace);
+        y += workSpace + 8;
+      });
+
+      setGenerationProgress(90);
+      const fileName = `worksheet-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      trackFeature('differentiated_worksheet', 'worksheets', 'generate_banded_single_sheet');
+
+      toast({
+        title: 'Worksheet created',
+        description: `One sheet with ${items.length} banked items.`,
+      });
+      setGenerationProgress(100);
+    } catch (error) {
+      console.error('Banded sheet error:', error);
+      toast({
+        title: 'Generation failed',
+        description: error instanceof Error ? error.message : 'Could not build the banded worksheet.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+      setGenerationStatus('');
+    }
+  };
+
+
   // Generate preview data (questions only, no PDF)
   const generatePreview = async () => {
     const selectedStudents = students.filter(s => s.selected);
