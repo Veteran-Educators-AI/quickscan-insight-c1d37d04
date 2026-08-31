@@ -74,7 +74,10 @@ export interface BankedQuestion {
   prompt_image_url: string | null;
   answer_image_url: string | null;
   difficulty: number | null;
+  /** Linked topic names, used to resolve NYS standards at render time. */
+  topicNames?: string[];
 }
+
 
 export interface BandShortfall {
   band: QuestionBand;
