@@ -4525,8 +4525,12 @@ const toggleStudent = (studentId: string) => {
             </Button>
           )}
           <Button
-            onClick={bandedMode ? generateBandedSingleSheet : generateDifferentiatedWorksheets}
-            disabled={isGenerating || (!bandedMode && selectedCount === 0)}
+            onClick={bandedMode ? generateBandedVariantSet : generateDifferentiatedWorksheets}
+            disabled={
+              isGenerating ||
+              (!bandedMode && selectedCount === 0) ||
+              (bandedMode && VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT))
+            }
             className="bg-purple-600 hover:bg-purple-700"
           >
             {isGenerating ? (
@@ -4538,11 +4542,12 @@ const toggleStudent = (studentId: string) => {
               <>
                 <Download className="h-4 w-4 mr-2" />
                 {bandedMode
-                  ? `Generate Single Sheet (${bandedItemCount} items)`
+                  ? 'Generate Class Set + 4 Answer Keys'
                   : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
               </>
             )}
           </Button>
+
 
         </DialogFooter>
       </DialogContent>
