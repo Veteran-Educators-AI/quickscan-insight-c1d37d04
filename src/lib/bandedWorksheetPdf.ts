@@ -145,17 +145,14 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
   });
 
   // ---- Optional standards footer: one flat sheet-wide list of codes, never per item ----
-  if (footerCodes.length > 0) {
+  if (footerLines.length > 0) {
     pdf.setFontSize(8);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(90);
-    const line = pdf.splitTextToSize(
-      `Standards: ${footerCodes.join(', ')}`,
-      contentWidth,
-    ) as string[];
-    pdf.text(line[0], margin, footerTop + 4);
+    footerLines.forEach((line, i) => pdf.text(line, margin, footerTop + 4 + i * 4));
     pdf.setTextColor(0);
   }
+
 
 
   // ---- Detachable answer strip: plain numbers, one CHECK total ----
