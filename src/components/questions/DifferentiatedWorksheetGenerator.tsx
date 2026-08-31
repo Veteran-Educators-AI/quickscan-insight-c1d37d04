@@ -4349,15 +4349,16 @@ const toggleStudent = (studentId: string) => {
             </Card>
           )}
 
-          {/* Banked single-sheet mode */}
+          {/* Four sheet variants (A-D) */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Single banded sheet</CardTitle>
+                  <CardTitle className="text-base">Four sheet variants (A–D)</CardTitle>
                   <CardDescription>
-                    One worksheet drawn from your question bank, ordered foundation → depth. Items are
-                    marked only by a small grey glyph in the right margin.
+                    Ten items each, drawn from your question bank. All four share the same four anchor
+                    items in the same positions; the other six vary by band mix. Student copies carry
+                    no band marks — the four answer keys are the teacher's copy.
                   </CardDescription>
                 </div>
                 <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); setBandShortfalls([]); }} />
@@ -4365,40 +4366,66 @@ const toggleStudent = (studentId: string) => {
             </CardHeader>
             {bandedMode && (
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Label className="text-sm">Items</Label>
-                  <Select value={bandedItemCount} onValueChange={(v) => { setBandedItemCount(v); setBandShortfalls([]); }}>
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {['8', '10', '12', '16', '20'].map((n) => (
-                        <SelectItem key={n} value={n}>{n}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <span className="text-xs text-muted-foreground">
-                    {(() => {
-                      const c = defaultComposition(parseInt(bandedItemCount) || 10);
-                      return `${c.foundation} / ${c.core} / ${c.extension} / ${c.depth}`;
-                    })()} across the four bands
-                  </span>
+                <p className="text-xs text-muted-foreground">
+                  Anchor items: {DEFAULT_ANCHOR_BANDS.join(', ')} — at items {[1, 4, 7, 10].join(', ')} on every variant.
+                </p>
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2">Variant</th>
+                        {BANDS.map((b) => (
+                          <th key={b} className="text-left p-2 capitalize">{b}</th>
+                        ))}
+                        <th className="text-left p-2">Varying</th>
+                        <th className="text-left p-2">Whole sheet (F/C/E/D)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {VARIANTS.map((letter) => {
+                        const mix = variantMixes[letter];
+                        const total = mixTotal(mix);
+                        const totals = wholeSheetTotals(DEFAULT_ANCHOR_BANDS, mix);
+                        return (
+                          <tr key={letter} className="border-b last:border-0">
+                            <td className="p-2 font-medium">{letter}</td>
+                            {BANDS.map((b) => (
+                              <td key={b} className="p-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={6}
+                                  className="h-7 w-14 text-xs"
+                                  value={String(mix[b])}
+                                  onChange={(e) => {
+                                    const value = Math.max(0, Math.min(6, parseInt(e.target.value) || 0));
+                                    setBandShortfalls([]);
+                                    setVariantMixes((prev) => ({
+                                      ...prev,
+                                      [letter]: { ...prev[letter], [b as QuestionBand]: value },
+                                    }));
+                                  }}
+                                />
+                              </td>
+                            ))}
+                            <td className={`p-2 ${total === VARYING_ITEM_COUNT ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
+                              {total} / {VARYING_ITEM_COUNT}
+                            </td>
+                            <td className="p-2 text-muted-foreground">
+                              {BANDS.map((b) => totals[b]).join(' / ')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                {(() => {
-                  const total = parseInt(bandedItemCount) || 10;
-                  const r = deriveSetRanges(total);
-                  const ov = setCommonOverlap(r);
-                  return (
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>
-                        Sets: {[1, 2, 3, 4].map((s) => `${s}) ${r[s][0]}–${r[s][1]}`).join('   ')}
-                      </p>
-                      <p className={ov ? '' : 'text-destructive'}>
-                        {ov ? `Every set contains items ${ov[0]}–${ov[1]}.` : 'These ranges share no common item.'}
-                      </p>
-                    </div>
-                  );
-                })()}
+                {VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT) && (
+                  <p className="text-xs text-destructive">
+                    Each variant's varying items must total exactly {VARYING_ITEM_COUNT} (plus the 4 shared anchors = 10).
+                  </p>
+                )}
+
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
