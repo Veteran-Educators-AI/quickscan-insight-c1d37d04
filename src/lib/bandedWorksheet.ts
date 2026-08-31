@@ -109,20 +109,55 @@ export interface BandedSelectionResult {
 export interface BandedSelectionOptions {
   /** Topic ids to restrict selection to. */
   topicIds?: string[];
-  /** Topic names to restrict selection to; resolved to ids for this teacher. */
+  /** Topic names to restrict selection to; resolved to ids for this teacher or the shared defaults. */
   topicNames?: string[];
 }
 
-/** Resolves topic names to topic ids for a teacher. Unknown names are ignored. */
-export async function resolveTopicIds(teacherId: string, topicNames: string[]): Promise<string[]> {
-  if (!topicNames || topicNames.length === 0) return [];
+export interface TopicResolution {
+  /** Ids matched, in no particular order. */
+  ids: string[];
+  /** Names that matched a topic row. */
+  matched: string[];
+  /** Names that could not be matched to any topic. */
+  unmatched: string[];
+}
+
+/** Thrown when topics were requested but could not be fully resolved. Generation must stop. */
+export class TopicResolutionError extends Error {
+  unmatched: string[];
+  constructor(unmatched: string[]) {
+    super(
+      unmatched.length === 1
+        ? `Topic "${unmatched[0]}" could not be matched to a topic in the question bank. Nothing was generated.`
+        : `These topics could not be matched to topics in the question bank: ${unmatched.map((n) => `"${n}"`).join(', ')}. Nothing was generated.`,
+    );
+    this.name = 'TopicResolutionError';
+    this.unmatched = unmatched;
+  }
+}
+
+/**
+ * Resolves topic names to topic ids. Matches topics owned by this teacher OR the shared
+ * defaults (`teacher_id is null`, e.g. the seeded NYS Regents topic map), and reports
+ * which requested names failed to match so callers can refuse to generate.
+ */
+export async function resolveTopicIds(teacherId: string, topicNames: string[]): Promise<TopicResolution> {
+  if (!topicNames || topicNames.length === 0) return { ids: [], matched: [], unmatched: [] };
   const { data, error } = await supabase
     .from('topics')
-    .select('id, name')
-    .eq('teacher_id', teacherId)
+    .select('id, name, teacher_id')
+    .or(`teacher_id.eq.${teacherId},teacher_id.is.null`)
     .in('name', topicNames);
   if (error) throw error;
-  return ((data || []) as { id: string }[]).map((t) => t.id);
+
+  const rows = (data || []) as { id: string; name: string }[];
+  const norm = (s: string) => s.trim().toLowerCase();
+  const matchedNames = new Set(rows.map((r) => norm(r.name)));
+  return {
+    ids: Array.from(new Set(rows.map((r) => r.id))),
+    matched: topicNames.filter((n) => matchedNames.has(norm(n))),
+    unmatched: topicNames.filter((n) => !matchedNames.has(norm(n))),
+  };
 }
 
 /**
@@ -131,6 +166,9 @@ export async function resolveTopicIds(teacherId: string, topicNames: string[]): 
  * across the whole sheet (a group claimed by one band is unavailable to the others).
  * Shortfall counts are computed after topic filtering, so "needed vs available"
  * always means available *within the selected topics*.
+ *
+ * Throws `TopicResolutionError` when topic names were supplied and any of them failed
+ * to resolve — a partially or fully failed filter must never degrade to "use everything".
  */
 export async function selectBandedQuestions(
   teacherId: string,
@@ -138,11 +176,19 @@ export async function selectBandedQuestions(
   options?: string[] | BandedSelectionOptions,
 ): Promise<BandedSelectionResult> {
   const opts: BandedSelectionOptions = Array.isArray(options) ? { topicIds: options } : (options || {});
-  const resolvedIds = [
-    ...(opts.topicIds || []),
-    ...(opts.topicNames && opts.topicNames.length > 0 ? await resolveTopicIds(teacherId, opts.topicNames) : []),
-  ];
-  const topicIds = Array.from(new Set(resolvedIds));
+  const askedForNames = Boolean(opts.topicNames && opts.topicNames.length > 0);
+  const askedForIds = Boolean(opts.topicIds && opts.topicIds.length > 0);
+
+  let resolvedIds: string[] = [...(opts.topicIds || [])];
+  if (askedForNames) {
+    const resolution = await resolveTopicIds(teacherId, opts.topicNames as string[]);
+    if (resolution.unmatched.length > 0) throw new TopicResolutionError(resolution.unmatched);
+    resolvedIds = [...resolvedIds, ...resolution.ids];
+  }
+
+  // null => filtering not requested. [] can never reach the picker.
+  const topicIds = askedForNames || askedForIds ? Array.from(new Set(resolvedIds)) : null;
+  if (topicIds && topicIds.length === 0) throw new TopicResolutionError(opts.topicNames || []);
 
   const query = supabase
     .from('questions')
@@ -157,6 +203,7 @@ export async function selectBandedQuestions(
 
   return pickBandedQuestions((data || []) as any[], composition, topicIds);
 }
+
 
 /**
  * Pure selection: topic filtering, banding, answer_group dedup and shortfall counts.
