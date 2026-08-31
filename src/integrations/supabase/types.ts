@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -1735,9 +1735,11 @@ export type Database = {
       }
       questions: {
         Row: {
+          answer_group: string | null
           answer_image_url: string | null
           answer_text: string | null
           assessment_mode: string
+          band: Database["public"]["Enums"]["question_band"]
           created_at: string
           difficulty: number | null
           id: string
@@ -1749,9 +1751,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          answer_group?: string | null
           answer_image_url?: string | null
           answer_text?: string | null
           assessment_mode?: string
+          band?: Database["public"]["Enums"]["question_band"]
           created_at?: string
           difficulty?: number | null
           id?: string
@@ -1763,9 +1767,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          answer_group?: string | null
           answer_image_url?: string | null
           answer_text?: string | null
           assessment_mode?: string
+          band?: Database["public"]["Enums"]["question_band"]
           created_at?: string
           difficulty?: number | null
           id?: string
@@ -2935,6 +2941,7 @@ export type Database = {
     }
     Enums: {
       attempt_status: "pending" | "analyzed" | "reviewed"
+      question_band: "foundation" | "core" | "extension" | "depth"
       user_role: "teacher" | "student" | "admin"
     }
     CompositeTypes: {
@@ -3064,6 +3071,7 @@ export const Constants = {
   public: {
     Enums: {
       attempt_status: ["pending", "analyzed", "reviewed"],
+      question_band: ["foundation", "core", "extension", "depth"],
       user_role: ["teacher", "student", "admin"],
     },
   },

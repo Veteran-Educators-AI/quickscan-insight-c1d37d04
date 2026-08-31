@@ -554,6 +554,8 @@ export default function QuestionNew() {
   const [answerImage, setAnswerImage] = useState<File | null>(null);
   const [isExtractingAnswer, setIsExtractingAnswer] = useState(false);
   const [difficulty, setDifficulty] = useState('2');
+  const [band, setBand] = useState<'foundation' | 'core' | 'extension' | 'depth'>('core');
+  const [answerGroup, setAnswerGroup] = useState('');
   const [rubricSteps, setRubricSteps] = useState<RubricStep[]>([
     { description: '', points: 1 },
   ]);
@@ -737,6 +739,8 @@ export default function QuestionNew() {
           answer_text: assessmentMode === 'teacher' ? (answerText || null) : null,
           answer_image_url: assessmentMode === 'teacher' ? answerImageUrl : null,
           difficulty: parseInt(difficulty),
+          band,
+          answer_group: answerGroup.trim() || null,
           assessment_mode: assessmentMode,
         })
         .select()
@@ -1069,6 +1073,40 @@ export default function QuestionNew() {
                     <SelectItem value="5">Expert</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="band">Difficulty Band</Label>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  <strong>Foundation</strong> — execute a named procedure on given values<br />
+                  <strong>Core</strong> — apply a procedure in an unfamiliar context<br />
+                  <strong>Extension</strong> — apply, then justify the choice of method<br />
+                  <strong>Depth</strong> — multi-stage, or reasoning about the method itself
+                </p>
+                <Select value={band} onValueChange={(v) => setBand(v as typeof band)}>
+                  <SelectTrigger id="band">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="foundation">Foundation</SelectItem>
+                    <SelectItem value="core">Core</SelectItem>
+                    <SelectItem value="extension">Extension</SelectItem>
+                    <SelectItem value="depth">Depth</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="answer_group">Answer Group (optional)</Label>
+                <Input
+                  id="answer_group"
+                  value={answerGroup}
+                  onChange={(e) => setAnswerGroup(e.target.value)}
+                  placeholder="e.g. slope-set-A"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Questions sharing an answer group resolve to the same final answer by different routes, so one answer key grades all bands.
+                </p>
               </div>
             </CardContent>
           </Card>
