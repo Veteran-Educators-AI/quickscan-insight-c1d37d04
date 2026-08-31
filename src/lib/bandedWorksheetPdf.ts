@@ -80,9 +80,9 @@ function renderStudentSheet(pdf: jsPDF, sheet: StudentSheet, opts: SheetRenderOp
 
   const footerCodes = opts.showStandardsFooter ? sheetStandardCodes(sheet.items) : [];
   const footerHeight = footerCodes.length > 0 ? 7 : 0;
-  const stripHeight = 30 + footerHeight;
-  const stripTop = pageHeight - margin - stripHeight + footerHeight;
-  const footerTop = pageHeight - margin - stripHeight;
+  const stripTop = pageHeight - margin - 30;
+  const footerTop = stripTop - footerHeight;
+
 
 
   // Ten items with usable working space do not fit on one side of letter paper, so a
