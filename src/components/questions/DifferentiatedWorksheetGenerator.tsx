@@ -2419,7 +2419,7 @@ const toggleStudent = (studentId: string) => {
           settings: {
             mode: 'banded-single-sheet',
             composition,
-            setRanges: SET_RANGES,
+            setRanges: derivedRanges,
             setChecks,
           } as never,
         });
