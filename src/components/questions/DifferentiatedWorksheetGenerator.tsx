@@ -330,6 +330,8 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
   // Banked single-sheet mode (one document, four bands, glyphs only)
   const [bandedMode, setBandedMode] = useState(false);
   const [bandedItemCount, setBandedItemCount] = useState('10');
+  const [setAssignmentOpen, setSetAssignmentOpen] = useState(false);
+
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
   const [unresolvedTopics, setUnresolvedTopics] = useState<string[]>([]);
   
