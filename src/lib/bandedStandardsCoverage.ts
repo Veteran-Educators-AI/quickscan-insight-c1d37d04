@@ -121,3 +121,68 @@ export function sheetStandardCodes(items: BankedQuestion[]): string[] {
 }
 
 export const VARIANT_ORDER = VARIANTS;
+
+// ===================== Common-sheet (one sheet, four groups) coverage =====================
+
+export interface GroupCoverageRow {
+  code: string;
+  topicName: string;
+  /** Item count per group number 1-4. */
+  perGroup: Record<number, number>;
+  /** True when every group's item list hits this standard — every student, whatever group. */
+  allGroups: boolean;
+  /** Every band this standard is assessed at on the sheet. */
+  bands: QuestionBand[];
+}
+
+export interface GroupCoverage {
+  rows: GroupCoverageRow[];
+  distinctStandards: number;
+  /** Standards every student hits regardless of group. */
+  universal: string[];
+}
+
+/**
+ * Standards coverage for the common-sheet mode: which standards each GROUP is assessed
+ * on, and which standards every student hits regardless of group.
+ */
+export function groupCoverage(
+  items: BankedQuestion[],
+  groups: { group: number; items: number[] }[],
+): GroupCoverage {
+  const map = new Map<
+    string,
+    { topicName: string; perGroup: Record<number, number>; bands: Set<QuestionBand> }
+  >();
+
+  groups.forEach((g) => {
+    g.items.forEach((n) => {
+      const q = items[n - 1];
+      if (!q) return;
+      const band = (q.band || 'core') as QuestionBand;
+      itemStandards(q).forEach((s) => {
+        const row =
+          map.get(s.code) || { topicName: s.topicName, perGroup: {} as Record<number, number>, bands: new Set<QuestionBand>() };
+        row.perGroup[g.group] = (row.perGroup[g.group] || 0) + 1;
+        row.bands.add(band);
+        map.set(s.code, row);
+      });
+    });
+  });
+
+  const rows: GroupCoverageRow[] = Array.from(map.entries())
+    .map(([code, r]) => ({
+      code,
+      topicName: r.topicName,
+      perGroup: { ...r.perGroup },
+      allGroups: groups.every((g) => (r.perGroup[g.group] || 0) > 0),
+      bands: BANDS.filter((b) => r.bands.has(b)),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  return {
+    rows,
+    distinctStandards: rows.length,
+    universal: rows.filter((r) => r.allGroups).map((r) => r.code),
+  };
+}

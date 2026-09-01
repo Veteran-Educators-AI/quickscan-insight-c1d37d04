@@ -43,9 +43,21 @@ import {
   type VariantLetter,
 } from '@/lib/bandedWorksheet';
 import { SetAssignmentDialog } from './SetAssignmentDialog';
+import { GroupAssignmentDialog } from './GroupAssignmentDialog';
+import {
+  DEFAULT_GROUP_MIX,
+  DEFAULT_SHEET_BANDS,
+  GROUPS,
+  GROUP_ITEM_COUNT,
+  buildCommonSheet,
+  GroupSolveError,
+  type GroupNumber,
+} from '@/lib/bandedCommonSheet';
+import { buildCommonAnswerKeyPdf, buildCommonClassSetPdf } from '@/lib/bandedCommonSheetPdf';
 
 
 import { buildAnswerKeysPdf, buildClassSetPdf } from '@/lib/bandedWorksheetPdf';
+
 
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
@@ -343,6 +355,16 @@ export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosti
     JSON.parse(JSON.stringify(DEFAULT_VARIANT_MIX)),
   );
   const [setAssignmentOpen, setSetAssignmentOpen] = useState(false);
+
+  // Common-sheet mode: ONE identical ten-item sheet, four groups each completing six items
+  const [commonMode, setCommonMode] = useState(false);
+  const [groupMixes, setGroupMixes] = useState<Record<GroupNumber, BandMix>>(() =>
+    JSON.parse(JSON.stringify(DEFAULT_GROUP_MIX)),
+  );
+  const [groupAssignmentOpen, setGroupAssignmentOpen] = useState(false);
+  const [groupSolveError, setGroupSolveError] = useState<string | null>(null);
+
+
 
 
   const [bandShortfalls, setBandShortfalls] = useState<BandShortfall[]>([]);
@@ -2518,6 +2540,137 @@ const toggleStudent = (studentId: string) => {
     }
   };
 
+  // ============================================================
+  // COMMON SHEET + FOUR GROUPS. Every student answers from the same ten questions in
+  // the same order; each group is asked to complete six of them. The sheet is identical
+  // for everyone apart from the pre-printed name — no group number, no item list and no
+  // CHECK value on the page.
+  // ============================================================
+  const generateBandedCommonSheet = async () => {
+    if (!user) return;
+    setBandShortfalls([]);
+    setUnresolvedTopics([]);
+    setGroupSolveError(null);
+    setIsGenerating(true);
+    setGenerationProgress(0);
+    setGenerationStatus('Selecting banked questions...');
+
+    try {
+      const pools = await fetchBandPools(
+        user.id,
+        selectedTopics.length > 0 ? { topicNames: selectedTopics } : {},
+      );
+
+      const build = buildCommonSheet(pools, DEFAULT_SHEET_BANDS, groupMixes);
+      if (build.shortfalls.length > 0) {
+        setBandShortfalls(build.shortfalls);
+        toast({
+          title: 'Not enough banked questions',
+          description: `${formatShortfallMessage(build.shortfalls)} Add banked questions in these bands (with a stored answer) and try again. Nothing was substituted or generated.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setGenerationProgress(45);
+      setGenerationStatus('Building the class set...');
+
+      const title = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Practice';
+      const roster = students.filter((s) => s.selected).length > 0
+        ? students.filter((s) => s.selected)
+        : students;
+
+      const sheetStudents =
+        roster.length > 0
+          ? roster.map((s) => ({
+              studentName: `${s.first_name} ${s.last_name}`,
+              sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+            }))
+          : [{ studentName: '______________________________', sortKey: 'blank' }];
+
+      const classSet = buildCommonClassSetPdf(sheetStudents, build.items, {
+        title,
+        marginSize,
+        formatText: formatPdfText,
+        showStandardsFooter,
+      });
+      classSet.save(`common-sheet-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      setGenerationProgress(75);
+      setGenerationStatus('Building the answer key...');
+
+      const key = buildCommonAnswerKeyPdf(build.items, build.groups, {
+        title,
+        marginSize,
+        formatText: formatPdfText,
+      });
+      key.save(`common-answer-key-${new Date().toISOString().split('T')[0]}.pdf`);
+
+      setGenerationProgress(90);
+
+      try {
+        await supabase.from('worksheets').insert({
+          teacher_id: user.id,
+          title,
+          questions: build.items.map((q, idx) => ({
+            number: idx + 1,
+            questionId: q.id,
+            band: q.band,
+            answerGroup: q.answer_group,
+            prompt: q.prompt_text,
+            answer: q.answer_text,
+            topicNames: q.topicNames || [],
+          })) as never,
+          topics: (selectedTopics.length > 0 ? selectedTopics : []) as never,
+          settings: {
+            mode: 'banded-common',
+            bandLayout: build.layout,
+            sheetBands: DEFAULT_SHEET_BANDS,
+            groupMixes,
+            groups: build.groups,
+          } as never,
+        });
+      } catch (persistError) {
+        console.error('Could not store common-sheet worksheet metadata:', persistError);
+      }
+
+      trackFeature({
+        featureName: 'Generate Banded Common Sheet',
+        category: 'worksheets',
+        action: 'generated',
+        metadata: { groupMixes, studentCount: roster.length },
+      });
+
+      toast({
+        title: 'Common sheet + answer key ready',
+        description: `Group item lists: ${build.groups.map((g) => `G${g.group} ${g.items.join('/')}`).join(' · ')}. Print the item-list cards from Group assignment.`,
+      });
+      setGenerationProgress(100);
+    } catch (error) {
+      console.error('Common sheet error:', error);
+      if (error instanceof TopicResolutionError) {
+        setUnresolvedTopics(error.unmatched);
+        toast({ title: 'Topics could not be matched', description: error.message, variant: 'destructive' });
+        return;
+      }
+      if (error instanceof GroupSolveError) {
+        setGroupSolveError(error.message);
+        toast({ title: 'Group item lists could not be solved', description: error.message, variant: 'destructive' });
+        return;
+      }
+      toast({
+        title: 'Generation failed',
+        description: error instanceof Error ? error.message : 'Could not build the common sheet.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+      setGenerationStatus('');
+    }
+  };
+
+
+
 
 
   // Generate preview data (questions only, no PDF)
@@ -4383,7 +4536,7 @@ const toggleStudent = (studentId: string) => {
                     no band marks — the four answer keys are the teacher's copy.
                   </CardDescription>
                 </div>
-                <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); setBandShortfalls([]); }} />
+                <Switch checked={bandedMode} onCheckedChange={(v) => { setBandedMode(v); if (v) setCommonMode(false); setBandShortfalls([]); }} />
               </div>
             </CardHeader>
             {bandedMode && (
@@ -4501,6 +4654,115 @@ const toggleStudent = (studentId: string) => {
             )}
           </Card>
 
+          {/* One common sheet, four groups */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">One common sheet, four groups</CardTitle>
+                  <CardDescription>
+                    Every student gets the SAME ten questions in the same order — the sheet differs only
+                    in the printed name. Each group completes six of them, listed on a teacher-only card.
+                    Bands are interleaved across the positions, so position tells a student nothing about
+                    difficulty.
+                  </CardDescription>
+                </div>
+                <Switch
+                  checked={commonMode}
+                  onCheckedChange={(v) => {
+                    setCommonMode(v);
+                    if (v) setBandedMode(false);
+                    setBandShortfalls([]);
+                    setGroupSolveError(null);
+                  }}
+                />
+              </div>
+            </CardHeader>
+            {commonMode && (
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Sheet composition: {BANDS.map((b) => `${DEFAULT_SHEET_BANDS[b]} ${b}`).join(', ')} — ten items in total.
+                </p>
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="text-left p-2">Group</th>
+                        {BANDS.map((b) => (
+                          <th key={b} className="text-left p-2 capitalize">{b}</th>
+                        ))}
+                        <th className="text-left p-2">Items</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {GROUPS.map((g) => {
+                        const mix = groupMixes[g];
+                        const total = mixTotal(mix);
+                        return (
+                          <tr key={g} className="border-b last:border-0">
+                            <td className="p-2 font-medium">{g}</td>
+                            {BANDS.map((b) => (
+                              <td key={b} className="p-2">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={GROUP_ITEM_COUNT}
+                                  className="h-7 w-14 text-xs"
+                                  value={String(mix[b])}
+                                  onChange={(e) => {
+                                    const value = Math.max(0, Math.min(GROUP_ITEM_COUNT, parseInt(e.target.value) || 0));
+                                    setBandShortfalls([]);
+                                    setGroupSolveError(null);
+                                    setGroupMixes((prev) => ({
+                                      ...prev,
+                                      [g]: { ...prev[g], [b as QuestionBand]: value },
+                                    }));
+                                  }}
+                                />
+                              </td>
+                            ))}
+                            <td className={`p-2 ${total === GROUP_ITEM_COUNT ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
+                              {total} / {GROUP_ITEM_COUNT}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {GROUPS.some((g) => mixTotal(groupMixes[g]) !== GROUP_ITEM_COUNT) && (
+                  <p className="text-xs text-destructive">
+                    Each group must complete exactly {GROUP_ITEM_COUNT} of the ten items.
+                  </p>
+                )}
+                {groupSolveError && (
+                  <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-sm text-destructive">
+                    <p className="font-medium flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" /> Item lists could not be solved
+                    </p>
+                    <p className="text-xs mt-1">{groupSolveError}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedClassId}
+                    onClick={() => setGroupAssignmentOpen(true)}
+                  >
+                    <Users className="h-4 w-4 mr-2" /> Group assignment &amp; placement (teacher only)
+                  </Button>
+                  {!selectedClassId && (
+                    <span className="text-xs text-muted-foreground">Select a class first.</span>
+                  )}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
+
+
           {/* Time estimator - shown before generation */}
           {!isGenerating && selectedCount > 0 && (
             <GenerationTimeEstimator
@@ -4527,7 +4789,7 @@ const toggleStudent = (studentId: string) => {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isGenerating}>
             Cancel
           </Button>
-          {!bandedMode && (
+          {!bandedMode && !commonMode && (
             <Button
               variant="outline"
               onClick={generatePreview}
@@ -4547,11 +4809,18 @@ const toggleStudent = (studentId: string) => {
             </Button>
           )}
           <Button
-            onClick={bandedMode ? generateBandedVariantSet : generateDifferentiatedWorksheets}
+            onClick={
+              commonMode
+                ? generateBandedCommonSheet
+                : bandedMode
+                  ? generateBandedVariantSet
+                  : generateDifferentiatedWorksheets
+            }
             disabled={
               isGenerating ||
-              (!bandedMode && selectedCount === 0) ||
-              (bandedMode && VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT))
+              (!bandedMode && !commonMode && selectedCount === 0) ||
+              (bandedMode && VARIANTS.some((v) => mixTotal(variantMixes[v]) !== VARYING_ITEM_COUNT)) ||
+              (commonMode && GROUPS.some((g) => mixTotal(groupMixes[g]) !== GROUP_ITEM_COUNT))
             }
             className="bg-purple-600 hover:bg-purple-700"
           >
@@ -4563,12 +4832,15 @@ const toggleStudent = (studentId: string) => {
             ) : (
               <>
                 <Download className="h-4 w-4 mr-2" />
-                {bandedMode
-                  ? 'Generate Class Set + 4 Answer Keys'
-                  : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
+                {commonMode
+                  ? 'Generate Common Sheet + Answer Key'
+                  : bandedMode
+                    ? 'Generate Class Set + 4 Answer Keys'
+                    : `Generate ${selectedCount} Worksheet${selectedCount !== 1 ? 's' : ''}`}
               </>
             )}
           </Button>
+
 
 
         </DialogFooter>
@@ -4854,6 +5126,13 @@ const toggleStudent = (studentId: string) => {
         classId={selectedClassId}
         className={classes.find((c) => c.id === selectedClassId)?.name}
       />
+      <GroupAssignmentDialog
+        open={groupAssignmentOpen}
+        onOpenChange={setGroupAssignmentOpen}
+        classId={selectedClassId}
+        className={classes.find((c) => c.id === selectedClassId)?.name}
+      />
+
     </Dialog>
 
   );
