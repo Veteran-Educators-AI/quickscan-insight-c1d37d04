@@ -2782,6 +2782,7 @@ export type Database = {
           is_default: boolean | null
           name: string
           parent_id: string | null
+          secondary_standard: string | null
           sort_order: number | null
           teacher_id: string | null
         }
@@ -2792,6 +2793,7 @@ export type Database = {
           is_default?: boolean | null
           name: string
           parent_id?: string | null
+          secondary_standard?: string | null
           sort_order?: number | null
           teacher_id?: string | null
         }
@@ -2802,6 +2804,7 @@ export type Database = {
           is_default?: boolean | null
           name?: string
           parent_id?: string | null
+          secondary_standard?: string | null
           sort_order?: number | null
           teacher_id?: string | null
         }
