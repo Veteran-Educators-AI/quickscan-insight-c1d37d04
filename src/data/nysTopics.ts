@@ -3,6 +3,8 @@ export interface JMAPTopic {
   name: string;
   standard: string;
   url: string;
+  /** Optional secondary reference (e.g. CUNY BMCC MAT 150 outcome). Never rendered in place of `standard`. */
+  secondaryStandard?: string;
 }
 
 export interface TopicCategory {
@@ -1409,6 +1411,57 @@ export const ECONOMICS_TOPICS: TopicCategory[] = [
   },
 ];
 
+export const STATISTICS_TOPICS: TopicCategory[] = [
+  {
+    category: 'S-ID — INTERPRETING CATEGORICAL AND QUANTITATIVE DATA',
+    topics: [
+      { name: 'Represent data with plots on the real number line: dot plots, histograms, box plots', standard: 'S-ID.A.1', secondaryStandard: 'CUNY BMCC MAT 150: construct and interpret simple statistical charts', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Compare center and spread of two or more data sets', standard: 'S-ID.A.2', secondaryStandard: 'CUNY BMCC MAT 150: calculate key statistics and parameters', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Interpret differences in shape, center and spread; account for outliers', standard: 'S-ID.A.3', secondaryStandard: 'CUNY BMCC MAT 150: calculate key statistics and parameters', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Normal distribution and the empirical rule', standard: 'S-ID.A.4', secondaryStandard: 'CUNY BMCC MAT 150: probabilities from continuous distributions', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Two-way frequency tables: joint, marginal and conditional relative frequencies', standard: 'S-ID.B.5', secondaryStandard: 'CUNY BMCC MAT 150: construct and interpret simple statistical charts', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Scatter plots; fit a function to data', standard: 'S-ID.B.6', secondaryStandard: 'CUNY BMCC MAT 150: concepts in regression and correlation', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Interpret slope and intercept of a linear model in context', standard: 'S-ID.C.7', secondaryStandard: 'CUNY BMCC MAT 150: concepts in regression and correlation', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Compute and interpret the correlation coefficient', standard: 'S-ID.C.8', secondaryStandard: 'CUNY BMCC MAT 150: concepts in regression and correlation', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Distinguish between correlation and causation', standard: 'S-ID.C.9', secondaryStandard: 'CUNY BMCC MAT 150: concepts in regression and correlation', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+    ],
+  },
+  {
+    category: 'S-IC — MAKING INFERENCES AND JUSTIFYING CONCLUSIONS',
+    topics: [
+      { name: 'Statistics as a process for making inferences about a population', standard: 'S-IC.A.1', secondaryStandard: 'CUNY BMCC MAT 150: define the vocabulary, terminology and symbols of statistics', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Evaluate a model by simulation', standard: 'S-IC.A.2', secondaryStandard: 'CUNY BMCC MAT 150: calculate confidence intervals and construct hypothesis tests', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Surveys, experiments and observational studies; the role of randomization', standard: 'S-IC.B.3', secondaryStandard: 'CUNY BMCC MAT 150: plan an experiment or survey and gather data', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Estimate a population mean or proportion; margin of error', standard: 'S-IC.B.4', secondaryStandard: 'CUNY BMCC MAT 150: calculate confidence intervals and construct hypothesis tests', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Compare two treatments; decide whether differences are significant', standard: 'S-IC.B.5', secondaryStandard: 'CUNY BMCC MAT 150: calculate confidence intervals and construct hypothesis tests', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Evaluate reports based on data', standard: 'S-IC.B.6', secondaryStandard: 'CUNY BMCC MAT 150: draw conclusions from data', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+    ],
+  },
+  {
+    category: 'S-CP — CONDITIONAL PROBABILITY AND THE RULES OF PROBABILITY',
+    topics: [
+      { name: 'Describe events as subsets of a sample space', standard: 'S-CP.A.1', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Independence and the multiplication rule', standard: 'S-CP.A.2', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Conditional probability and independence', standard: 'S-CP.A.3', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Construct and interpret two-way tables of data', standard: 'S-CP.A.4', secondaryStandard: 'CUNY BMCC MAT 150: construct and interpret simple statistical charts', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Conditional probability and independence in everyday situations', standard: 'S-CP.A.5', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Conditional probability as a fraction of outcomes', standard: 'S-CP.B.6', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Apply the addition rule', standard: 'S-CP.B.7', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+    ],
+  },
+  {
+    category: 'S-MD — USING PROBABILITY TO MAKE DECISIONS',
+    topics: [
+      { name: 'Define a random variable; graph its probability distribution', standard: 'S-MD.A.1', secondaryStandard: 'CUNY BMCC MAT 150: probabilities from continuous distributions', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Calculate the expected value of a random variable', standard: 'S-MD.A.2', secondaryStandard: 'CUNY BMCC MAT 150: calculate key statistics and parameters', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Expected value under a theoretical probability distribution', standard: 'S-MD.A.3', secondaryStandard: 'CUNY BMCC MAT 150: probabilities from continuous distributions', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Weigh outcomes and make decisions under uncertainty', standard: 'S-MD.B.5', secondaryStandard: 'CUNY BMCC MAT 150: draw conclusions from data', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Use probability to make fair decisions', standard: 'S-MD.B.6', secondaryStandard: 'CUNY BMCC MAT 150: calculate elementary probabilities', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+      { name: 'Analyze decisions and strategies using probability concepts', standard: 'S-MD.B.7', secondaryStandard: 'CUNY BMCC MAT 150: draw conclusions from data', url: 'https://www.nysed.gov/curriculum-instruction/high-school-mathematics-standards' },
+    ],
+  },
+];
+
 export const NYS_SUBJECTS: Subject[] = [
   {
     id: 'geometry',
@@ -1433,6 +1486,12 @@ export const NYS_SUBJECTS: Subject[] = [
     name: 'Precalculus',
     shortName: 'PRE',
     categories: PRECALCULUS_TOPICS,
+  },
+  {
+    id: 'statistics',
+    name: 'High School Statistics',
+    shortName: 'STAT',
+    categories: STATISTICS_TOPICS,
   },
   {
     id: 'english',
