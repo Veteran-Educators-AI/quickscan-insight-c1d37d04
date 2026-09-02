@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS topics_default_name_key ON public.topics (name) WHERE teacher_id IS NULL;
