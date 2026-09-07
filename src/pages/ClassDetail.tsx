@@ -46,7 +46,7 @@ export default function ClassDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { getDisplayName, revealRealNames, toggleRevealNames, remainingSeconds } = useStudentNames();
+  const { getDisplayName, getDisplayEmail, getDisplayStudentNumber, revealRealNames, toggleRevealNames, remainingSeconds } = useStudentNames();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [classData, setClassData] = useState<ClassData | null>(null);
@@ -785,10 +785,10 @@ export default function ClassDetail() {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {student.student_id || '—'}
+                        {getDisplayStudentNumber(student.student_id)}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {student.email || '—'}
+                        {student.email ? getDisplayEmail(student.id, student.email) : '—'}
                       </TableCell>
                       <TableCell className="text-center">
                         {coverageLoading ? (

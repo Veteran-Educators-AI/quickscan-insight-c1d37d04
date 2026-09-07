@@ -12,6 +12,10 @@ interface StudentNameContextType {
   getDisplayName: (studentId: string, firstName: string, lastName: string) => string;
   getDisplayInitials: (studentId: string, firstName: string, lastName: string) => string;
   getDisplayEmail: (studentId: string, email: string | null) => string;
+  /** Guardian/parent addresses have no pseudonym form — hidden unless real names are revealed. */
+  getDisplayParentEmail: (email: string | null) => string;
+  /** District student numbers are identifying; hidden unless real names are revealed. */
+  getDisplayStudentNumber: (studentNumber: string | null) => string;
   remainingSeconds: number | null;
 }
 
@@ -142,6 +146,20 @@ export function StudentNameProvider({ children }: { children: ReactNode }) {
     return `${slug}@student.protected`;
   }, [revealRealNames]);
 
+  const getDisplayParentEmail = useCallback((email: string | null) => {
+    if (revealRealNames) {
+      return email || 'No email';
+    }
+    return email ? 'Guardian email hidden' : 'No email';
+  }, [revealRealNames]);
+
+  const getDisplayStudentNumber = useCallback((studentNumber: string | null) => {
+    if (revealRealNames) {
+      return studentNumber || '—';
+    }
+    return studentNumber ? 'Hidden' : '—';
+  }, [revealRealNames]);
+
   return (
     <StudentNameContext.Provider value={{ 
       revealRealNames, 
@@ -149,6 +167,8 @@ export function StudentNameProvider({ children }: { children: ReactNode }) {
       getDisplayName, 
       getDisplayInitials,
       getDisplayEmail,
+      getDisplayParentEmail,
+      getDisplayStudentNumber,
       remainingSeconds
     }}>
       {children}
