@@ -588,14 +588,15 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       id,
       imageDataUrl,
       studentId,
-      studentName: studentName || undefined,
+      studentName: maskFullName(studentId, studentName) || studentName || undefined,
+      studentRealName: studentName || undefined,
       status: 'pending',
       filename,
       worksheetTopic,
     };
     setItems(prev => [...prev, newItem]);
     return id;
-  }, [parseWorksheetTopic]);
+  }, [parseWorksheetTopic, maskFullName]);
 
   // Auto-identify a single newly added image
   const autoIdentifySingle = useCallback(async (itemId: string, studentRoster: Student[]) => {
