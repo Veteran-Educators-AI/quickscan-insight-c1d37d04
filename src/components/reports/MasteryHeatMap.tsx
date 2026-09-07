@@ -15,7 +15,10 @@ export interface TopicMastery {
 
 export interface StudentMastery {
   studentId: string;
+  /** Display name — already pseudonymised unless the teacher revealed real names. */
   studentName: string;
+  /** Raw roster name, for exports that legitimately require legal names. */
+  realName?: string;
   topics: TopicMastery[];
   overallMastery: number; // 0-100
 }
