@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import { useGoogleClassroom } from '@/hooks/useGoogleClassroom';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface GradeToSync {
   studentName: string;
@@ -210,7 +211,9 @@ export function PushToClassroomDialog({
                           <div className="flex-1">
                             <p className="font-medium text-sm">{grade.studentName}</p>
                             {grade.studentEmail && (
-                              <p className="text-xs text-muted-foreground">{grade.studentEmail}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {revealRealNames ? grade.studentEmail : 'Email hidden'}
+                              </p>
                             )}
                           </div>
                           <div className="flex items-center gap-3">
