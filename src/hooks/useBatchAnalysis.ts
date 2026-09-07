@@ -983,10 +983,18 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
   }, []);
 
   const updateItemStudent = useCallback((itemId: string, studentId: string, studentName: string) => {
-    setItems(prev => prev.map(item => 
-      item.id === itemId ? { ...item, studentId, studentName, autoAssigned: false } : item
+    setItems(prev => prev.map(item =>
+      item.id === itemId
+        ? {
+            ...item,
+            studentId,
+            studentName: maskFullName(studentId, studentName) || studentName,
+            studentRealName: studentName,
+            autoAssigned: false,
+          }
+        : item
     ));
-  }, []);
+  }, [maskFullName]);
 
   const clearAll = useCallback(() => {
     console.log('[BatchAnalysis] Clearing all data');
