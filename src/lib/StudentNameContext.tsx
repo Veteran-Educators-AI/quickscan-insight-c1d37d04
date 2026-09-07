@@ -12,6 +12,10 @@ interface StudentNameContextType {
   getDisplayName: (studentId: string, firstName: string, lastName: string) => string;
   getDisplayInitials: (studentId: string, firstName: string, lastName: string) => string;
   getDisplayEmail: (studentId: string, email: string | null) => string;
+  /** Guardian/parent addresses have no pseudonym form — hidden unless real names are revealed. */
+  getDisplayParentEmail: (email: string | null) => string;
+  /** District student numbers are identifying; hidden unless real names are revealed. */
+  getDisplayStudentNumber: (studentNumber: string | null) => string;
   remainingSeconds: number | null;
 }
 
