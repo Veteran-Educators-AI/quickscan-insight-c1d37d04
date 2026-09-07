@@ -413,7 +413,7 @@ export function DifferentiationGroupView({ items, classId, getEffectiveGrade, on
             ? `Challenge problems to extend understanding. Ready for advanced applications.`
             : `${group.remediationType}. Focus areas: ${misconceptions.slice(0, 2).join(', ') || 'General review'}`,
           student_id: item.studentId,
-          student_name: item.studentName,
+          student_name: item.studentRealName || item.studentName,
           topic_name: `${group.remediationType} - ${topicName}`,
           standard_code: item.result?.nysStandard || 'N/A',
           xp_reward: group.xpReward,
