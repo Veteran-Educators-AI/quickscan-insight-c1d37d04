@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Copy, Zap, CheckCircle2, AlertTriangle, BookOpen, Edit2, XCircle, ShieldCheck } from 'lucide-react';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface StudentGradeData {
   lastName: string;
@@ -45,6 +46,7 @@ const getLetterGrade = (avg: number): string => {
 };
 
 export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillDialogProps) {
+  const { revealRealNames } = useStudentNames();
   const [copied, setCopied] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<{ lastName: string; firstName: string; grade: string }>({ lastName: '', firstName: '', grade: '' });
@@ -393,6 +395,14 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
   }, [effectiveStudents]);
 
   const handleCopyBookmarklet = async () => {
+    // The bookmarklet carries legal names to match the DOE portal roster.
+    if (!revealRealNames) {
+      toast.info('The DOE script uses students\u2019 legal names', {
+        description: 'Switch "Show real names" on first, then copy the script.',
+        duration: 6000,
+      });
+      return;
+    }
     if (hasBlockingErrors) {
       toast.error('Fix validation errors before copying the script');
       return;
@@ -606,7 +616,7 @@ export function DOEAutoFillDialog({ open, onOpenChange, students }: DOEAutoFillD
           </Button>
           <Button
             onClick={handleCopyBookmarklet}
-            disabled={!effectiveStudents.length || hasBlockingErrors}
+            disabled={!effectiveStudents.length || hasBlockingErrors || !revealRealNames}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             {copied ? (
