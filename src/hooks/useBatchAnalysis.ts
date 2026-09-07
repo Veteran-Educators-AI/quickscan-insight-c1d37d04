@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import { handleApiError } from '@/lib/apiErrorHandler';
 import { useQRScanSettings } from '@/hooks/useQRScanSettings';
 import { useDuplicateWorkDetection } from '@/hooks/useDuplicateWorkDetection';
@@ -293,7 +294,10 @@ export interface BatchItem {
   id: string;
   imageDataUrl: string;
   studentId?: string;
+  /** Display name — pseudonymised unless the teacher revealed real names. */
   studentName?: string;
+  /** Raw roster name, for scan matching, DB writes, emails and the DOE export. */
+  studentRealName?: string;
   questionId?: string;
   status: 'pending' | 'identifying' | 'analyzing' | 'completed' | 'failed' | 'needs-reupload';
   identification?: IdentificationResult;
@@ -374,6 +378,15 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
   const { settings: qrScanSettings } = useQRScanSettings();
   const { gradeFloor: teacherGradeFloor } = useGradeFloorSettings();
   const { checkForDuplicate, quickDuplicateCheck, clearDuplicateCache } = useDuplicateWorkDetection();
+  const { getDisplayName } = useStudentNames();
+  const getDisplayNameRef = useRef(getDisplayName);
+  getDisplayNameRef.current = getDisplayName;
+  /** Pseudonymised display name for a roster row (raw name kept as studentRealName). */
+  const displayNameOf = useCallback(
+    (s: { id: string; first_name: string; last_name: string }) =>
+      getDisplayNameRef.current(s.id, s.first_name, s.last_name),
+    [],
+  );
   const hasLoadedFromStorage = useRef(false);
   const lastSavedItems = useRef<string>('');
   const lastSavedSummary = useRef<string>('');
@@ -640,7 +653,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               ...newItem,
               status: 'pending',
               studentId: matchedStudent.id,
-              studentName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
+              studentName: displayNameOf(matchedStudent),
+              studentRealName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
               questionId: qrResult.questionId,
               pageNumber: qrResult.pageNumber,
               totalPages: qrResult.totalPages,
@@ -767,7 +781,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             pageNumber: qrResult.pageNumber,
             totalPages: qrResult.totalPages,
             studentId: matchedStudent?.id || existingGroup.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : existingGroup.studentName,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : existingGroup.studentName,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : existingGroup.studentRealName,
             autoAssigned: true,
             identification: {
               qrCodeDetected: true,
@@ -787,7 +804,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           currentGroup = {
             primaryId: pageId,
             studentId: matchedStudent?.id || qrResult.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : undefined,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : undefined,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : undefined,
             pageIds: [pageId],
           };
           
@@ -797,7 +817,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             pageNumber: qrResult.pageNumber,
             totalPages: qrResult.totalPages,
             studentId: matchedStudent?.id || qrResult.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : undefined,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : undefined,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : undefined,
             autoAssigned: !!matchedStudent,
             identification: {
               qrCodeDetected: true,
@@ -1145,7 +1168,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               ...item,
               status: 'pending',
               studentId: matchedStudent.id,
-              studentName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
+              studentName: displayNameOf(matchedStudent),
+              studentRealName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
               questionId: qrResult.questionId,
               pageNumber: qrResult.pageNumber,
               totalPages: qrResult.totalPages,
