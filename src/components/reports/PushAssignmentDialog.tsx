@@ -54,11 +54,11 @@ interface StudentRecord {
 }
 
 export function PushAssignmentDialog({
-  const { getDisplayName } = useStudentNames();
   open,
   onOpenChange,
   defaultClassId,
 }: PushAssignmentDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const { pushToSisterApp } = usePushToSisterApp();
 

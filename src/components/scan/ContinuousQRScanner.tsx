@@ -34,12 +34,12 @@ interface ContinuousQRScannerProps {
 }
 
 export function ContinuousQRScanner({ 
-  const { getDisplayName } = useStudentNames();
   isOpen, 
   onClose, 
   studentRoster,
   onScanComplete 
 }: ContinuousQRScannerProps) {
+  const { getDisplayName } = useStudentNames();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);

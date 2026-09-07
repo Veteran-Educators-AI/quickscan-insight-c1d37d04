@@ -62,7 +62,6 @@ interface PrintableWorksheetProps {
 }
 
 export function PrintableWorksheet({ 
-  const { getDisplayName } = useStudentNames();
   student, 
   questions, 
   assessmentName = 'Assessment',
@@ -78,6 +77,7 @@ export function PrintableWorksheet({
   totalPages = 1,
   hideLevelFromStudent = true,
 }: PrintableWorksheetProps) {
+  const { getDisplayName } = useStudentNames();
   const levelInfo = studentLevel ? LEVEL_COLORS[studentLevel] : null;
   const levelDescription = studentLevel ? LEVEL_DESCRIPTIONS[studentLevel] : null;
   

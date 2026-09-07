@@ -59,11 +59,11 @@ interface RecalculationPreview {
 }
 
 export function GradeRecalculationDialog({
-  const { getDisplayName } = useStudentNames();
   open,
   onOpenChange,
   classId,
 }: GradeRecalculationDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { gradeFloor, gradeFloorWithEffort, calculateGrade } = useGradeFloorSettings();

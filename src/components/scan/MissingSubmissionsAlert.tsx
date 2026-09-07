@@ -26,12 +26,12 @@ interface MissingSubmissionsAlertProps {
 type AbsenceReason = 'absent' | 'late' | 'exempt' | 'will_submit_later';
 
 export function MissingSubmissionsAlert({
-  const { getDisplayName } = useStudentNames();
   classId,
   analyzedStudentIds,
   analyzedStudentNames = [],
   assignmentName = 'this assignment',
 }: MissingSubmissionsAlertProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const [rosterStudents, setRosterStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);

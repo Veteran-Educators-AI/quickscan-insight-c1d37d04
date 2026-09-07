@@ -47,12 +47,12 @@ const PRESET_REASONS = [
 ];
 
 export function BehaviorPointDeductionDialog({
-  const { getDisplayName } = useStudentNames();
   open,
   onOpenChange,
   preselectedStudentId,
   preselectedClassId,
 }: BehaviorPointDeductionDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   

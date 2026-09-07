@@ -32,7 +32,6 @@ interface LiveSessionControlsProps {
 }
 
 export function LiveSessionControls({
-  const { getDisplayName } = useStudentNames();
   presentationId,
   presentationTitle,
   topic,
@@ -41,6 +40,7 @@ export function LiveSessionControls({
   currentSlideQuestion,
   themeAccentHex = '#fbbf24',
 }: LiveSessionControlsProps) {
+  const { getDisplayName } = useStudentNames();
   const {
     session,
     participants,
