@@ -273,7 +273,7 @@ const getGradeSourceLabel = (source: GradeSource) =>
 
 export function Gradebook({ classId }: GradebookProps) {
   const { user } = useAuth();
-  const { getDisplayName } = useStudentNames();
+  const { getDisplayName, revealRealNames } = useStudentNames();
   const [searchParams, setSearchParams] = useSearchParams();
   
   // Initialize filters from URL params
@@ -587,7 +587,19 @@ export function Gradebook({ classId }: GradebookProps) {
     toast.success('Gradebook exported!');
   };
 
+  // The DOE file must carry legal names to match the portal roster, so it is only
+  // produced while the teacher has real names switched on.
+  const requireRealNamesForDOE = () => {
+    if (revealRealNames) return true;
+    toast.info('The DOE file uses students\u2019 legal names', {
+      description: 'Switch "Show real names" on first, then export.',
+      duration: 6000,
+    });
+    return false;
+  };
+
   const handleExportDOEGradebook = () => {
+    if (!requireRealNamesForDOE()) return;
     if (!filteredGrades.length) return;
 
     // Build per-student averages for DOE format
@@ -976,7 +988,7 @@ export function Gradebook({ classId }: GradebookProps) {
               </Button>
               <Button 
                 variant="outline" 
-                onClick={() => setDoeAutoFillOpen(true)} 
+                onClick={() => { if (requireRealNamesForDOE()) setDoeAutoFillOpen(true); }} 
                 disabled={!filteredGrades.length}
                 className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/20"
               >

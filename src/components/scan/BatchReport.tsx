@@ -164,7 +164,7 @@ export function BatchReport({ items, summary, classId, questionId, className, as
           title: `Remediation: ${topicName}`,
           description: `Based on scan analysis. Misconceptions: ${misconceptions.slice(0, 2).join(', ') || 'General review needed'}`,
           student_id: item.studentId,
-          student_name: item.studentName,
+          student_name: item.studentRealName || item.studentName,
           topic_name: topicName,
           standard_code: nysStandard,
           xp_reward: xpReward,
@@ -223,7 +223,7 @@ export function BatchReport({ items, summary, classId, questionId, className, as
           title: `Basic Skills Remediation: ${topicName}`,
           description: `Foundational skills practice to build confidence. Focus on prerequisite concepts and step-by-step problem solving.`,
           student_id: item.studentId,
-          student_name: item.studentName,
+          student_name: item.studentRealName || item.studentName,
           topic_name: 'Basic Skills - ' + topicName,
           standard_code: item.result?.nysStandard || 'Foundation',
           xp_reward: 25, // Higher XP for encouragement
@@ -633,7 +633,7 @@ export function BatchReport({ items, summary, classId, questionId, className, as
         <MissingSubmissionsAlert
           classId={classId}
           analyzedStudentIds={completedItems.map(item => item.studentId).filter(Boolean) as string[]}
-          analyzedStudentNames={completedItems.map(item => item.studentName).filter(Boolean) as string[]}
+          analyzedStudentNames={completedItems.map(item => item.studentRealName || item.studentName).filter(Boolean) as string[]}
           assignmentName={completedItems[0]?.result?.problemIdentified || 'this assignment'}
         />
       )}
@@ -942,7 +942,7 @@ export function BatchReport({ items, summary, classId, questionId, className, as
               const scaledGrade = Math.round((effectiveGrade / 100) * maxPoints);
               
               return {
-                studentName: item.studentName || 'Unknown',
+                studentName: item.studentRealName || item.studentName || 'Unknown',
                 studentEmail: undefined,
                 courseId: context.courseId,
                 courseWorkId: context.courseWorkId,

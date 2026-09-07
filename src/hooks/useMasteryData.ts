@@ -1,7 +1,15 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import type { StudentMastery, TopicMastery } from '@/components/reports/MasteryHeatMap';
+
+/** Query-shape student record: raw roster name, never rendered directly. */
+type RawStudentMastery = Omit<StudentMastery, 'studentName' | 'realName'> & {
+  firstName: string;
+  lastName: string;
+};
 
 interface UseMasteryDataOptions {
   classId?: string;
@@ -17,6 +25,7 @@ interface MasteryDataResult {
 export function useMasteryData(options: UseMasteryDataOptions = {}): MasteryDataResult {
   const { user } = useAuth();
   const { classId } = options;
+  const { getDisplayName } = useStudentNames();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['mastery-data', user?.id, classId],
@@ -71,7 +80,8 @@ export function useMasteryData(options: UseMasteryDataOptions = {}): MasteryData
         return {
           students: students.map(s => ({
             studentId: s.id,
-            studentName: `${s.first_name} ${s.last_name}`,
+            firstName: s.first_name,
+            lastName: s.last_name,
             topics: [],
             overallMastery: 0,
           })),
@@ -173,7 +183,7 @@ export function useMasteryData(options: UseMasteryDataOptions = {}): MasteryData
       });
 
       // Convert to StudentMastery format
-      const studentMasteryData: StudentMastery[] = students.map(student => {
+      const studentMasteryData: RawStudentMastery[] = students.map(student => {
         const masteryByTopic = studentMasteryMap[student.id] || {};
         
         const topicsMastery: TopicMastery[] = (topics || []).map(topic => {
@@ -195,7 +205,8 @@ export function useMasteryData(options: UseMasteryDataOptions = {}): MasteryData
 
         return {
           studentId: student.id,
-          studentName: `${student.first_name} ${student.last_name}`,
+          firstName: student.first_name,
+          lastName: student.last_name,
           topics: topicsMastery,
           overallMastery,
         };
@@ -209,8 +220,22 @@ export function useMasteryData(options: UseMasteryDataOptions = {}): MasteryData
     enabled: !!user,
   });
 
+  // Display names go through the FERPA pseudonym layer; the raw roster name is kept
+  // separately as `realName` for the paths that legitimately need it.
+  const students = useMemo<StudentMastery[]>(
+    () =>
+      ((data?.students || []) as RawStudentMastery[]).map(s => ({
+        studentId: s.studentId,
+        studentName: getDisplayName(s.studentId, s.firstName, s.lastName),
+        realName: `${s.firstName} ${s.lastName}`.trim(),
+        topics: s.topics,
+        overallMastery: s.overallMastery,
+      })),
+    [data?.students, getDisplayName],
+  );
+
   return {
-    students: data?.students || [],
+    students,
     topics: data?.topics || [],
     isLoading,
     error: error as Error | null,

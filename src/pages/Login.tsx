@@ -329,6 +329,9 @@ export default function Login() {
               Beta
             </span>
           </div>
+          <p className="text-xl md:text-2xl font-medium text-muted-foreground mt-3">
+            Differentiation, built into every sheet.
+          </p>
           <p className="text-muted-foreground mt-2">
             {branding.tagline}
           </p>

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import { handleApiError } from '@/lib/apiErrorHandler';
 import { useQRScanSettings } from '@/hooks/useQRScanSettings';
 import { useDuplicateWorkDetection } from '@/hooks/useDuplicateWorkDetection';
@@ -293,7 +294,10 @@ export interface BatchItem {
   id: string;
   imageDataUrl: string;
   studentId?: string;
+  /** Display name — pseudonymised unless the teacher revealed real names. */
   studentName?: string;
+  /** Raw roster name, for scan matching, DB writes, emails and the DOE export. */
+  studentRealName?: string;
   questionId?: string;
   status: 'pending' | 'identifying' | 'analyzing' | 'completed' | 'failed' | 'needs-reupload';
   identification?: IdentificationResult;
@@ -374,6 +378,21 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
   const { settings: qrScanSettings } = useQRScanSettings();
   const { gradeFloor: teacherGradeFloor } = useGradeFloorSettings();
   const { checkForDuplicate, quickDuplicateCheck, clearDuplicateCache } = useDuplicateWorkDetection();
+  const { getDisplayName } = useStudentNames();
+  const getDisplayNameRef = useRef(getDisplayName);
+  getDisplayNameRef.current = getDisplayName;
+  /** Pseudonymised display name for a roster row (raw name kept as studentRealName). */
+  const displayNameOf = useCallback(
+    (s: { id: string; first_name: string; last_name: string }) =>
+      getDisplayNameRef.current(s.id, s.first_name, s.last_name),
+    [],
+  );
+  /** Pseudonymise an already-concatenated roster name when the student id is known. */
+  const maskFullName = useCallback((studentId: string | null | undefined, fullName: string | null | undefined) => {
+    if (!studentId || !fullName) return fullName || undefined;
+    const [first, ...rest] = fullName.trim().split(/\s+/);
+    return getDisplayNameRef.current(studentId, first || '', rest.join(' '));
+  }, []);
   const hasLoadedFromStorage = useRef(false);
   const lastSavedItems = useRef<string>('');
   const lastSavedSummary = useRef<string>('');
@@ -569,14 +588,15 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       id,
       imageDataUrl,
       studentId,
-      studentName: studentName || undefined,
+      studentName: maskFullName(studentId, studentName) || studentName || undefined,
+      studentRealName: studentName || undefined,
       status: 'pending',
       filename,
       worksheetTopic,
     };
     setItems(prev => [...prev, newItem]);
     return id;
-  }, [parseWorksheetTopic]);
+  }, [parseWorksheetTopic, maskFullName]);
 
   // Auto-identify a single newly added image
   const autoIdentifySingle = useCallback(async (itemId: string, studentRoster: Student[]) => {
@@ -640,7 +660,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               ...newItem,
               status: 'pending',
               studentId: matchedStudent.id,
-              studentName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
+              studentName: displayNameOf(matchedStudent),
+              studentRealName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
               questionId: qrResult.questionId,
               pageNumber: qrResult.pageNumber,
               totalPages: qrResult.totalPages,
@@ -709,6 +730,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       primaryId: string;
       studentId?: string;
       studentName?: string;
+      studentRealName?: string;
       pageIds: string[];
     }
     
@@ -767,7 +789,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             pageNumber: qrResult.pageNumber,
             totalPages: qrResult.totalPages,
             studentId: matchedStudent?.id || existingGroup.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : existingGroup.studentName,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : existingGroup.studentName,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : existingGroup.studentRealName,
             autoAssigned: true,
             identification: {
               qrCodeDetected: true,
@@ -787,7 +812,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
           currentGroup = {
             primaryId: pageId,
             studentId: matchedStudent?.id || qrResult.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : undefined,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : undefined,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : undefined,
             pageIds: [pageId],
           };
           
@@ -797,7 +825,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             pageNumber: qrResult.pageNumber,
             totalPages: qrResult.totalPages,
             studentId: matchedStudent?.id || qrResult.studentId,
-            studentName: matchedStudent ? `${matchedStudent.first_name} ${matchedStudent.last_name}` : undefined,
+            studentName: matchedStudent ? displayNameOf(matchedStudent) : undefined,
+            studentRealName: matchedStudent
+              ? `${matchedStudent.first_name} ${matchedStudent.last_name}`
+              : undefined,
             autoAssigned: !!matchedStudent,
             identification: {
               qrCodeDetected: true,
@@ -953,10 +984,18 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
   }, []);
 
   const updateItemStudent = useCallback((itemId: string, studentId: string, studentName: string) => {
-    setItems(prev => prev.map(item => 
-      item.id === itemId ? { ...item, studentId, studentName, autoAssigned: false } : item
+    setItems(prev => prev.map(item =>
+      item.id === itemId
+        ? {
+            ...item,
+            studentId,
+            studentName: maskFullName(studentId, studentName) || studentName,
+            studentRealName: studentName,
+            autoAssigned: false,
+          }
+        : item
     ));
-  }, []);
+  }, [maskFullName]);
 
   const clearAll = useCallback(() => {
     console.log('[BatchAnalysis] Clearing all data');
@@ -1145,7 +1184,8 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               ...item,
               status: 'pending',
               studentId: matchedStudent.id,
-              studentName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
+              studentName: displayNameOf(matchedStudent),
+              studentRealName: `${matchedStudent.first_name} ${matchedStudent.last_name}`,
               questionId: qrResult.questionId,
               pageNumber: qrResult.pageNumber,
               totalPages: qrResult.totalPages,
@@ -1234,7 +1274,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
         status: 'pending',
         identification,
         studentId: identification.matchedStudentId || item.studentId,
-        studentName: identification.matchedStudentName || item.studentName,
+        studentName:
+          maskFullName(identification.matchedStudentId, identification.matchedStudentName) ||
+          item.studentName,
+        studentRealName: identification.matchedStudentName || item.studentRealName,
         questionId: identification.matchedQuestionId || item.questionId,
         autoAssigned: !!identification.matchedStudentId,
       };
@@ -1325,7 +1368,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               status: 'pending' as const,
               identification,
               studentId: identification.matchedStudentId || item.studentId,
-              studentName: identification.matchedStudentName || item.studentName,
+              studentName:
+                maskFullName(identification.matchedStudentId, identification.matchedStudentName) ||
+                item.studentName,
+              studentRealName: identification.matchedStudentName || item.studentRealName,
               questionId: identification.matchedQuestionId || item.questionId,
               autoAssigned: !!identification.matchedStudentId,
             };
@@ -1465,7 +1511,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       const { data, error } = await invokeWithRetry('analyze-student-work', {
         imageBase64: item.imageDataUrl,
         rubricSteps,
-        studentName: item.studentName,
+        studentName: item.studentRealName || item.studentName,
         teacherId: user?.id,
         assessmentMode: assessmentMode || 'teacher',
         promptText,
@@ -2073,7 +2119,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       // STEP 2: Grade using extracted text (no image = much faster) or fall back to image
       const requestBody: any = {
         rubricSteps,
-        studentName: item.studentName,
+        studentName: item.studentRealName || item.studentName,
         teacherId: user?.id,
         assessmentMode: assessmentMode || 'teacher',
         promptText,
@@ -2501,7 +2547,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             answerGuideBase64: answerGuideImages[0],
             answerGuideImages: answerGuideImages.length > 1 ? answerGuideImages : undefined,
             rubricSteps,
-            studentName: item.studentName,
+            studentName: item.studentRealName || item.studentName,
             teacherId: user?.id,
             assessmentMode: 'teacher-guided',
           };

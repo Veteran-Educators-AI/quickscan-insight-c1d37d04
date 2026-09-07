@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import { useStudentWeaknesses, type StudentPerformanceProfile, type AdvancementLevel } from '@/hooks/useStudentWeaknesses';
 import { fixEncodingCorruption, renderMathText, sanitizeForPDF } from '@/lib/mathRenderer';
 import { generateQRCodePngDataUrl, generateStudentQuestionQRData, QR_PRINT_RENDER_SIZE } from '@/lib/qrCodeUtils';
@@ -91,6 +92,7 @@ const generateQRCodeDataUrl = async (
 };
 
 export function AdaptiveWorksheetGenerator({ open, onOpenChange }: AdaptiveWorksheetGeneratorProps) {
+  const { getDisplayName } = useStudentNames();
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -187,7 +189,7 @@ export function AdaptiveWorksheetGenerator({ open, onOpenChange }: AdaptiveWorks
 
       for (let i = 0; i < selectedProfiles.length; i++) {
         const profile = selectedProfiles[i];
-        setGenerationStatus(`Generating personalized worksheet for ${profile.firstName} ${profile.lastName}...`);
+        setGenerationStatus(`Generating personalized worksheet for ${getDisplayName(profile.studentId, profile.firstName, profile.lastName)}...`);
         setGenerationProgress(((i + 0.5) / totalStudents) * 100);
 
         // Determine topics to focus on based on weaknesses
@@ -340,7 +342,7 @@ export function AdaptiveWorksheetGenerator({ open, onOpenChange }: AdaptiveWorks
 
         // Student info with QR
         pdf.setFontSize(11);
-        pdf.text(`Name: ${worksheet.firstName} ${worksheet.lastName}`, margin, yPosition);
+        pdf.text(`Name: ${getDisplayName(worksheet.studentId, worksheet.firstName, worksheet.lastName)}`, margin, yPosition);
         pdf.text('Date: _______________', pageWidth - margin - 50, yPosition);
 
         if (includeQR) {
@@ -558,7 +560,7 @@ export function AdaptiveWorksheetGenerator({ open, onOpenChange }: AdaptiveWorks
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium truncate">
-                                  {profile.firstName} {profile.lastName}
+                                  {getDisplayName(profile.studentId, profile.firstName, profile.lastName)}
                                 </span>
                                 <Badge className={`text-xs ${getLevelColor(profile.overallLevel)}`}>
                                   {profile.overallLevel}
@@ -649,7 +651,7 @@ export function AdaptiveWorksheetGenerator({ open, onOpenChange }: AdaptiveWorks
                     {generatedWorksheets.map(ws => (
                       <div key={ws.studentId} className="flex items-center gap-2 p-2 bg-white rounded border">
                         <Badge className={getLevelColor(ws.level)}>{ws.level}</Badge>
-                        <span className="text-sm font-medium">{ws.firstName} {ws.lastName}</span>
+                        <span className="text-sm font-medium">{getDisplayName(ws.studentId, ws.firstName, ws.lastName)}</span>
                         <span className="text-xs text-muted-foreground ml-auto">
                           {ws.questions.length} Qs
                         </span>
