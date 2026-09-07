@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useLiveSession, LiveSession, SessionParticipant, SessionAnswer } from '@/hooks/useLiveSession';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface LiveSessionControlsProps {
   presentationId: string;
@@ -31,6 +32,7 @@ interface LiveSessionControlsProps {
 }
 
 export function LiveSessionControls({
+  const { getDisplayName } = useStudentNames();
   presentationId,
   presentationTitle,
   topic,
@@ -337,7 +339,9 @@ export function LiveSessionControls({
                           p.status === 'active' ? 'bg-emerald-500' : 'bg-gray-500'
                         )} />
                         <span className="text-white text-sm">
-                          {p.student?.first_name} {p.student?.last_name?.charAt(0)}.
+                          {p.student
+                            ? getDisplayName(p.student_id, p.student.first_name, p.student.last_name)
+                            : 'Student'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-xs">

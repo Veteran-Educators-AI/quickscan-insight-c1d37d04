@@ -9,6 +9,7 @@ import { parseAnyStudentQRCode } from '@/components/print/StudentOnlyQRCode';
 import { parseStudentQRCode } from '@/components/print/StudentQRCode';
 import { playNotificationSound } from '@/lib/notificationSound';
 import jsQR from 'jsqr';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface Student {
   id: string;
@@ -33,6 +34,7 @@ interface ContinuousQRScannerProps {
 }
 
 export function ContinuousQRScanner({ 
+  const { getDisplayName } = useStudentNames();
   isOpen, 
   onClose, 
   studentRoster,
@@ -523,7 +525,7 @@ export function ContinuousQRScanner({
                     >
                       <div className="flex items-center gap-2">
                         <UserX className="h-4 w-4 text-red-500" />
-                        <span className="font-medium">{student.first_name} {student.last_name}</span>
+                        <span className="font-medium">{getDisplayName(student.id, student.first_name, student.last_name)}</span>
                       </div>
                       <Button
                         variant="outline"

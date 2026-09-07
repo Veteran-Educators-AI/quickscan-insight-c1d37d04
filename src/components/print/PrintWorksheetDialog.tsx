@@ -16,6 +16,7 @@ import { AIScanPreviewDialog } from './AIScanPreviewDialog';
 import { StudentScanningGuide } from './StudentScanningGuide';
 import { ClassroomScanningPoster } from './ClassroomScanningPoster';
 import { useAuth } from '@/lib/auth';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface Student {
   id: string;
@@ -47,6 +48,7 @@ interface PrintWorksheetDialogProps {
 }
 
 export function PrintWorksheetDialog({ classId, students, trigger, topicName }: PrintWorksheetDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { toast } = useToast();
   const { user } = useAuth();
   const printRef = useRef<HTMLDivElement>(null);
@@ -324,7 +326,7 @@ export function PrintWorksheetDialog({ classId, students, trigger, topicName }: 
                           onCheckedChange={() => toggleStudent(student.id)}
                         />
                         <Label htmlFor={`student-${student.id}`} className="text-sm cursor-pointer flex-1 flex items-center gap-2">
-                          {student.last_name}, {student.first_name}
+                          {getDisplayName(student.id, student.first_name, student.last_name)}
                           {levelInfo && (
                             <Badge 
                               variant="secondary" 
@@ -491,7 +493,15 @@ export function PrintWorksheetDialog({ classId, students, trigger, topicName }: 
         open={showAIScanPreview}
         onOpenChange={setShowAIScanPreview}
         questions={getSelectedQuestions().length > 0 ? getSelectedQuestions() : questions.slice(0, 3)}
-        studentName={getSelectedStudents()[0]?.first_name || 'Sample Student'}
+        studentName={
+          getSelectedStudents()[0]
+            ? getDisplayName(
+                getSelectedStudents()[0].id,
+                getSelectedStudents()[0].first_name,
+                getSelectedStudents()[0].last_name,
+              )
+            : 'Sample Student'
+        }
       />
 
       {/* Print Styles */}

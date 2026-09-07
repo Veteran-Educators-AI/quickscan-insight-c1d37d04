@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface ClassWithStudents {
   id: string;
@@ -35,6 +36,7 @@ interface DiagnosticGap {
 }
 
 export function DiagnosticGapsSummary() {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -209,7 +211,7 @@ export function DiagnosticGapsSummary() {
     const rows = classesWithGaps.flatMap(cls =>
       cls.students.map(student => [
         cls.name,
-        `${student.last_name}, ${student.first_name}`,
+        getDisplayName(student.id, student.first_name, student.last_name),
         ...topicsToCheck.map(topic => 
           student.diagnosedTopics.includes(topic) ? 'Yes' : 'No'
         ),
@@ -482,7 +484,7 @@ export function DiagnosticGapsSummary() {
                                 ) : (
                                   <CheckCircle className="h-4 w-4 text-green-500" />
                                 )}
-                                <span>{student.last_name}, {student.first_name}</span>
+                                <span>{getDisplayName(student.id, student.first_name, student.last_name)}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 {student.missingTopics.length > 0 ? (

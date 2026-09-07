@@ -61,6 +61,7 @@ import { buildAnswerKeysPdf, buildClassSetPdf } from '@/lib/bandedWorksheetPdf';
 
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, PageOrientation, BorderStyle, AlignmentType, convertInchesToTwip, ImageRun, Table, TableRow, TableCell, WidthType, VerticalAlign, Header, Footer } from 'docx';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface WorksheetPreset {
   id: string;
@@ -328,6 +329,8 @@ interface ClassOption {
 }
 
 export function DifferentiatedWorksheetGenerator({ open, onOpenChange, diagnosticMode = false, initialTopics = [] }: DifferentiatedWorksheetGeneratorProps) {
+  const { getDisplayName, revealRealNames } = useStudentNames();
+  const nameOf = (s: { id: string; first_name: string; last_name: string }) => getDisplayName(s.id, s.first_name, s.last_name);
   const { toast } = useToast();
   const { user } = useAuth();
   const { trackFeature } = useFeatureTracking();
@@ -835,7 +838,7 @@ const toggleStudent = (studentId: string) => {
         const cacheKey = `${assignedForm}-${student.recommendedLevel}`;
         const questions = previewData.questions[cacheKey];
 
-        setGenerationStatus(`Processing ${student.first_name} ${student.last_name}...`);
+        setGenerationStatus(`Processing ${nameOf(student)}...`);
 
         const children: any[] = [];
         const topicsLabel = selectedTopics.length > 0 ? selectedTopics.join(', ') : 'Math Practice';
@@ -903,7 +906,7 @@ const toggleStudent = (studentId: string) => {
                           new Paragraph({
                             children: [
                               new TextRun({
-                                text: `${student.first_name} ${student.last_name} - Level ${student.recommendedLevel}`,
+                                text: `${nameOf(student)} - Level ${student.recommendedLevel}`,
                                 bold: true,
                                 size: 20,
                               }),
@@ -990,7 +993,7 @@ const toggleStudent = (studentId: string) => {
           new Paragraph({
             children: [
               new TextRun({ text: 'Name: ', bold: true, size: 22 }),
-              new TextRun({ text: `${student.first_name} ${student.last_name}`, size: 22 }),
+              new TextRun({ text: nameOf(student), size: 22 }),
               new TextRun({ text: '          Date: _______________', size: 22 }),
               ...(numForms > 1 ? [new TextRun({ text: `          Form ${assignedForm}`, bold: true, size: 22 })] : []),
             ],
@@ -1676,7 +1679,7 @@ const toggleStudent = (studentId: string) => {
           const assignedForm = formsToGenerate[formIndex];
           const cacheKey = `${assignedForm}-${level}`;
           
-          setGenerationStatus(`Creating worksheet for ${student.first_name} ${student.last_name} (Level ${level}, Form ${assignedForm})...`);
+          setGenerationStatus(`Creating worksheet for ${nameOf(student)} (Level ${level}, Form ${assignedForm})...`);
 
           // Use pre-generated questions from cache
           const cachedQuestions = formQuestionCache[cacheKey];
@@ -1712,7 +1715,7 @@ const toggleStudent = (studentId: string) => {
 
           // Student info with form indicator and inline QR code next to name
           pdf.setFontSize(11);
-          pdf.text(`Name: ${student.first_name} ${student.last_name}`, margin, yPosition);
+          pdf.text(`Name: ${nameOf(student)}`, margin, yPosition);
           
           // Add small QR code next to student name
           if (includeStudentQR) {
@@ -1720,7 +1723,7 @@ const toggleStudent = (studentId: string) => {
               const headerWorksheetId = `diag_${selectedTopics[0]?.substring(0, 10) || 'math'}_${level}_${assignedForm}_${Date.now()}`;
               const headerQrDataUrl = await generateQRCodeDataUrl(student.id, headerWorksheetId, 80);
               const headerQrSize = 12; // smaller QR for header
-              const nameWidth = pdf.getTextWidth(`Name: ${student.first_name} ${student.last_name}`);
+              const nameWidth = pdf.getTextWidth(`Name: ${nameOf(student)}`);
               pdf.addImage(headerQrDataUrl, 'PNG', margin + nameWidth + 3, yPosition - 8, headerQrSize, headerQrSize);
             } catch (qrError) {
               console.error('Error generating header QR code:', qrError);
@@ -1773,7 +1776,7 @@ const toggleStudent = (studentId: string) => {
             pdf.setFontSize(9);
             pdf.setFont('helvetica', 'bold');
             pdf.setTextColor(80);
-            pdf.text(`${student.first_name} ${student.last_name}`, margin, 10);
+            pdf.text(nameOf(student), margin, 10);
             pdf.setFont('helvetica', 'normal');
             pdf.text(`Level ${level}${numForms > 1 ? ` | Form ${assignedForm}` : ''} | Page ${currentPage}`, margin + 60, 10);
             
@@ -2444,11 +2447,11 @@ const toggleStudent = (studentId: string) => {
           const letter = assignedVariant[s.id] || 'B';
           const v = byLetter(letter);
           return {
-            studentName: `${s.first_name} ${s.last_name}`,
+            studentName: nameOf(s),
             variant: letter,
             items: v.items,
             check: v.check,
-            sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+            sortKey: revealRealNames ? `${s.last_name} ${s.first_name}`.toLowerCase() : nameOf(s).toLowerCase(),
           };
         });
         const classSet = buildClassSetPdf(sheets, { title, marginSize, formatText: formatPdfText, showStandardsFooter });
@@ -2583,8 +2586,8 @@ const toggleStudent = (studentId: string) => {
       const sheetStudents =
         roster.length > 0
           ? roster.map((s) => ({
-              studentName: `${s.first_name} ${s.last_name}`,
-              sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+              studentName: nameOf(s),
+              sortKey: revealRealNames ? `${s.last_name} ${s.first_name}`.toLowerCase() : nameOf(s).toLowerCase(),
             }))
           : [{ studentName: '______________________________', sortKey: 'blank' }];
 
@@ -3311,7 +3314,7 @@ const toggleStudent = (studentId: string) => {
           <div className="flex items-center gap-3">
             <div>
               <span className="text-sm font-medium">Name: </span>
-              <span className="text-sm">{student.first_name} {student.last_name}</span>
+              <span className="text-sm">{nameOf(student)}</span>
             </div>
             {/* QR Code next to name (visible in preview when enabled) */}
             {includeStudentQR && (
@@ -4417,7 +4420,7 @@ const toggleStudent = (studentId: string) => {
                             />
                             <div>
                               <p className="font-medium text-sm flex items-center gap-1.5">
-                                {student.last_name}, {student.first_name}
+                                {nameOf(student)}
                                 {isAdaptiveAdjusted && (
                                   <TooltipProvider>
                                     <Tooltip>
