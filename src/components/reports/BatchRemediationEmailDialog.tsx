@@ -19,6 +19,7 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface StrugglingStudent {
   id: string;
@@ -52,6 +53,7 @@ export function BatchRemediationEmailDialog({
   students,
 }: BatchRemediationEmailDialogProps) {
   const { toast } = useToast();
+  const { getDisplayName } = useStudentNames();
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set(students.map(s => s.id)));
   const [recipientType, setRecipientType] = useState<'student' | 'parent' | 'both'>('both');
   const [includeHints, setIncludeHints] = useState(true);
@@ -99,7 +101,9 @@ export function BatchRemediationEmailDialog({
 
     for (let i = 0; i < selectedList.length; i++) {
       const student = selectedList[i];
+      // Raw name goes in the email addressed to the student; teacher-facing rows use the pseudonym.
       const studentName = `${student.firstName} ${student.lastName}`;
+      const displayName = getDisplayName(student.id, student.firstName, student.lastName);
       
       try {
         // First generate remediation questions based on weak topics
@@ -147,7 +151,7 @@ export function BatchRemediationEmailDialog({
           if (emailData.missingEmails) {
             results.push({
               studentId: student.id,
-              studentName,
+              studentName: displayName,
               status: 'no-email',
               message: `Missing: ${emailData.missingEmails.join(', ')}`,
             });
@@ -157,16 +161,16 @@ export function BatchRemediationEmailDialog({
         } else {
           results.push({
             studentId: student.id,
-            studentName,
+            studentName: displayName,
             status: 'success',
             message: `Sent to ${emailData?.emailsSent?.join(', ') || 'recipient'}`,
           });
         }
       } catch (error) {
-        console.error(`Error sending to ${studentName}:`, error);
+        console.error(`Error sending to ${displayName}:`, error);
         results.push({
           studentId: student.id,
-          studentName,
+          studentName: displayName,
           status: 'failed',
           message: error instanceof Error ? error.message : 'Unknown error',
         });
@@ -343,7 +347,7 @@ export function BatchRemediationEmailDialog({
                       >
                         <div>
                           <span className="font-medium text-sm">
-                            {student.lastName}, {student.firstName}
+                            {getDisplayName(student.id, student.firstName, student.lastName)}
                           </span>
                           <span className="text-xs text-muted-foreground ml-2">
                             {student.className}
