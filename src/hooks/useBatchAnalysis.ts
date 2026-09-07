@@ -1511,7 +1511,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       const { data, error } = await invokeWithRetry('analyze-student-work', {
         imageBase64: item.imageDataUrl,
         rubricSteps,
-        studentName: item.studentName,
+        studentName: item.studentRealName || item.studentName,
         teacherId: user?.id,
         assessmentMode: assessmentMode || 'teacher',
         promptText,
@@ -2119,7 +2119,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       // STEP 2: Grade using extracted text (no image = much faster) or fall back to image
       const requestBody: any = {
         rubricSteps,
-        studentName: item.studentName,
+        studentName: item.studentRealName || item.studentName,
         teacherId: user?.id,
         assessmentMode: assessmentMode || 'teacher',
         promptText,
@@ -2547,7 +2547,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
             answerGuideBase64: answerGuideImages[0],
             answerGuideImages: answerGuideImages.length > 1 ? answerGuideImages : undefined,
             rubricSteps,
-            studentName: item.studentName,
+            studentName: item.studentRealName || item.studentName,
             teacherId: user?.id,
             assessmentMode: 'teacher-guided',
           };
