@@ -172,7 +172,7 @@ export function GradeRecalculationDialog({
       newPreviews.push({
         id: record.id,
         studentName: record.student
-          ? getDisplayName(record.student.id, record.student.first_name, record.student.last_name)
+          ? getDisplayName(record.student_id, record.student.first_name, record.student.last_name)
           : 'Unknown Student',
         topicName: record.topic_name,
         oldGrade: record.grade,
