@@ -27,6 +27,7 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { PrintRemediationQuestionsDialog } from '@/components/print/PrintRemediationQuestionsDialog';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface ClassMisconceptionSummaryProps {
   classId?: string;
@@ -427,6 +428,7 @@ const extractMisconceptionFromJustification = (
 };
 
 export function ClassMisconceptionSummary({ classId }: ClassMisconceptionSummaryProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isGeneratingWorksheet, setIsGeneratingWorksheet] = useState(false);
@@ -475,7 +477,7 @@ export function ClassMisconceptionSummary({ classId }: ClassMisconceptionSummary
       if (entry.grade_justification && entry.student) {
         const misconception = extractMisconceptionFromJustification(
           entry.grade_justification,
-          `${entry.student.first_name} ${entry.student.last_name}`,
+          getDisplayName(entry.student.id, entry.student.first_name, entry.student.last_name),
           entry.student.id,
           entry.topic_name,
           entry.grade,

@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { RefreshCw, CheckCircle2, AlertTriangle, Calculator, Settings2 } from 'lucide-react';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface GradeRecalculationDialogProps {
   open: boolean;
@@ -62,6 +63,7 @@ export function GradeRecalculationDialog({
   onOpenChange,
   classId,
 }: GradeRecalculationDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { gradeFloor, gradeFloorWithEffort, calculateGrade } = useGradeFloorSettings();
@@ -169,8 +171,8 @@ export function GradeRecalculationDialog({
       
       newPreviews.push({
         id: record.id,
-        studentName: record.student 
-          ? `${record.student.first_name} ${record.student.last_name}`
+        studentName: record.student
+          ? getDisplayName(record.student_id, record.student.first_name, record.student.last_name)
           : 'Unknown Student',
         topicName: record.topic_name,
         oldGrade: record.grade,

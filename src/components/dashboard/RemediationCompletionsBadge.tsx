@@ -13,10 +13,12 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRemediationCompletions } from '@/hooks/useRemediationCompletions';
 import { formatDistanceToNow } from 'date-fns';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 export function RemediationCompletionsBadge() {
   const { count, completions, markAsViewed } = useRemediationCompletions();
   const [showDetails, setShowDetails] = useState(false);
+  const { getDisplayName } = useStudentNames();
 
   if (count === 0) return null;
 
@@ -27,7 +29,12 @@ export function RemediationCompletionsBadge() {
 
   const getStudentName = (completion: typeof completions[0]) => {
     if (completion.student) {
-      return `${completion.student.first_name} ${completion.student.last_name}`;
+      if (!completion.student_id) return 'Student';
+      return getDisplayName(
+        completion.student_id,
+        completion.student.first_name,
+        completion.student.last_name,
+      );
     }
     if (completion.data?.student_name) {
       return completion.data.student_name;

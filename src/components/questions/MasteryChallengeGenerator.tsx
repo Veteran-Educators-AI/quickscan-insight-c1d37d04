@@ -31,6 +31,7 @@ import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { fixEncodingCorruption, renderMathText } from '@/lib/mathRenderer';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface MasteryChallengeGeneratorProps {
   open: boolean;
@@ -89,6 +90,7 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export function MasteryChallengeGenerator({ open, onOpenChange }: MasteryChallengeGeneratorProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -710,7 +712,7 @@ export function MasteryChallengeGenerator({ open, onOpenChange }: MasteryChallen
                                         />
                                         <div>
                                           <p className="font-medium">
-                                            {student.firstName} {student.lastName}
+                                            {getDisplayName(student.id, student.firstName, student.lastName)}
                                           </p>
                                           <p className="text-sm text-muted-foreground">
                                             {student.latestGrade !== null ? `Score: ${student.latestGrade}%` : 'Level A achieved'}
@@ -751,7 +753,7 @@ export function MasteryChallengeGenerator({ open, onOpenChange }: MasteryChallen
                                 />
                                 <div>
                                   <p className="font-medium">
-                                    {student.firstName} {student.lastName}
+                                    {getDisplayName(student.id, student.firstName, student.lastName)}
                                   </p>
                                   <p className="text-sm text-muted-foreground">
                                     {student.latestGrade !== null ? `Score: ${student.latestGrade}%` : 'Level A achieved'}
@@ -945,7 +947,7 @@ export function MasteryChallengeGenerator({ open, onOpenChange }: MasteryChallen
                   </div>
                   {selectedStudents.length === 1 && (
                     <p className="mt-2">
-                      <strong>Student:</strong> {selectedStudents[0].firstName} {selectedStudents[0].lastName}
+                      <strong>Student:</strong> {getDisplayName(selectedStudents[0].id, selectedStudents[0].firstName, selectedStudents[0].lastName)}
                     </p>
                   )}
                   <div className="flex gap-4 mt-2 text-sm text-gray-600">

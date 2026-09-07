@@ -24,6 +24,8 @@ import {
   type VariantLetter,
 } from '@/lib/bandedWorksheet';
 import { buildAnswerKeysPdf, buildClassSetPdf, buildStudentSheetPdf } from '@/lib/bandedWorksheetPdf';
+import { useStudentNames } from '@/lib/StudentNameContext';
+import { NameVisibilityControl, displayNameSlug, escapeHtml } from '@/components/students/NameVisibilityControl';
 
 const formatPdfText = (text: string) => sanitizeForPDF(fixEncodingCorruption(text));
 
@@ -59,6 +61,9 @@ interface AssignmentRow {
 export function SetAssignmentDialog({ open, onOpenChange, classId, className }: SetAssignmentDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { getDisplayName, revealRealNames } = useStudentNames();
+
+  const nameOf = (s: RosterStudent) => getDisplayName(s.id, s.first_name, s.last_name);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -203,7 +208,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     const cards = students
       .map(
         (s) =>
-          `<div class="card"><div class="name">${s.first_name} ${s.last_name}</div><div class="variant">Variant ${variantFor(s.id)}</div></div>`,
+          `<div class="card"><div class="name">${escapeHtml(nameOf(s))}</div><div class="variant">Variant ${variantFor(s.id)}</div></div>`,
       )
       .join('');
     const win = window.open('', '_blank', 'width=900,height=1100');
@@ -228,14 +233,14 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     if (items.length === 0) return;
     const pdf = buildStudentSheetPdf(
       {
-        studentName: `${student.first_name} ${student.last_name}`,
+        studentName: nameOf(student),
         variant: variantFor(student.id),
         items,
         check: computeVariantCheck(items),
       },
       { title: worksheet?.title || 'Practice', formatText: formatPdfText },
     );
-    pdf.save(`sheet-${student.last_name}-${student.first_name}.pdf`.toLowerCase().replace(/\s+/g, '-'));
+    pdf.save(`sheet-${displayNameSlug(nameOf(student))}.pdf`);
   };
 
   /** One PDF, one sheet per student, ordered by surname. The main output. */
@@ -244,11 +249,11 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
     const sheets = students.map((s) => {
       const items = worksheet.variants[variantFor(s.id)];
       return {
-        studentName: `${s.first_name} ${s.last_name}`,
+        studentName: nameOf(s),
         variant: variantFor(s.id),
         items,
         check: computeVariantCheck(items),
-        sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+        sortKey: revealRealNames ? `${s.last_name} ${s.first_name}`.toLowerCase() : nameOf(s).toLowerCase(),
       };
     });
     const pdf = buildClassSetPdf(sheets, { title: worksheet.title, formatText: formatPdfText });
@@ -315,6 +320,9 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
             <Lock className="h-3.5 w-3.5" />
             Teacher-only. Variant assignments are never shown on a class-facing or projected screen.
           </DialogDescription>
+          <div className="pt-1">
+            <NameVisibilityControl />
+          </div>
         </DialogHeader>
 
         {loading ? (
@@ -375,7 +383,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                     <TableBody>
                       {students.map((s) => (
                         <TableRow key={s.id}>
-                          <TableCell className="text-sm">{s.first_name} {s.last_name}</TableCell>
+                          <TableCell className="text-sm">{nameOf(s)}</TableCell>
                           <TableCell>
                             <Select
                               value={variantFor(s.id)}
@@ -414,7 +422,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                     return (
                       <div key={s.id} className="p-3 space-y-2">
                         <p className="text-sm font-medium">
-                          {s.first_name} {s.last_name}
+                          {nameOf(s)}
                           <span className="ml-2 text-xs text-muted-foreground">Variant {variantFor(s.id)}</span>
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -464,7 +472,7 @@ export function SetAssignmentDialog({ open, onOpenChange, classId, className }: 
                         const differs = suggestion != null && suggestion !== r.currentVariant;
                         return (
                           <TableRow key={r.student.id}>
-                            <TableCell className="text-sm">{r.student.first_name} {r.student.last_name}</TableCell>
+                            <TableCell className="text-sm">{nameOf(r.student)}</TableCell>
                             <TableCell className="text-sm">{bandLabel(r.bandReached)}</TableCell>
                             <TableCell className="text-sm">Variant {r.currentVariant}</TableCell>
                             <TableCell className="text-sm">

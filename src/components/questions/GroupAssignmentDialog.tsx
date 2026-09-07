@@ -22,6 +22,8 @@ import {
   type GroupPlan,
 } from '@/lib/bandedCommonSheet';
 import { buildCommonAnswerKeyPdf, buildCommonClassSetPdf, buildCommonSheetPdf } from '@/lib/bandedCommonSheetPdf';
+import { useStudentNames } from '@/lib/StudentNameContext';
+import { NameVisibilityControl, displayNameSlug, escapeHtml } from '@/components/students/NameVisibilityControl';
 
 const formatPdfText = (text: string) => sanitizeForPDF(fixEncodingCorruption(text));
 
@@ -56,6 +58,9 @@ interface AssignmentRow {
 export function GroupAssignmentDialog({ open, onOpenChange, classId, className }: GroupAssignmentDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { getDisplayName, revealRealNames } = useStudentNames();
+
+  const nameOf = (s: RosterStudent) => getDisplayName(s.id, s.first_name, s.last_name);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -201,7 +206,7 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
         const plan = planFor(s.id);
         const list = plan ? formatItemList(plan.items) : '';
         const check = plan ? formatCheckValue(plan.check) : '\u2014';
-        return `<div class="card"><div class="name">${s.first_name} ${s.last_name}</div><div class="items">${list}</div><div class="check">Your completed answers should total ${check}</div></div>`;
+        return `<div class="card"><div class="name">${escapeHtml(nameOf(s))}</div><div class="items">${escapeHtml(list)}</div><div class="check">Your completed answers should total ${check}</div></div>`;
       })
       .join('');
     const win = window.open('', '_blank', 'width=900,height=1100');
@@ -224,20 +229,23 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
 
   const downloadSheet = (student: RosterStudent) => {
     if (!worksheet) return;
+    const displayName = nameOf(student);
     const pdf = buildCommonSheetPdf(
-      `${student.first_name} ${student.last_name}`,
+      displayName,
       worksheet.items,
       { title: worksheet.title, formatText: formatPdfText },
     );
-    pdf.save(`sheet-${student.last_name}-${student.first_name}.pdf`.toLowerCase().replace(/\s+/g, '-'));
+    pdf.save(`sheet-${displayNameSlug(displayName)}.pdf`);
   };
 
   const downloadClassSet = () => {
     if (!worksheet || students.length === 0) return;
     const pdf = buildCommonClassSetPdf(
       students.map((s) => ({
-        studentName: `${s.first_name} ${s.last_name}`,
-        sortKey: `${s.last_name} ${s.first_name}`.toLowerCase(),
+        studentName: nameOf(s),
+        sortKey: revealRealNames
+          ? `${s.last_name} ${s.first_name}`.toLowerCase()
+          : nameOf(s).toLowerCase(),
       })),
       worksheet.items,
       { title: worksheet.title, formatText: formatPdfText },
@@ -298,6 +306,9 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
             <Lock className="h-3.5 w-3.5" />
             Teacher-only. Group assignments and item lists are never shown on a class-facing or projected screen.
           </DialogDescription>
+          <div className="pt-1">
+            <NameVisibilityControl />
+          </div>
         </DialogHeader>
 
         {loading ? (
@@ -359,7 +370,7 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
                     <TableBody>
                       {students.map((s) => (
                         <TableRow key={s.id}>
-                          <TableCell className="text-sm">{s.first_name} {s.last_name}</TableCell>
+                          <TableCell className="text-sm">{nameOf(s)}</TableCell>
                           <TableCell>
                             <Select
                               value={String(groupFor(s.id))}
@@ -401,7 +412,7 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
                     return (
                       <div key={s.id} className="p-3 space-y-2">
                         <p className="text-sm font-medium">
-                          {s.first_name} {s.last_name}
+                          {nameOf(s)}
                           <span className="ml-2 text-xs text-muted-foreground">Group {groupFor(s.id)}</span>
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -450,7 +461,7 @@ export function GroupAssignmentDialog({ open, onOpenChange, classId, className }
                         const differs = suggestion != null && suggestion !== r.currentGroup;
                         return (
                           <TableRow key={r.student.id}>
-                            <TableCell className="text-sm">{r.student.first_name} {r.student.last_name}</TableCell>
+                            <TableCell className="text-sm">{nameOf(r.student)}</TableCell>
                             <TableCell className="text-sm">{bandLabel(r.bandReached)}</TableCell>
                             <TableCell className="text-sm">Group {r.currentGroup}</TableCell>
                             <TableCell className="text-sm">

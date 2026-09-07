@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface LevelProgressionChartProps {
   classId?: string;
@@ -56,6 +57,7 @@ const STUDENT_COLORS = [
 ];
 
 export function LevelProgressionChart({ classId, topicName }: LevelProgressionChartProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [timeRange, setTimeRange] = useState<'4w' | '8w' | '12w' | 'all'>('8w');
@@ -101,7 +103,7 @@ export function LevelProgressionChart({ classId, topicName }: LevelProgressionCh
       if (result.students) {
         studentMap.set(result.student_id, {
           id: result.student_id,
-          name: `${result.students.first_name} ${result.students.last_name}`,
+          name: getDisplayName(result.student_id, result.students.first_name, result.students.last_name),
         });
       }
     });

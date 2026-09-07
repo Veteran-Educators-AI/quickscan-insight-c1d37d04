@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, MinusCircle, AlertTriangle, Coins, Star } from 'lucide-react';
 import { toast } from 'sonner';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface Student {
   id: string;
@@ -51,6 +52,7 @@ export function BehaviorPointDeductionDialog({
   preselectedStudentId,
   preselectedClassId,
 }: BehaviorPointDeductionDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
@@ -145,7 +147,7 @@ export function BehaviorPointDeductionDialog({
     onSuccess: () => {
       const student = students?.find(s => s.id === selectedStudentId);
       toast.success('Points deducted successfully', {
-        description: `${student?.first_name} ${student?.last_name}: -${xpDeduction} XP, -${coinDeduction} coins`,
+        description: `${student ? getDisplayName(student.id, student.first_name, student.last_name) : 'Student'}: -${xpDeduction} XP, -${coinDeduction} coins`,
       });
       queryClient.invalidateQueries({ queryKey: ['inbound-scholar-events'] });
       handleClose();
@@ -225,7 +227,7 @@ export function BehaviorPointDeductionDialog({
                 <ScrollArea className="h-[200px]">
                   {students?.map((student) => (
                     <SelectItem key={student.id} value={student.id}>
-                      {student.last_name}, {student.first_name}
+                      {getDisplayName(student.id, student.first_name, student.last_name)}
                     </SelectItem>
                   ))}
                 </ScrollArea>
@@ -317,7 +319,7 @@ export function BehaviorPointDeductionDialog({
                 <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
                 <div>
                   <p className="font-medium text-sm">
-                    {selectedStudent.first_name} {selectedStudent.last_name}
+                    {getDisplayName(selectedStudent.id, selectedStudent.first_name, selectedStudent.last_name)}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Will lose{' '}

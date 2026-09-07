@@ -43,6 +43,7 @@ import {
   Users,
   Send,
 } from 'lucide-react';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface WorksheetSubmission {
   id: string;
@@ -76,6 +77,7 @@ interface WorksheetSubmissionsTrackerProps {
 }
 
 export function WorksheetSubmissionsTracker({ classId }: WorksheetSubmissionsTrackerProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -239,7 +241,7 @@ export function WorksheetSubmissionsTracker({ classId }: WorksheetSubmissionsTra
   const handleNotifyMissing = () => {
     if (!selectedWorksheet) return;
     const missing = submissions?.filter(s => s.status === 'missing' || s.status === 'pending') || [];
-    setMissingStudents(missing.map(s => `${s.student.first_name} ${s.student.last_name}`));
+    setMissingStudents(missing.map(s => getDisplayName(s.student_id, s.student.first_name, s.student.last_name)));
     setShowNotifyDialog(true);
   };
 
@@ -390,7 +392,7 @@ export function WorksheetSubmissionsTracker({ classId }: WorksheetSubmissionsTra
                       {submissions?.map(submission => (
                         <TableRow key={submission.id}>
                           <TableCell className="font-medium">
-                            {submission.student.first_name} {submission.student.last_name}
+                            {getDisplayName(submission.student_id, submission.student.first_name, submission.student.last_name)}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">

@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface Student {
   id: string;
@@ -30,6 +31,7 @@ export function MissingSubmissionsAlert({
   analyzedStudentNames = [],
   assignmentName = 'this assignment',
 }: MissingSubmissionsAlertProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const [rosterStudents, setRosterStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -365,7 +367,7 @@ export function MissingSubmissionsAlert({
                       <div className="flex items-center gap-3">
                         <UserX className={`h-4 w-4 ${markedReason ? 'text-muted-foreground' : 'text-orange-600'}`} />
                         <span className={markedReason ? 'text-muted-foreground' : 'font-medium'}>
-                          {student.last_name}, {student.first_name}
+                          {getDisplayName(student.id, student.first_name, student.last_name)}
                         </span>
                         {markedReason && (
                           <div className="flex items-center gap-1">
@@ -461,7 +463,7 @@ export function MissingSubmissionsAlert({
                         className="flex items-center gap-2 p-2 rounded bg-green-50/50 dark:bg-green-950/20 text-sm"
                       >
                         <CheckCircle2 className="h-3 w-3 text-green-600" />
-                        <span>{student.last_name}, {student.first_name}</span>
+                        <span>{getDisplayName(student.id, student.first_name, student.last_name)}</span>
                       </div>
                     ))}
                   </div>

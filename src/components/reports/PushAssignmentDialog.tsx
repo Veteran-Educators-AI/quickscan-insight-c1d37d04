@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { usePushToSisterApp } from '@/hooks/usePushToSisterApp';
 import { toast } from 'sonner';
 import { NYS_SUBJECTS } from '@/data/nysTopics';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface PushAssignmentDialogProps {
   open: boolean;
@@ -57,6 +58,7 @@ export function PushAssignmentDialog({
   onOpenChange,
   defaultClassId,
 }: PushAssignmentDialogProps) {
+  const { getDisplayName } = useStudentNames();
   const { user } = useAuth();
   const { pushToSisterApp } = usePushToSisterApp();
 
@@ -332,7 +334,7 @@ export function PushAssignmentDialog({
     try {
       for (let i = 0; i < studentsToSend.length; i++) {
         const student = studentsToSend[i];
-        setPushProgress({ current: i + 1, total: studentsToSend.length, studentName: `${student.first_name} ${student.last_name}` });
+        setPushProgress({ current: i + 1, total: studentsToSend.length, studentName: getDisplayName(student.id, student.first_name, student.last_name) });
 
         const { data: questionData, error: genError } = await supabase.functions.invoke('generate-worksheet-questions', {
           body: {
@@ -381,7 +383,7 @@ export function PushAssignmentDialog({
         if (result.success) {
           successCount++;
         } else {
-          failedNames.push(`${student.first_name} ${student.last_name}`);
+          failedNames.push(getDisplayName(student.id, student.first_name, student.last_name));
           console.error(`Failed to push to ${student.first_name}:`, result.error);
         }
       }
@@ -559,7 +561,7 @@ export function PushAssignmentDialog({
                             checked={selectedStudentIds.has(student.id)}
                             onCheckedChange={() => toggleStudent(student.id)}
                           />
-                          <span>{student.last_name}, {student.first_name}</span>
+                          <span>{getDisplayName(student.id, student.first_name, student.last_name)}</span>
                         </label>
                       ))}
                     </div>

@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useStudentNames } from '@/lib/StudentNameContext';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -105,6 +106,7 @@ interface SavedLessonPlan {
 
 interface GradedWorkSample {
   id: string;
+  student_id: string | null;
   student_name: string;
   topic_name: string;
   grade: number;
@@ -121,6 +123,12 @@ type ContentTab = 'worksheets' | 'lessons' | 'graded';
 export default function TeacherLibrary() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const { getDisplayName } = useStudentNames();
+  const displayStudent = (w: GradedWorkSample) => {
+    if (!w.student_id || w.student_name === 'Unknown') return w.student_name;
+    const [first, ...rest] = w.student_name.split(' ');
+    return getDisplayName(w.student_id, first, rest.join(' '));
+  };
   const navigate = useNavigate();
 
   // State
@@ -240,6 +248,7 @@ export default function TeacherLibrary() {
           grade_justification,
           nys_standard,
           created_at,
+          student_id,
           student:students(first_name, last_name)
         `)
         .eq('teacher_id', user.id)
@@ -250,6 +259,7 @@ export default function TeacherLibrary() {
 
       const samples: GradedWorkSample[] = (data || []).map(item => ({
         id: item.id,
+        student_id: (item as any).student_id ?? null,
         student_name: item.student ? `${(item.student as any).first_name} ${(item.student as any).last_name}` : 'Unknown',
         topic_name: item.topic_name,
         grade: item.grade,
@@ -957,7 +967,7 @@ export default function TeacherLibrary() {
                       <CardHeader className="pb-2">
                         <div className="flex justify-between items-start">
                           <div className="flex-1 min-w-0">
-                            <CardTitle className="text-sm truncate">{work.student_name}</CardTitle>
+                            <CardTitle className="text-sm truncate">{displayStudent(work)}</CardTitle>
                             <CardDescription className="truncate">{work.topic_name}</CardDescription>
                           </div>
                           <div className={`w-12 h-12 rounded-full ${getGradeColor(work.grade)} flex items-center justify-center text-white font-bold`}>
@@ -994,7 +1004,7 @@ export default function TeacherLibrary() {
                           {work.grade}
                         </div>
                         <div>
-                          <h3 className="font-medium">{work.student_name}</h3>
+                          <h3 className="font-medium">{displayStudent(work)}</h3>
                           <p className="text-sm text-muted-foreground">
                             {work.topic_name} • {format(new Date(work.created_at), 'MMM d, yyyy')}
                           </p>

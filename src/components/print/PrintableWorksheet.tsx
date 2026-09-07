@@ -2,6 +2,7 @@ import { StudentQRCode } from './StudentQRCode';
 import { StudentOnlyQRCode } from './StudentOnlyQRCode';
 import { StudentPageQRCode } from './StudentPageQRCode';
 import { renderMathText } from '@/lib/mathRenderer';
+import { useStudentNames } from '@/lib/StudentNameContext';
 
 interface Student {
   id: string;
@@ -76,6 +77,7 @@ export function PrintableWorksheet({
   totalPages = 1,
   hideLevelFromStudent = true,
 }: PrintableWorksheetProps) {
+  const { getDisplayName } = useStudentNames();
   const levelInfo = studentLevel ? LEVEL_COLORS[studentLevel] : null;
   const levelDescription = studentLevel ? LEVEL_DESCRIPTIONS[studentLevel] : null;
   
@@ -544,7 +546,7 @@ export function PrintableWorksheet({
                 margin: '0.1rem 0 0 0',
                 fontFamily: 'Helvetica, Arial, sans-serif',
               }}>
-                {student.first_name} {student.last_name}
+                {getDisplayName(student.id, student.first_name, student.last_name)}
               </p>
             </div>
             {student.student_id && (
@@ -856,7 +858,7 @@ export function PrintableWorksheet({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontWeight: '600', color: '#374151' }}>
-            {student.last_name}, {student.first_name}
+            {getDisplayName(student.id, student.first_name, student.last_name)}
           </span>
           {studentLevel && (
             <span style={{
