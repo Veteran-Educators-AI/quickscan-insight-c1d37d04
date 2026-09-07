@@ -146,6 +146,20 @@ export function StudentNameProvider({ children }: { children: ReactNode }) {
     return `${slug}@student.protected`;
   }, [revealRealNames]);
 
+  const getDisplayParentEmail = useCallback((email: string | null) => {
+    if (revealRealNames) {
+      return email || 'No email';
+    }
+    return email ? 'Guardian email hidden' : 'No email';
+  }, [revealRealNames]);
+
+  const getDisplayStudentNumber = useCallback((studentNumber: string | null) => {
+    if (revealRealNames) {
+      return studentNumber || '—';
+    }
+    return studentNumber ? 'Hidden' : '—';
+  }, [revealRealNames]);
+
   return (
     <StudentNameContext.Provider value={{ 
       revealRealNames, 
@@ -153,6 +167,8 @@ export function StudentNameProvider({ children }: { children: ReactNode }) {
       getDisplayName, 
       getDisplayInitials,
       getDisplayEmail,
+      getDisplayParentEmail,
+      getDisplayStudentNumber,
       remainingSeconds
     }}>
       {children}
