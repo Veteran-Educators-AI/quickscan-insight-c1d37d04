@@ -723,6 +723,7 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       primaryId: string;
       studentId?: string;
       studentName?: string;
+      studentRealName?: string;
       pageIds: string[];
     }
     
