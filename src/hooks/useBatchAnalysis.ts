@@ -387,6 +387,12 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
       getDisplayNameRef.current(s.id, s.first_name, s.last_name),
     [],
   );
+  /** Pseudonymise an already-concatenated roster name when the student id is known. */
+  const maskFullName = useCallback((studentId: string | null | undefined, fullName: string | null | undefined) => {
+    if (!studentId || !fullName) return fullName || undefined;
+    const [first, ...rest] = fullName.trim().split(/\s+/);
+    return getDisplayNameRef.current(studentId, first || '', rest.join(' '));
+  }, []);
   const hasLoadedFromStorage = useRef(false);
   const lastSavedItems = useRef<string>('');
   const lastSavedSummary = useRef<string>('');
@@ -1259,7 +1265,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
         status: 'pending',
         identification,
         studentId: identification.matchedStudentId || item.studentId,
-        studentName: identification.matchedStudentName || item.studentName,
+        studentName:
+          maskFullName(identification.matchedStudentId, identification.matchedStudentName) ||
+          item.studentName,
+        studentRealName: identification.matchedStudentName || item.studentRealName,
         questionId: identification.matchedQuestionId || item.questionId,
         autoAssigned: !!identification.matchedStudentId,
       };
@@ -1350,7 +1359,10 @@ export function useBatchAnalysis(): UseBatchAnalysisReturn {
               status: 'pending' as const,
               identification,
               studentId: identification.matchedStudentId || item.studentId,
-              studentName: identification.matchedStudentName || item.studentName,
+              studentName:
+                maskFullName(identification.matchedStudentId, identification.matchedStudentName) ||
+                item.studentName,
+              studentRealName: identification.matchedStudentName || item.studentRealName,
               questionId: identification.matchedQuestionId || item.questionId,
               autoAssigned: !!identification.matchedStudentId,
             };
