@@ -45,6 +45,7 @@ export function PushToClassroomDialog({
   onSyncComplete,
 }: PushToClassroomDialogProps) {
   const { pushGradeToClassroom, hasClassroomAccess } = useGoogleClassroom();
+  const { revealRealNames } = useStudentNames();
   
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
