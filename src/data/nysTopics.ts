@@ -298,7 +298,75 @@ export const ALGEBRA2_TOPICS: TopicCategory[] = [
       { name: 'Normal Distribution', standard: 'S.ID.A.4', url: 'https://www.jmap.org/htmlstandard/S.ID.A.4.htm' },
     ],
   },
+  {
+    category: 'QUADRATIC FUNCTIONS AND EQUATIONS',
+    topics: [
+      { name: 'Completing the Square', standard: 'A.SSE.B.3', url: 'https://www.jmap.org/htmlstandard/A.SSE.B.3.htm' },
+      { name: 'Quadratic Formula and the Discriminant', standard: 'A.REI.B.4', url: 'https://www.jmap.org/htmlstandard/A.REI.B.4.htm' },
+      { name: 'Complex Roots of Quadratic Equations', standard: 'N.CN.C.7', url: 'https://www.jmap.org/htmlstandard/N.CN.C.7.htm' },
+      { name: 'Vertex Form and Parabola Graphs', standard: 'F.IF.C.7', url: 'https://www.jmap.org/htmlstandard/F.IF.C.7.htm' },
+      { name: 'Linear-Quadratic Systems', standard: 'A.REI.C.7', url: 'https://www.jmap.org/htmlstandard/A.REI.C.7.htm' },
+      { name: 'Quadratic Inequalities', standard: 'A.CED.A.1', url: 'https://www.jmap.org/htmlstandard/A.CED.A.1.htm' },
+    ],
+  },
+  {
+    category: 'FUNCTIONS AND INVERSES',
+    topics: [
+      { name: 'Composition of Functions', standard: 'F.BF.A.1', url: 'https://www.jmap.org/htmlstandard/F.BF.A.1.htm' },
+      { name: 'Inverse Functions', standard: 'F.BF.B.4', url: 'https://www.jmap.org/htmlstandard/F.BF.B.4.htm' },
+      { name: 'Even and Odd Functions', standard: 'F.BF.B.3', url: 'https://www.jmap.org/htmlstandard/F.BF.B.3.htm' },
+      { name: 'Piecewise Functions', standard: 'F.IF.C.7', url: 'https://www.jmap.org/htmlstandard/F.IF.C.7.htm' },
+      { name: 'Average Rate of Change', standard: 'F.IF.B.6', url: 'https://www.jmap.org/htmlstandard/F.IF.B.6.htm' },
+      { name: 'Key Features of Graphs', standard: 'F.IF.B.4', url: 'https://www.jmap.org/htmlstandard/F.IF.B.4.htm' },
+      { name: 'Domain and Range of Functions', standard: 'F.IF.B.5', url: 'https://www.jmap.org/htmlstandard/F.IF.B.5.htm' },
+    ],
+  },
+  {
+    category: 'EXPONENTS AND RATIONAL EXPONENTS',
+    topics: [
+      { name: 'Rational Exponents', standard: 'N.RN.A.1', url: 'https://www.jmap.org/htmlstandard/N.RN.A.1.htm' },
+      { name: 'Properties of Exponents', standard: 'N.RN.A.2', url: 'https://www.jmap.org/htmlstandard/N.RN.A.2.htm' },
+      { name: 'Simplifying Radical Expressions', standard: 'N.RN.A.2', url: 'https://www.jmap.org/htmlstandard/N.RN.A.2.htm' },
+    ],
+  },
+  {
+    category: 'POLYNOMIAL OPERATIONS AND EQUATIONS',
+    topics: [
+      { name: 'Factoring Polynomials', standard: 'A.SSE.A.2', url: 'https://www.jmap.org/htmlstandard/A.SSE.A.2.htm' },
+      { name: 'Polynomial Long Division', standard: 'A.APR.D.6', url: 'https://www.jmap.org/htmlstandard/A.APR.D.6.htm' },
+      { name: 'Solving Polynomial Equations', standard: 'A.APR.B.3', url: 'https://www.jmap.org/htmlstandard/A.APR.B.3.htm' },
+      { name: 'End Behavior of Polynomial Graphs', standard: 'F.IF.C.7', url: 'https://www.jmap.org/htmlstandard/F.IF.C.7.htm' },
+    ],
+  },
+  {
+    category: 'LOGARITHMIC MODELS',
+    topics: [
+      { name: 'Solving Logarithmic Equations', standard: 'F.LE.A.4', url: 'https://www.jmap.org/htmlstandard/F.LE.A.4.htm' },
+      { name: 'Compound Interest and the Number e', standard: 'F.LE.A.2', url: 'https://www.jmap.org/htmlstandard/F.LE.A.2.htm' },
+      { name: 'Comparing Linear, Quadratic and Exponential Models', standard: 'F.LE.A.3', url: 'https://www.jmap.org/htmlstandard/F.LE.A.3.htm' },
+    ],
+  },
+  {
+    category: 'MODELING AND SYSTEMS',
+    topics: [
+      { name: 'Systems of Three Linear Equations', standard: 'A.REI.C.6', url: 'https://www.jmap.org/htmlstandard/A.REI.C.6.htm' },
+      { name: 'Modeling with Periodic Functions', standard: 'F.TF.B.5', url: 'https://www.jmap.org/htmlstandard/F.TF.B.5.htm' },
+      { name: 'Curve Fitting and Regression Models', standard: 'S.ID.B.6', url: 'https://www.jmap.org/htmlstandard/S.ID.B.6.htm' },
+    ],
+  },
+  {
+    category: 'STATISTICS AND INFERENCE',
+    topics: [
+      { name: 'Normal Curve and z-Scores', standard: 'S.ID.A.4', url: 'https://www.jmap.org/htmlstandard/S.ID.A.4.htm' },
+      { name: 'Simulation and Random Models', standard: 'S.IC.A.2', url: 'https://www.jmap.org/htmlstandard/S.IC.A.2.htm' },
+      { name: 'Surveys, Experiments and Observational Studies', standard: 'S.IC.B.3', url: 'https://www.jmap.org/htmlstandard/S.IC.B.3.htm' },
+      { name: 'Margin of Error', standard: 'S.IC.B.4', url: 'https://www.jmap.org/htmlstandard/S.IC.B.4.htm' },
+      { name: 'Comparing Two Treatments', standard: 'S.IC.B.5', url: 'https://www.jmap.org/htmlstandard/S.IC.B.5.htm' },
+      { name: 'Evaluating Reports Based on Data', standard: 'S.IC.B.6', url: 'https://www.jmap.org/htmlstandard/S.IC.B.6.htm' },
+    ],
+  },
 ];
+
 
 export const PRECALCULUS_TOPICS: TopicCategory[] = [
   {
