@@ -1432,6 +1432,12 @@ export function StudentReportDialog({
 
             <Separator className="my-6" />
 
+            {/* Scanned paper results from Scholar */}
+            <PaperScanResultsPanel studentId={studentId} />
+
+            <Separator className="my-6" />
+
+
             {/* Diagnostic Results Section */}
             <Collapsible open={sectionsExpanded.diagnostics} onOpenChange={() => toggleSection('diagnostics')}>
               <CollapsibleTrigger className="w-full">
