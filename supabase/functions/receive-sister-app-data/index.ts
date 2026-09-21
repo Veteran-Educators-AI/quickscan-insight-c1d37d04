@@ -1197,10 +1197,14 @@ serve(async (req) => {
     // Include the log ID and processing result.
     // -------------------------------------------------------------------------
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
+        student_found: outcomeStudentFound,
+        created_student: outcomeCreatedStudent,
+        merged: outcomeMerged,
+        grade_saved: outcomeGradeSaved || !!processedResult?.grade_saved,
         log_id: logEntry?.id,
-        processed: processedResult 
+        processed: processedResult
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
