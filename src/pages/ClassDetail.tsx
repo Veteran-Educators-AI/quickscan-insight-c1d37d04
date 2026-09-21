@@ -488,7 +488,7 @@ export default function ClassDetail() {
 
         {/* Tabs for Students and Gradebook */}
         <Tabs defaultValue="students" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-xl">
             <TabsTrigger value="students" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Students ({students.length})
@@ -497,7 +497,15 @@ export default function ClassDetail() {
               <BookOpen className="h-4 w-4" />
               Gradebook
             </TabsTrigger>
+            <TabsTrigger value="paper-scans" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Paper Scans
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="paper-scans">
+            {id && <PaperScanResultsPanel classId={id} title="Scanned paper results for this class" />}
+          </TabsContent>
 
           <TabsContent value="students">
             {/* Data Coverage Summary */}
