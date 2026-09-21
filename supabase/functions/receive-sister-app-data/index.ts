@@ -781,21 +781,18 @@ serve(async (req) => {
 
       const workData: any = body.data || {};
       const incomingStudentId = body.student_id || undefined;
-      const existingStudentIds2 = await fetchExistingStudentIds(
+      const workResolution = await resolveStudent(
         supabaseAdmin,
-        incomingStudentId ? [incomingStudentId] : []
-      );
-      const emailMap2 = await fetchStudentIdsByEmail(
-        supabaseAdmin,
-        workData.student_email ? [workData.student_email] : [],
-        teacherId
-      );
-      const resolvedStudent2 = resolveStudentId(
+        teacherId,
         incomingStudentId,
-        workData.student_email,
-        existingStudentIds2,
-        emailMap2
+        workData
       );
+      applyOutcome(workResolution);
+      const resolvedStudent2 = {
+        resolvedId: workResolution.studentId,
+        externalStudentId: workResolution.externalStudentId,
+        resolution: workResolution.resolution,
+      };
 
       // Save grade if score present
       let workGradeSaved = false;
