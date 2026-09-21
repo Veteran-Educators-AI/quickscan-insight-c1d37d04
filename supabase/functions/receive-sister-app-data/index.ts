@@ -397,10 +397,19 @@ serve(async (req) => {
         );
       }
     } else if (!body.student_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing required field: student_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Paper scans identify the student by email or by exact name within a class,
+      // so a root student_id is not required for them.
+      const paperIdentified =
+        String((body.data as any)?.submission_type || '').toLowerCase() === 'paper_scan' &&
+        (!!(body.data as any)?.student_email ||
+          (!!(body.data as any)?.class_join_code && !!(body.data as any)?.student_name));
+
+      if (!paperIdentified) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing required field: student_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const teacherId = teacherIdFromKey!;
