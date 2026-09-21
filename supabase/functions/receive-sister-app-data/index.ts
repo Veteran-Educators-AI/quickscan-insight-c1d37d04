@@ -13,6 +13,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveStudent, type ResolutionOutcome } from "./studentResolution.ts";
+import { savePaperScanResult, buildJustification } from "./paperScanResults.ts";
 
 // -----------------------------------------------------------------------------
 // CORS HEADERS
@@ -408,6 +410,17 @@ serve(async (req) => {
     // -------------------------------------------------------------------------
     let processedResult: any = null;
     let logEntry: any = null;
+    // Top-level outcome flags returned to Scholar for every action.
+    let outcomeStudentFound = false;
+    let outcomeCreatedStudent = false;
+    let outcomeMerged = false;
+    let outcomeGradeSaved = false;
+
+    const applyOutcome = (r: ResolutionOutcome) => {
+      if (r.studentId) outcomeStudentFound = true;
+      if (r.createdStudent) outcomeCreatedStudent = true;
+      if (r.merged) outcomeMerged = true;
+    };
 
     if (body.action === 'live_session_completed') {
       // ---------------------------------------------------------------------
