@@ -796,7 +796,18 @@ serve(async (req) => {
 
       // Save grade if score present
       let workGradeSaved = false;
-      if (workData.score !== undefined && resolvedStudent2.resolvedId) {
+      const workIsPaperScan = String(workData.submission_type || '').toLowerCase() === 'paper_scan';
+      if (resolvedStudent2.resolvedId && workIsPaperScan) {
+        // Paper scans: grade + full item-level detail, idempotent on source_ref
+        const saved = await savePaperScanResult(
+          supabaseAdmin,
+          teacherId,
+          resolvedStudent2.resolvedId,
+          workResolution.classId,
+          workData
+        );
+        workGradeSaved = saved.gradeSaved;
+      } else if (workData.score !== undefined && resolvedStudent2.resolvedId) {
         const { error: gradeError } = await supabaseAdmin
           .from('grade_history')
           .insert({
@@ -812,6 +823,7 @@ serve(async (req) => {
         workGradeSaved = !gradeError;
         if (gradeError) console.error('Error saving work grade:', gradeError);
       }
+      if (workGradeSaved) outcomeGradeSaved = true;
 
       // Log to sister_app_sync_log
       try {
