@@ -1659,6 +1659,110 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_scan_results: {
+        Row: {
+          activity_name: string | null
+          class_id: string | null
+          created_at: string
+          evidence: Json
+          grade_history_id: string | null
+          id: string
+          item_marks: Json
+          items_attempted: number | null
+          items_correct: number | null
+          raw_payload: Json | null
+          scanned_at: string | null
+          score: number | null
+          source_ref: string | null
+          standard_code: string | null
+          strengths: Json
+          student_id: string
+          submission_type: string | null
+          summary: string | null
+          teacher_id: string
+          topic_name: string
+          updated_at: string
+          weak_skill_tags: string[]
+        }
+        Insert: {
+          activity_name?: string | null
+          class_id?: string | null
+          created_at?: string
+          evidence?: Json
+          grade_history_id?: string | null
+          id?: string
+          item_marks?: Json
+          items_attempted?: number | null
+          items_correct?: number | null
+          raw_payload?: Json | null
+          scanned_at?: string | null
+          score?: number | null
+          source_ref?: string | null
+          standard_code?: string | null
+          strengths?: Json
+          student_id: string
+          submission_type?: string | null
+          summary?: string | null
+          teacher_id: string
+          topic_name: string
+          updated_at?: string
+          weak_skill_tags?: string[]
+        }
+        Update: {
+          activity_name?: string | null
+          class_id?: string | null
+          created_at?: string
+          evidence?: Json
+          grade_history_id?: string | null
+          id?: string
+          item_marks?: Json
+          items_attempted?: number | null
+          items_correct?: number | null
+          raw_payload?: Json | null
+          scanned_at?: string | null
+          score?: number | null
+          source_ref?: string | null
+          standard_code?: string | null
+          strengths?: Json
+          student_id?: string
+          submission_type?: string | null
+          summary?: string | null
+          teacher_id?: string
+          topic_name?: string
+          updated_at?: string
+          weak_skill_tags?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_scan_results_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paper_scan_results_grade_history_id_fkey"
+            columns: ["grade_history_id"]
+            isOneToOne: false
+            referencedRelation: "grade_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paper_scan_results_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paper_scan_results_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_scans: {
         Row: {
           class_id: string | null
@@ -2625,6 +2729,7 @@ export type Database = {
       }
       students: {
         Row: {
+          archived_at: string | null
           class_id: string
           created_at: string
           custom_pseudonym: string | null
@@ -2632,12 +2737,15 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
+          merged_into_student_id: string | null
           parent_email: string | null
+          source: string | null
           student_id: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          archived_at?: string | null
           class_id: string
           created_at?: string
           custom_pseudonym?: string | null
@@ -2645,12 +2753,15 @@ export type Database = {
           first_name: string
           id?: string
           last_name: string
+          merged_into_student_id?: string | null
           parent_email?: string | null
+          source?: string | null
           student_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          archived_at?: string | null
           class_id?: string
           created_at?: string
           custom_pseudonym?: string | null
@@ -2658,7 +2769,9 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string
+          merged_into_student_id?: string | null
           parent_email?: string | null
+          source?: string | null
           student_id?: string | null
           updated_at?: string
           user_id?: string | null
@@ -2669,6 +2782,13 @@ export type Database = {
             columns: ["class_id"]
             isOneToOne: false
             referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "students_merged_into_student_id_fkey"
+            columns: ["merged_into_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
           {
