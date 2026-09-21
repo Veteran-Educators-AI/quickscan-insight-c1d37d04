@@ -1014,7 +1014,35 @@ serve(async (req) => {
           // Handle practice session completions from Scholar
           const score = body.data?.score;
           const topicName = body.data?.topic_name || body.data?.activity_name || (body.data as any)?.title;
-          
+
+          // Paper scans carry item-level marks; store them in full (idempotent on source_ref)
+          const singleIsPaperScan =
+            String((body.data as any)?.submission_type || '').toLowerCase() === 'paper_scan';
+
+          if (singleIsPaperScan) {
+            if (!resolvedStudent.resolvedId) {
+              processedResult = { paper_scan_skipped_missing_student: true, action: body.action };
+              break;
+            }
+            const savedPaper = await savePaperScanResult(
+              supabaseAdmin,
+              teacherId,
+              resolvedStudent.resolvedId,
+              singleResolution.classId,
+              (body.data || {}) as Record<string, any>
+            );
+            if (savedPaper.gradeSaved) outcomeGradeSaved = true;
+            processedResult = {
+              paper_scan_saved: !!savedPaper.resultId,
+              paper_scan_updated: savedPaper.updated,
+              grade_saved: savedPaper.gradeSaved,
+              paper_scan_result_id: savedPaper.resultId,
+              error: savedPaper.error,
+              action: body.action,
+            };
+            break;
+          }
+
           if (score !== undefined && topicName) {
             if (!resolvedStudent.resolvedId) {
               processedResult = { grade_skipped_missing_student: true, action: body.action };
