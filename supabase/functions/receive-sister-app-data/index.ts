@@ -969,21 +969,18 @@ serve(async (req) => {
       console.log(`Full incoming body for ${body.action}:`, JSON.stringify(body).substring(0, 1000));
 
       const incomingStudentId = body.student_id || undefined;
-      const existingStudentIds = await fetchExistingStudentIds(
+      const singleResolution = await resolveStudent(
         supabaseAdmin,
-        incomingStudentId ? [incomingStudentId] : []
-      );
-      const emailMap = await fetchStudentIdsByEmail(
-        supabaseAdmin,
-        body.data && (body.data as any).student_email ? [(body.data as any).student_email] : [],
-        teacherId
-      );
-      const resolvedStudent = resolveStudentId(
+        teacherId,
         incomingStudentId,
-        body.data ? (body.data as any).student_email : null,
-        existingStudentIds,
-        emailMap
+        (body.data || {}) as Record<string, any>
       );
+      applyOutcome(singleResolution);
+      const resolvedStudent = {
+        resolvedId: singleResolution.studentId,
+        externalStudentId: singleResolution.externalStudentId,
+        resolution: singleResolution.resolution,
+      };
 
       const { data: singleLogEntry, error: logError } = await supabaseAdmin
         .from('sister_app_sync_log')
