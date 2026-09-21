@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PrintRemediationQuestionsDialog } from '@/components/print/PrintRemediationQuestionsDialog';
+import { PaperScanResultsPanel } from '@/components/reports/PaperScanResultsPanel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1431,6 +1432,12 @@ export function StudentReportDialog({
             </Collapsible>
 
             <Separator className="my-6" />
+
+            {/* Scanned paper results from Scholar */}
+            <PaperScanResultsPanel studentId={studentId} />
+
+            <Separator className="my-6" />
+
 
             {/* Diagnostic Results Section */}
             <Collapsible open={sectionsExpanded.diagnostics} onOpenChange={() => toggleSection('diagnostics')}>

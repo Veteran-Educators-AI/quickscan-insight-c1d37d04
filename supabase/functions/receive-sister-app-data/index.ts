@@ -13,6 +13,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveStudent, type ResolutionOutcome } from "./studentResolution.ts";
+import { savePaperScanResult, buildJustification } from "./paperScanResults.ts";
 
 // -----------------------------------------------------------------------------
 // CORS HEADERS
@@ -395,10 +397,19 @@ serve(async (req) => {
         );
       }
     } else if (!body.student_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Missing required field: student_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Paper scans identify the student by email or by exact name within a class,
+      // so a root student_id is not required for them.
+      const paperIdentified =
+        String((body.data as any)?.submission_type || '').toLowerCase() === 'paper_scan' &&
+        (!!(body.data as any)?.student_email ||
+          (!!(body.data as any)?.class_join_code && !!(body.data as any)?.student_name));
+
+      if (!paperIdentified) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing required field: student_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const teacherId = teacherIdFromKey!;
@@ -408,6 +419,17 @@ serve(async (req) => {
     // -------------------------------------------------------------------------
     let processedResult: any = null;
     let logEntry: any = null;
+    // Top-level outcome flags returned to Scholar for every action.
+    let outcomeStudentFound = false;
+    let outcomeCreatedStudent = false;
+    let outcomeMerged = false;
+    let outcomeGradeSaved = false;
+
+    const applyOutcome = (r: ResolutionOutcome) => {
+      if (r.studentId) outcomeStudentFound = true;
+      if (r.createdStudent) outcomeCreatedStudent = true;
+      if (r.merged) outcomeMerged = true;
+    };
 
     if (body.action === 'live_session_completed') {
       // ---------------------------------------------------------------------
@@ -768,25 +790,33 @@ serve(async (req) => {
 
       const workData: any = body.data || {};
       const incomingStudentId = body.student_id || undefined;
-      const existingStudentIds2 = await fetchExistingStudentIds(
+      const workResolution = await resolveStudent(
         supabaseAdmin,
-        incomingStudentId ? [incomingStudentId] : []
-      );
-      const emailMap2 = await fetchStudentIdsByEmail(
-        supabaseAdmin,
-        workData.student_email ? [workData.student_email] : [],
-        teacherId
-      );
-      const resolvedStudent2 = resolveStudentId(
+        teacherId,
         incomingStudentId,
-        workData.student_email,
-        existingStudentIds2,
-        emailMap2
+        workData
       );
+      applyOutcome(workResolution);
+      const resolvedStudent2 = {
+        resolvedId: workResolution.studentId,
+        externalStudentId: workResolution.externalStudentId,
+        resolution: workResolution.resolution,
+      };
 
       // Save grade if score present
       let workGradeSaved = false;
-      if (workData.score !== undefined && resolvedStudent2.resolvedId) {
+      const workIsPaperScan = String(workData.submission_type || '').toLowerCase() === 'paper_scan';
+      if (resolvedStudent2.resolvedId && workIsPaperScan) {
+        // Paper scans: grade + full item-level detail, idempotent on source_ref
+        const saved = await savePaperScanResult(
+          supabaseAdmin,
+          teacherId,
+          resolvedStudent2.resolvedId,
+          workResolution.classId,
+          workData
+        );
+        workGradeSaved = saved.gradeSaved;
+      } else if (workData.score !== undefined && resolvedStudent2.resolvedId) {
         const { error: gradeError } = await supabaseAdmin
           .from('grade_history')
           .insert({
@@ -802,6 +832,7 @@ serve(async (req) => {
         workGradeSaved = !gradeError;
         if (gradeError) console.error('Error saving work grade:', gradeError);
       }
+      if (workGradeSaved) outcomeGradeSaved = true;
 
       // Log to sister_app_sync_log
       try {
@@ -947,21 +978,18 @@ serve(async (req) => {
       console.log(`Full incoming body for ${body.action}:`, JSON.stringify(body).substring(0, 1000));
 
       const incomingStudentId = body.student_id || undefined;
-      const existingStudentIds = await fetchExistingStudentIds(
+      const singleResolution = await resolveStudent(
         supabaseAdmin,
-        incomingStudentId ? [incomingStudentId] : []
-      );
-      const emailMap = await fetchStudentIdsByEmail(
-        supabaseAdmin,
-        body.data && (body.data as any).student_email ? [(body.data as any).student_email] : [],
-        teacherId
-      );
-      const resolvedStudent = resolveStudentId(
+        teacherId,
         incomingStudentId,
-        body.data ? (body.data as any).student_email : null,
-        existingStudentIds,
-        emailMap
+        (body.data || {}) as Record<string, any>
       );
+      applyOutcome(singleResolution);
+      const resolvedStudent = {
+        resolvedId: singleResolution.studentId,
+        externalStudentId: singleResolution.externalStudentId,
+        resolution: singleResolution.resolution,
+      };
 
       const { data: singleLogEntry, error: logError } = await supabaseAdmin
         .from('sister_app_sync_log')
@@ -995,7 +1023,35 @@ serve(async (req) => {
           // Handle practice session completions from Scholar
           const score = body.data?.score;
           const topicName = body.data?.topic_name || body.data?.activity_name || (body.data as any)?.title;
-          
+
+          // Paper scans carry item-level marks; store them in full (idempotent on source_ref)
+          const singleIsPaperScan =
+            String((body.data as any)?.submission_type || '').toLowerCase() === 'paper_scan';
+
+          if (singleIsPaperScan) {
+            if (!resolvedStudent.resolvedId) {
+              processedResult = { paper_scan_skipped_missing_student: true, action: body.action };
+              break;
+            }
+            const savedPaper = await savePaperScanResult(
+              supabaseAdmin,
+              teacherId,
+              resolvedStudent.resolvedId,
+              singleResolution.classId,
+              (body.data || {}) as Record<string, any>
+            );
+            if (savedPaper.gradeSaved) outcomeGradeSaved = true;
+            processedResult = {
+              paper_scan_saved: !!savedPaper.resultId,
+              paper_scan_updated: savedPaper.updated,
+              grade_saved: savedPaper.gradeSaved,
+              paper_scan_result_id: savedPaper.resultId,
+              error: savedPaper.error,
+              action: body.action,
+            };
+            break;
+          }
+
           if (score !== undefined && topicName) {
             if (!resolvedStudent.resolvedId) {
               processedResult = { grade_skipped_missing_student: true, action: body.action };
@@ -1150,10 +1206,14 @@ serve(async (req) => {
     // Include the log ID and processing result.
     // -------------------------------------------------------------------------
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
+        student_found: outcomeStudentFound,
+        created_student: outcomeCreatedStudent,
+        merged: outcomeMerged,
+        grade_saved: outcomeGradeSaved || !!processedResult?.grade_saved,
         log_id: logEntry?.id,
-        processed: processedResult 
+        processed: processedResult
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
