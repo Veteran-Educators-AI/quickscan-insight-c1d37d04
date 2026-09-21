@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PrintRemediationQuestionsDialog } from '@/components/print/PrintRemediationQuestionsDialog';
+import { PaperScanResultsPanel } from '@/components/reports/PaperScanResultsPanel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
