@@ -24,6 +24,7 @@ import { BehaviorPointDeductionDialog } from '@/components/behavior/BehaviorPoin
 import { EditStudentDialog } from '@/components/classes/EditStudentDialog';
 import { SyncRosterToScholarButton } from '@/components/classes/SyncRosterToScholarButton';
 import { PushAssignmentDialog } from '@/components/reports/PushAssignmentDialog';
+import { PaperScanResultsPanel } from '@/components/reports/PaperScanResultsPanel';
 
 interface Student {
   id: string;
