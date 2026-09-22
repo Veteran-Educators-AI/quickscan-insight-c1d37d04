@@ -41,12 +41,47 @@ export function buildJustification(data: Record<string, any>): string {
   return parts.join(' — ');
 }
 
+/**
+ * Source reference used for idempotency. Checked in order:
+ * data.source_ref -> bodySourceRef (top-level body.source_ref) -> data.worksheet_result_id -> data.session_id
+ */
+export function resolveSourceRef(
+  data: Record<string, any>,
+  bodySourceRef?: unknown
+): string | null {
+  const candidates = [
+    data?.source_ref,
+    bodySourceRef,
+    data?.worksheet_result_id,
+    data?.worksheetResultId,
+    data?.session_id,
+    data?.sessionId,
+  ];
+  for (const c of candidates) {
+    if (c === null || c === undefined) continue;
+    const s = String(c).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+/** Event timestamp from the payload, falling back to now. */
+export function resolveEventTimestamp(data: Record<string, any>): string {
+  const raw = data?.completed_at || data?.scanned_at || data?.timestamp;
+  if (raw) {
+    const d = new Date(String(raw));
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export async function savePaperScanResult(
   supabaseAdmin: any,
   teacherId: string,
   studentId: string,
   classId: string | null,
-  data: Record<string, any>
+  data: Record<string, any>,
+  bodySourceRef?: unknown
 ): Promise<PaperScanSaveOutcome> {
   const outcome: PaperScanSaveOutcome = {
     gradeSaved: false,
@@ -55,13 +90,15 @@ export async function savePaperScanResult(
     gradeHistoryId: null,
   };
 
-  const sourceRef: string | null = data.source_ref ? String(data.source_ref) : null;
+  const sourceRef: string | null = resolveSourceRef(data, bodySourceRef);
+  const eventAt = resolveEventTimestamp(data);
   const topicName: string =
     data.topic_name || data.activity_name || data.assignment_title || 'Scholar Paper Scan';
   const score = data.score === null || data.score === undefined ? null : Number(data.score);
   const itemsCorrect = data.items_correct ?? data.questions_correct ?? null;
   const itemsAttempted = data.items_attempted ?? data.questions_attempted ?? null;
   const justification = buildJustification(data);
+
 
   // Existing result for this source_ref?
   let existing: { id: string; grade_history_id: string | null } | null = null;
@@ -87,7 +124,9 @@ export async function savePaperScanResult(
       raw_score_earned: itemsCorrect,
       raw_score_possible: itemsAttempted,
       grade_justification: justification,
+      created_at: eventAt,
     };
+
 
     if (gradeHistoryId) {
       const { error } = await supabaseAdmin
@@ -138,7 +177,7 @@ export async function savePaperScanResult(
     summary: data.summary || justification,
     grade_history_id: gradeHistoryId,
     raw_payload: data,
-    scanned_at: data.completed_at || data.scanned_at || new Date().toISOString(),
+    scanned_at: eventAt,
   };
 
   if (existing) {
@@ -152,6 +191,22 @@ export async function savePaperScanResult(
     } else {
       outcome.resultId = existing.id;
       outcome.updated = true;
+    }
+  } else if (sourceRef) {
+    // Upsert on the (teacher_id, source_ref) unique index so concurrent or
+    // repeated sends update the same row instead of duplicating.
+    const { data: upserted, error } = await supabaseAdmin
+      .from('paper_scan_results')
+      .upsert({ ...resultRow, updated_at: new Date().toISOString() }, {
+        onConflict: 'teacher_id,source_ref',
+      })
+      .select('id')
+      .single();
+    if (error) {
+      console.error('Paper scan: detail upsert failed', error.message);
+      outcome.error = outcome.error || error.message;
+    } else {
+      outcome.resultId = upserted.id;
     }
   } else {
     const { data: inserted, error } = await supabaseAdmin
@@ -167,5 +222,51 @@ export async function savePaperScanResult(
     }
   }
 
+
   return outcome;
 }
+
+/**
+ * Save a non-paper-scan grade (practice session, Scholar submission) keyed on the
+ * same source_ref so a repeated send updates instead of duplicating.
+ * The ref is stored as a "[ref:...]" tag inside grade_justification, since
+ * grade_history has no dedicated column for it.
+ */
+export async function saveGradeDeduped(
+  supabaseAdmin: any,
+  row: Record<string, any>,
+  sourceRef: string | null,
+  eventAt: string
+): Promise<{ saved: boolean; updated: boolean; error?: string }> {
+  const gradeRow = {
+    ...row,
+    created_at: eventAt,
+    grade_justification: sourceRef
+      ? `${row.grade_justification || ''} [ref:${sourceRef}]`.trim()
+      : row.grade_justification,
+  };
+
+  if (sourceRef) {
+    const { data: found } = await supabaseAdmin
+      .from('grade_history')
+      .select('id')
+      .eq('teacher_id', row.teacher_id)
+      .eq('student_id', row.student_id)
+      .ilike('grade_justification', `%[ref:${sourceRef}]%`)
+      .maybeSingle();
+
+    if (found?.id) {
+      const { error } = await supabaseAdmin
+        .from('grade_history')
+        .update(gradeRow)
+        .eq('id', found.id);
+      if (error) return { saved: false, updated: false, error: error.message };
+      return { saved: true, updated: true };
+    }
+  }
+
+  const { error } = await supabaseAdmin.from('grade_history').insert(gradeRow);
+  if (error) return { saved: false, updated: false, error: error.message };
+  return { saved: true, updated: false };
+}
+
