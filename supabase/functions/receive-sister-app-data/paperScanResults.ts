@@ -177,7 +177,7 @@ export async function savePaperScanResult(
     summary: data.summary || justification,
     grade_history_id: gradeHistoryId,
     raw_payload: data,
-    scanned_at: data.completed_at || data.scanned_at || new Date().toISOString(),
+    scanned_at: eventAt,
   };
 
   if (existing) {
@@ -192,6 +192,22 @@ export async function savePaperScanResult(
       outcome.resultId = existing.id;
       outcome.updated = true;
     }
+  } else if (sourceRef) {
+    // Upsert on the (teacher_id, source_ref) unique index so concurrent or
+    // repeated sends update the same row instead of duplicating.
+    const { data: upserted, error } = await supabaseAdmin
+      .from('paper_scan_results')
+      .upsert({ ...resultRow, updated_at: new Date().toISOString() }, {
+        onConflict: 'teacher_id,source_ref',
+      })
+      .select('id')
+      .single();
+    if (error) {
+      console.error('Paper scan: detail upsert failed', error.message);
+      outcome.error = outcome.error || error.message;
+    } else {
+      outcome.resultId = upserted.id;
+    }
   } else {
     const { data: inserted, error } = await supabaseAdmin
       .from('paper_scan_results')
@@ -205,6 +221,7 @@ export async function savePaperScanResult(
       outcome.resultId = inserted.id;
     }
   }
+
 
   return outcome;
 }
