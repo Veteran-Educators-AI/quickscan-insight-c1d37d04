@@ -41,12 +41,47 @@ export function buildJustification(data: Record<string, any>): string {
   return parts.join(' — ');
 }
 
+/**
+ * Source reference used for idempotency. Checked in order:
+ * data.source_ref -> bodySourceRef (top-level body.source_ref) -> data.worksheet_result_id -> data.session_id
+ */
+export function resolveSourceRef(
+  data: Record<string, any>,
+  bodySourceRef?: unknown
+): string | null {
+  const candidates = [
+    data?.source_ref,
+    bodySourceRef,
+    data?.worksheet_result_id,
+    data?.worksheetResultId,
+    data?.session_id,
+    data?.sessionId,
+  ];
+  for (const c of candidates) {
+    if (c === null || c === undefined) continue;
+    const s = String(c).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+/** Event timestamp from the payload, falling back to now. */
+export function resolveEventTimestamp(data: Record<string, any>): string {
+  const raw = data?.completed_at || data?.scanned_at || data?.timestamp;
+  if (raw) {
+    const d = new Date(String(raw));
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export async function savePaperScanResult(
   supabaseAdmin: any,
   teacherId: string,
   studentId: string,
   classId: string | null,
-  data: Record<string, any>
+  data: Record<string, any>,
+  bodySourceRef?: unknown
 ): Promise<PaperScanSaveOutcome> {
   const outcome: PaperScanSaveOutcome = {
     gradeSaved: false,
@@ -55,13 +90,15 @@ export async function savePaperScanResult(
     gradeHistoryId: null,
   };
 
-  const sourceRef: string | null = data.source_ref ? String(data.source_ref) : null;
+  const sourceRef: string | null = resolveSourceRef(data, bodySourceRef);
+  const eventAt = resolveEventTimestamp(data);
   const topicName: string =
     data.topic_name || data.activity_name || data.assignment_title || 'Scholar Paper Scan';
   const score = data.score === null || data.score === undefined ? null : Number(data.score);
   const itemsCorrect = data.items_correct ?? data.questions_correct ?? null;
   const itemsAttempted = data.items_attempted ?? data.questions_attempted ?? null;
   const justification = buildJustification(data);
+
 
   // Existing result for this source_ref?
   let existing: { id: string; grade_history_id: string | null } | null = null;
