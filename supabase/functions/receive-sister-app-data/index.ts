@@ -813,13 +813,14 @@ serve(async (req) => {
           teacherId,
           resolvedStudent2.resolvedId,
           workResolution.classId,
-          workData
+          workData,
+          (body as any)?.source_ref
         );
         workGradeSaved = saved.gradeSaved;
       } else if (workData.score !== undefined && resolvedStudent2.resolvedId) {
-        const { error: gradeError } = await supabaseAdmin
-          .from('grade_history')
-          .insert({
+        const result = await saveGradeDeduped(
+          supabaseAdmin,
+          {
             student_id: resolvedStudent2.resolvedId,
             teacher_id: teacherId,
             topic_name: workData.topic_name || workData.assignment_title || 'Scholar App Submission',
@@ -828,10 +829,14 @@ serve(async (req) => {
             raw_score_earned: workData.questions_correct || null,
             raw_score_possible: workData.questions_attempted || null,
             grade_justification: `Student submitted from Scholar App: ${workData.assignment_title || workData.topic_name || 'Work'} (${workData.questions_correct || 0}/${workData.questions_attempted || 0} correct)`,
-          });
-        workGradeSaved = !gradeError;
-        if (gradeError) console.error('Error saving work grade:', gradeError);
+          },
+          resolveSourceRef(workData as Record<string, any>, (body as any)?.source_ref),
+          resolveEventTimestamp(workData as Record<string, any>)
+        );
+        workGradeSaved = result.saved;
+        if (result.error) console.error('Error saving work grade:', result.error);
       }
+
       if (workGradeSaved) outcomeGradeSaved = true;
 
       // Log to sister_app_sync_log
