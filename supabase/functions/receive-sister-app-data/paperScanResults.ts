@@ -225,3 +225,48 @@ export async function savePaperScanResult(
 
   return outcome;
 }
+
+/**
+ * Save a non-paper-scan grade (practice session, Scholar submission) keyed on the
+ * same source_ref so a repeated send updates instead of duplicating.
+ * The ref is stored as a "[ref:...]" tag inside grade_justification, since
+ * grade_history has no dedicated column for it.
+ */
+export async function saveGradeDeduped(
+  supabaseAdmin: any,
+  row: Record<string, any>,
+  sourceRef: string | null,
+  eventAt: string
+): Promise<{ saved: boolean; updated: boolean; error?: string }> {
+  const gradeRow = {
+    ...row,
+    created_at: eventAt,
+    grade_justification: sourceRef
+      ? `${row.grade_justification || ''} [ref:${sourceRef}]`.trim()
+      : row.grade_justification,
+  };
+
+  if (sourceRef) {
+    const { data: found } = await supabaseAdmin
+      .from('grade_history')
+      .select('id')
+      .eq('teacher_id', row.teacher_id)
+      .eq('student_id', row.student_id)
+      .ilike('grade_justification', `%[ref:${sourceRef}]%`)
+      .maybeSingle();
+
+    if (found?.id) {
+      const { error } = await supabaseAdmin
+        .from('grade_history')
+        .update(gradeRow)
+        .eq('id', found.id);
+      if (error) return { saved: false, updated: false, error: error.message };
+      return { saved: true, updated: true };
+    }
+  }
+
+  const { error } = await supabaseAdmin.from('grade_history').insert(gradeRow);
+  if (error) return { saved: false, updated: false, error: error.message };
+  return { saved: true, updated: false };
+}
+
