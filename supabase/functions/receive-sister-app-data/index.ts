@@ -14,7 +14,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveStudent, type ResolutionOutcome } from "./studentResolution.ts";
-import { savePaperScanResult, buildJustification } from "./paperScanResults.ts";
+import { savePaperScanResult, buildJustification, resolveSourceRef, resolveEventTimestamp, saveGradeDeduped } from "./paperScanResults.ts";
 
 // -----------------------------------------------------------------------------
 // CORS HEADERS
