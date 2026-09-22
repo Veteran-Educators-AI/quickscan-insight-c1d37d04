@@ -124,7 +124,9 @@ export async function savePaperScanResult(
       raw_score_earned: itemsCorrect,
       raw_score_possible: itemsAttempted,
       grade_justification: justification,
+      created_at: eventAt,
     };
+
 
     if (gradeHistoryId) {
       const { error } = await supabaseAdmin
