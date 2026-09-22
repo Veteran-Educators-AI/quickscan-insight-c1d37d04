@@ -1043,7 +1043,8 @@ serve(async (req) => {
               teacherId,
               resolvedStudent.resolvedId,
               singleResolution.classId,
-              (body.data || {}) as Record<string, any>
+              (body.data || {}) as Record<string, any>,
+              (body as any)?.source_ref
             );
             if (savedPaper.gradeSaved) outcomeGradeSaved = true;
             processedResult = {
@@ -1066,23 +1067,27 @@ serve(async (req) => {
               ? `Practice session completed on Scholar: ${body.data?.activity_name || topicName} (${(body.data as any)?.questions_correct || '?'}/${(body.data as any)?.questions_attempted || '?'} correct)`
               : `Synced from sister app: ${body.data?.activity_name || body.action}`;
 
-            const { error: gradeError } = await supabaseAdmin
-              .from('grade_history')
-              .insert({
+            const gradeResult = await saveGradeDeduped(
+              supabaseAdmin,
+              {
                 student_id: resolvedStudent.resolvedId,
                 teacher_id: teacherId,
                 topic_name: topicName,
                 grade: score,
                 grade_justification: justification,
-              });
+              },
+              resolveSourceRef((body.data || {}) as Record<string, any>, (body as any)?.source_ref),
+              resolveEventTimestamp((body.data || {}) as Record<string, any>)
+            );
 
-            if (gradeError) {
-              console.error('Error saving grade:', gradeError);
-              processedResult = { grade_save_error: gradeError.message };
+            if (!gradeResult.saved) {
+              console.error('Error saving grade:', gradeResult.error);
+              processedResult = { grade_save_error: gradeResult.error };
             } else {
-              console.log(`Grade saved for ${body.action}: student=${resolvedStudent.resolvedId}, topic=${topicName}, score=${score}`);
-              processedResult = { grade_saved: true, action: body.action };
+              console.log(`Grade saved for ${body.action}: student=${resolvedStudent.resolvedId}, topic=${topicName}, score=${score}, updated=${gradeResult.updated}`);
+              processedResult = { grade_saved: true, grade_updated: gradeResult.updated, action: body.action };
             }
+
           } else {
             console.log(`No score/topic for ${body.action}: score=${score}, topic=${topicName}, data_keys=${Object.keys(body.data || {}).join(',')}`);
             
