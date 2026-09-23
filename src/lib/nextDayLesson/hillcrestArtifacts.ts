@@ -297,7 +297,11 @@ export function worksheetHtml(draft: NextDayDraft) {
 export function exitTicketsHtml(draft: NextDayDraft) {
   const course = courseOf(draft);
   const period = periodDigit(draft) || 'the digit';
-  const renderSlip = (form: 'A' | 'B') => `<div class="slip">${head(`${course} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} &middot; ${esc(draft.nextLessonDate)} &middot; Form ${form}`, `Exit Ticket &mdash; ${esc(draft.exitTicket.title || draft.nextLessonTitle)}`)}<p class="sans">Name ${F('l')} &nbsp; Period <span class="pbox"></span> Date ${F()}</p><p class="sans" style="font-size:8.4pt">In the box: write ${esc(period)} (your class period, not your grade). A blank answer tells me something different from a wrong answer.</p><div class="qs3">${draft.exitTicket.items.slice(0, 3).map((q, i) => `<div class="q"><b>${i + 1}</b><span class="math">${math(q.prompt)}</span></div><div class="ruleline"></div>`).join('')}</div><p class="sans" style="margin-top:8px">How sure are you? (circle) &nbsp; 1 not yet &nbsp; 2 a little &nbsp; 3 mostly &nbsp; 4 I could teach it</p></div>`;
+  const formOf = (form: 'A' | 'B') => (form === 'B' && draft.exitTicketFormB ? draft.exitTicketFormB : draft.exitTicket);
+  const renderSlip = (form: 'A' | 'B') => {
+    const ticket = formOf(form);
+    return `<div class="slip">${head(`${course} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} &middot; ${esc(draft.nextLessonDate)} &middot; Form ${form}`, `Exit Ticket &mdash; ${esc(ticket.title || draft.nextLessonTitle)}`)}<p class="sans">Name ${F('l')} &nbsp; Period <span class="pbox"></span> Date ${F()}</p><p class="sans" style="font-size:8.4pt">In the box: write ${esc(period)} (your class period, not your grade). A blank answer tells me something different from a wrong answer.</p><div class="qs3">${ticket.items.slice(0, 3).map((q, i) => `<div class="q"><b>${i + 1}</b><span class="math">${math(q.prompt)}</span></div><div class="ruleline"></div><div class="ruleline"></div>`).join('')}</div><p class="sans" style="margin-top:8px">How sure are you? (circle) &nbsp; 1 not yet &nbsp; 2 a little &nbsp; 3 mostly &nbsp; 4 I could teach it</p></div>`;
+  };
   return H + '<style>@page{margin:6mm 11mm}.slip{font-size:11pt}</style>' + renderSlip('A') + renderSlip('B') + E;
 }
 
@@ -305,7 +309,9 @@ export function answerKeyHtml(draft: NextDayDraft) {
   const course = courseOf(draft);
   const rows = draft.worksheet.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.workedSolution || it.verify || '')}<br><b>${math(it.answer || (it.answerNumeric ?? ''))}</b></td><td>${math(it.answerNumeric ?? it.answer)}</td><td>${math(it.skillTag || 'Check the method and the final value.')}</td><td>${math(it.errorTagIfWrong || 'Record the written error.')}</td></tr>`).join('');
   const totals = draft.grouping.groups.map((group, index) => `<tr><td>${index + 1}</td><td>${group.itemNumbers.join(', ')}</td><td><b>${group.checkTotal}</b></td><td>${firstSixTotal(draft, group.itemNumbers)}</td></tr>`).join('');
-  const exitRows = draft.exitTicket.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.answer || (it.answerNumeric ?? ''))}</td><td>${math(it.skillTag || '')}</td></tr>`).join('');
+  const exitRowsFor = (ticket: NextDayDraft['exitTicket'], form: string) =>
+    ticket.items.map((it) => `<tr><td>Form ${esc(form)} &middot; ${it.itemNumber}</td><td><b>${math(it.answer || (it.answerNumeric ?? ''))}</b>${it.workedSolution ? `<br>${math(it.workedSolution)}` : ''}</td><td>${math(it.skillTag || '')}</td></tr>`).join('');
+  const exitRows = exitRowsFor(draft.exitTicket, 'A') + (draft.exitTicketFormB ? exitRowsFor(draft.exitTicketFormB, 'B') : '');
   return H + head(`Teacher copy &middot; ${course} &middot; ${esc(draft.className)} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} &middot; every value verified before print`, `${esc(draft.nextLessonTitle)} &mdash; Answer key and grading table`) +
     `<table><tr><th>#</th><th>Answer</th><th>Strip</th><th>What to look for</th><th>Wrong answer &rarr; note</th></tr>${rows}</table>` +
     `<h2>Check totals</h2><table><tr><th>Set</th><th>Items</th><th>Check total</th><th>First-six subtotal</th></tr>${totals}</table>` +
@@ -465,6 +471,53 @@ export function tipExceptionHtml(rows: Array<{ prescribed?: string; finding?: st
   if (broken.length === 0) return '';
   return `<div class="gbox k"><b>TIP alignment exception:</b> ${broken.map((row) => esc(row.prescribed || row.finding || 'row')).join('; ')}. The teacher can live with it for this lesson, change the pack, or change the rule.</div>`;
 }
+
+/** True when this lesson touches sequences — the four-rules section is required. */
+export function isSequencesLesson(draft: NextDayDraft) {
+  const haystack = `${draft.nextLessonTitle} ${draft.lessonPlan.aim} ${draft.lessonPlan.title} ${draft.worksheet.title}`.toLowerCase();
+  return /sequence|recursive|explicit|arithmetic|geometric|nth term/.test(haystack);
+}
+
+/**
+ * The four rules — required in every sequences lesson. Examples are read off
+ * the day's own worksheet so the plan and the sheet point at each other.
+ */
+export function fourRulesHtml(draft: NextDayDraft) {
+  if (!isSequencesLesson(draft)) return '';
+  const items = draft.worksheet.items;
+  const find = (re: RegExp) => items.find((i) => re.test(`${i.prompt} ${i.workedSolution || ''}`));
+  const arith = find(/20,\s*17,\s*14|\+\s*d|common difference|4n\s*\+\s*2/) || items[0];
+  const geo = find(/2\u207F|geometric|\u00B7\s*2|\u00B7\s*4|3,\s*6,\s*12/) || items.at(-1);
+  const findTerm = find(/which term|equals/) || items[0];
+  const ref = (i?: WorksheetItemDraft) => (i ? `[item ${i.itemNumber}]` : '');
+
+  return `<h2>The four rules &mdash; what to teach and how to say it</h2>` +
+    `<table><tr><th></th><th>Recursive &mdash; one step at a time</th><th>Explicit &mdash; straight to term n</th></tr>` +
+    `<tr><th><b>Arithmetic</b> (add the same number d)</th><td>a<sub>1</sub> = first term, a<sub>n</sub> = a<sub>n&minus;1</sub> + d</td><td>a<sub>n</sub> = a<sub>1</sub> + d(n &minus; 1)</td></tr>` +
+    `<tr><th><b>Geometric</b> (multiply by the same number r)</th><td>a<sub>1</sub> = first term, a<sub>n</sub> = r &middot; a<sub>n&minus;1</sub></td><td>a<sub>n</sub> = a<sub>1</sub> &middot; r<sup>n&minus;1</sup></td></tr></table>` +
+
+    `<h2>Recursive rule &mdash; arithmetic and geometric</h2><ul>` +
+    `<li><b>What it says:</b> start here, then do this to get the next term. It always has <b>two parts</b>: the first term and the step. A rule with only the step describes every sequence with that step and cannot say which one.</li>` +
+    `<li><b>Arithmetic:</b> the step is <i>add d</i>, and d is negative when the terms go down. ${ref(arith)} ${arith ? math(arith.prompt) : ''}</li>` +
+    `<li><b>Geometric:</b> the step is <i>multiply by r</i>. ${ref(geo)} ${geo ? math(geo.prompt) : ''}</li>` +
+    `<li><b>Say it out loud first:</b> &ldquo;The first term is ___ and each term is ___ the one before.&rdquo; A sentence like &ldquo;keep subtracting 3&rdquo; is not a rule.</li>` +
+    `<li><b>Its weakness:</b> reaching term 50 means walking through the 49 before it. That is why the explicit rule exists.</li></ul>` +
+
+    `<h2>Explicit rule &mdash; arithmetic and geometric</h2><ul>` +
+    `<li><b>What it says:</b> put in the position n, get the term.</li>` +
+    `<li><b>Arithmetic:</b> ${ref(arith)} ${arith ? `${math(arith.workedSolution || arith.verify)} &rarr; <b>${math(arith.answer)}</b>` : ''}</li>` +
+    `<li><b>Geometric:</b> ${ref(geo)} ${geo ? `${math(geo.workedSolution || geo.verify)} &rarr; <b>${math(geo.answer)}</b>` : ''}</li>` +
+    `<li><b>Why n &minus; 1, in both:</b> count the jumps, not the terms. The first term has had no jumps. Four terms, three arrows.</li>` +
+    `<li><b>The one check that catches the mistake:</b> put n = 1 in and you must get the first term back. 3 &middot; 2<sup>n</sup> gives 6 at n = 1, not 3 &mdash; the geometric version of the same n &minus; 1 slip.</li></ul>` +
+
+    `<h2>Moving between them, and telling them apart</h2><ul>` +
+    `<li><b>Arithmetic or geometric?</b> Subtract neighbouring terms &mdash; same every time &rarr; arithmetic, that number is d. Divide &mdash; same every time &rarr; geometric, that number is r. Neither &rarr; say neither.</li>` +
+    `<li><b>Recursive &rarr; explicit:</b> read a<sub>1</sub> and d (or r) off the recursive rule and substitute.</li>` +
+    `<li><b>Explicit &rarr; recursive:</b> the coefficient of n is d; put n = 1 to get a<sub>1</sub>. ${ref(findTerm)}</li>` +
+    `<li><b>Where it goes next:</b> arithmetic is linear (d is the slope), geometric is exponential (r is the base); a sequence is only the points n = 1, 2, 3, &hellip;</li></ul>`;
+}
+
+
 
 export function lessonPlanHtml(draft: NextDayDraft) {
   const tipRows = tipAlignmentRows(draft);

@@ -681,39 +681,121 @@ export function exitTicketKeyPdf(draft: NextDayDraft): ExportFile {
 
 // -------------------------------------------------------------- who does which
 
+/** Short phrase for the board: the problem written out so students can start. */
+function boardPhrase(draft: NextDayDraft, itemNumber: number): string {
+  const found = draft.worksheet.items.find((i) => i.itemNumber === itemNumber);
+  if (!found) return `item ${itemNumber}`;
+  const shapeMatch = (found.skillTag || '').match(/[▲●■◆]/);
+  const shape = shapeMatch ? `${shapeMatch[0]} ` : '';
+  const text = (found.prompt || '').replace(/\s+/g, ' ').trim();
+  return `${shape}${text.length > 96 ? `${text.slice(0, 93)}…` : text}`;
+}
+
 export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile> {
   assertReadyForExport(draft);
   const pptx = mk();
   pptx.title = `${draft.className} — who does which problems`;
-  const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
+  const perStudent = draft.grouping.itemsPerStudent || draft.grouping.groups[0]?.itemNumbers.length || 8;
+  // The default group anyone with no paper joins. Never labelled as such on the board.
+  const defaultGroup = draft.grouping.groups[1] || draft.grouping.groups[0];
 
   const firstSlide = pptx.addSlide();
   firstSlide.background = { color: 'FFFFFF' };
-  firstSlide.addText('Find your name. Do the 8 items next to it.', { x: 0.75, y: 1.55, w: 11.7, h: 0.75, fontSize: 34, bold: true, color: INK, fontFace: 'Georgia', align: 'center' });
-  firstSlide.addText('Everyone does 8. Everyone checks a total.', { x: 0.75, y: 2.55, w: 11.7, h: 0.45, fontSize: 20, color: MUTE, fontFace: 'Arial', align: 'center' });
-  firstSlide.addNotes('[Format: the board version.] Put this on the board as students come in. Names, item numbers, and totals only.');
+  firstSlide.addText(`Find your name. Do the ${perStudent} problems next to it.`, { x: 0.75, y: 1.55, w: 11.7, h: 0.75, fontSize: 34, bold: true, color: INK, fontFace: 'Georgia', align: 'center' });
+  firstSlide.addText(`Everyone does ${perStudent}. Everyone checks a total. Leave SET blank on the strip.`, { x: 0.75, y: 2.55, w: 11.7, h: 0.45, fontSize: 20, color: MUTE, fontFace: 'Arial', align: 'center' });
+  firstSlide.addNotes('[Format: the board version.] Put this on the board as students come in. Names, item numbers, and totals only — no set numbers, no reasons, no scores. Tell students to leave SET blank on the printed strip.');
 
-  const boardSlide = base(pptx, `${periodOf(draft)} · find your name`, 'WORKSHEET SIDES 3–4', periodOf(draft).toUpperCase());
-  let y = 1.6;
-  draft.grouping.groups.forEach((group) => {
-    const names = group.students.map(hillcrestStudentBoardName);
-    const boxH = 0.5 + 0.36 * Math.max(1, Math.ceil(names.length / 3));
-    boardSlide.addShape(pptx.ShapeType.rect, { x: 0.75, y, w: 11.85, h: boxH, fill: { color: SOFT }, line: { color: INK, width: 1 } });
-    boardSlide.addText(`Items ${group.itemNumbers.join(', ')} · check total ${group.checkTotal}`, { x: 1.0, y: y + 0.14, w: 11.35, h: 0.25, fontSize: 13, bold: true, color: GOLD, fontFace: 'Arial' });
-    boardSlide.addText(names.join('    ·    ') || 'No names in this group', { x: 1.0, y: y + 0.48, w: 11.2, h: Math.max(0.3, boxH - 0.55), fontSize: 17, color: INK, fontFace: 'Arial', fit: 'shrink' });
-    y += boxH + 0.12;
+  // One slide per group that actually has students on it.
+  const shown = draft.grouping.groups.filter((group) => group.students.length > 0);
+  shown.forEach((group) => {
+    const names = group.students.map(hillcrestStudentBoardName).map((n) => n.replace(/ /g, '\u00A0'));
+    const slide = base(
+      pptx,
+      `${periodOf(draft)} — your ${perStudent} problems`,
+      'WORKSHEET SIDES 3–4',
+      periodOf(draft).toUpperCase()
+    );
+
+    const bandH = 0.5 + 0.3 * Math.max(1, Math.ceil(names.length / 4));
+    slide.addShape(pptx.ShapeType.rect, { x: 0.7, y: 1.5, w: 11.95, h: bandH, fill: { color: SOFT }, line: { color: INK, width: 1 } });
+    slide.addText('If your name is here:', { x: 0.95, y: 1.62, w: 11.4, h: 0.26, fontSize: 14, bold: true, color: GOLD, fontFace: 'Arial' });
+    slide.addText(names.join('   ·   ') || ' ', { x: 0.95, y: 1.95, w: 11.4, h: Math.max(0.3, bandH - 0.52), fontSize: 17, color: INK, fontFace: 'Arial', fit: 'shrink' });
+
+    const tableRows: any[] = [
+      [
+        { text: '#', options: { bold: true, fontSize: 14, fill: { color: 'EEEEEE' } } },
+        { text: 'Problem', options: { bold: true, fontSize: 14, fill: { color: 'EEEEEE' } } },
+      ],
+      ...group.itemNumbers.map((n) => [
+        { text: String(n), options: { fontSize: 14, bold: true } },
+        { text: boardPhrase(draft, n), options: { fontSize: 14 } },
+      ]),
+      [
+        { text: '✓', options: { fontSize: 14, bold: true } },
+        { text: `Your ${perStudent} answers add up to ${group.checkTotal}`, options: { fontSize: 14, bold: true } },
+      ],
+    ];
+    slide.addTable(tableRows, {
+      x: 0.7,
+      y: 1.5 + bandH + 0.15,
+      colW: [0.7, 11.25],
+      rowH: 0.42,
+      fontFace: 'Arial',
+      valign: 'middle',
+      border: { type: 'solid', color: '999999', pt: 1 },
+    });
+
+    if (defaultGroup && group.id === defaultGroup.id) {
+      slide.addText('Name not on any list? This is your list too.', { x: 7.4, y: 0.28, w: 5.2, h: 0.32, fontSize: 13, bold: true, color: RED, fontFace: 'Arial', align: 'right' });
+    }
+
+    foot(slide, dayFooterOf(draft));
+    slide.addNotes(
+      `[Format: the board version.] Items ${group.itemNumbers.join(', ')}; check total ${group.checkTotal}. No set numbers, no list numbers, no reasons, no scores — only names, item numbers and the check total. Tell students to leave SET blank on the strip.`
+    );
   });
-  if (fallback) boardSlide.addText(`Name not here? Items ${fallback.itemNumbers.join(', ')} (check total ${fallback.checkTotal})`, { x: 0.75, y: 6.55, w: 11.6, h: 0.3, fontSize: 14, bold: true, color: INK, fontFace: 'Arial' });
-  foot(boardSlide, dayFooterOf(draft));
-  boardSlide.addNotes('[Format: the board version.] No set numbers, no reasons, no scores — only names, item numbers and the check total.');
+
+  // Students with no results yet get the default list; named on their own slide.
+  if (draft.grouping.noResultsYet.length > 0 && defaultGroup) {
+    const slide = base(pptx, `${periodOf(draft)} — your ${perStudent} problems`, 'WORKSHEET SIDES 3–4', periodOf(draft).toUpperCase());
+    const names = draft.grouping.noResultsYet.map(studentBoardName).map((n) => n.replace(/ /g, '\u00A0'));
+    slide.addShape(pptx.ShapeType.rect, { x: 0.7, y: 1.5, w: 11.95, h: 1.1, fill: { color: SOFT }, line: { color: INK, width: 1 } });
+    slide.addText('If your name is here:', { x: 0.95, y: 1.62, w: 11.4, h: 0.26, fontSize: 14, bold: true, color: GOLD, fontFace: 'Arial' });
+    slide.addText(names.join('   ·   ') || ' ', { x: 0.95, y: 1.95, w: 11.4, h: 0.55, fontSize: 17, color: INK, fontFace: 'Arial', fit: 'shrink' });
+    slide.addText('Name not on any list? This is your list too.', { x: 7.4, y: 0.28, w: 5.2, h: 0.32, fontSize: 13, bold: true, color: RED, fontFace: 'Arial', align: 'right' });
+    slide.addTable(
+      [
+        [
+          { text: '#', options: { bold: true, fontSize: 14, fill: { color: 'EEEEEE' } } },
+          { text: 'Problem', options: { bold: true, fontSize: 14, fill: { color: 'EEEEEE' } } },
+        ],
+        ...defaultGroup.itemNumbers.map((n) => [
+          { text: String(n), options: { fontSize: 14, bold: true } },
+          { text: boardPhrase(draft, n), options: { fontSize: 14 } },
+        ]),
+        [
+          { text: '✓', options: { fontSize: 14, bold: true } },
+          { text: `Your ${perStudent} answers add up to ${defaultGroup.checkTotal}`, options: { fontSize: 14, bold: true } },
+        ],
+      ] as any,
+      { x: 0.7, y: 2.75, colW: [0.7, 11.25], rowH: 0.42, fontFace: 'Arial', valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 } }
+    );
+    foot(slide, dayFooterOf(draft));
+    slide.addNotes(`[Format: the board version.] Items ${defaultGroup.itemNumbers.join(', ')}; check total ${defaultGroup.checkTotal}. No paper handed in is not evidence of weakness — this is the default list. Leave SET blank on the strip.`);
+  }
 
   const done = base(pptx, 'Finished early?', 'BOARD DIRECTIONS');
   const items = draft.worksheet.items;
-  const square = items[10]?.itemNumber || items[0]?.itemNumber || 1;
-  const diamond = items[12]?.itemNumber || items[1]?.itemNumber || 2;
-  T(done, [`■ Do item ${square} first.`, `◆ Then do item ${diamond}.`, 'Write one sentence explaining how you checked it.'], { x: 1.0, y: 1.85, w: 10.8, h: 2.3, fontSize: 30, color: INK });
+  const pairing = items.filter((i) => /◆/.test(i.skillTag || '')).map((i) => i.itemNumber);
+  const square = pairing[0] ?? items.at(-2)?.itemNumber ?? items[0]?.itemNumber ?? 1;
+  const diamond = pairing[1] ?? items.at(-1)?.itemNumber ?? items[1]?.itemNumber ?? 2;
+  T(
+    done,
+    [`Do item ${square}: ${boardPhrase(draft, square)}`, `Then item ${diamond}: ${boardPhrase(draft, diamond)}`, 'Write one sentence explaining how you checked it.'],
+    { x: 1.0, y: 1.85, w: 10.8, h: 3.0, fontSize: 22, color: INK }
+  );
   foot(done, dayFooterOf(draft));
-  done.addNotes('[Format: the ■ → ◆ Set 4 pair.] The square task is first, then the diamond follow-up.');
+  done.addNotes(`[Format: the ■ → ◆ Set 4 pair.] Item ${square} first, then item ${diamond}. Both problems are written out so early finishers can start without asking.`);
 
   const data = (await pptx.write({ outputType: 'blob' })) as Blob;
   return { name: `${slug(draft.className)}-who-does-which.pptx`, blob: data };

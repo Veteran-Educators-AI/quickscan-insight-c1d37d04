@@ -118,6 +118,8 @@ export interface NextDayDraft {
   slides: SlideDraft[];
   worksheet: WorksheetDraft;
   exitTicket: ExitTicketDraft;
+  /** Optional second form with different questions (Form B). */
+  exitTicketFormB?: ExitTicketDraft;
   grouping: GroupingPlan;
   nextLessonTitle: string;
   nextLessonDate: string;

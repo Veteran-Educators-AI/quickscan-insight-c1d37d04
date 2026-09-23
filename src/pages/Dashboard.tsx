@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { RemediationCompletionsBadge } from '@/components/dashboard/RemediationCompletionsBadge';
 import { TomorrowsLessonsBand } from '@/components/dashboard/TomorrowsLessonsBand';
+import { TodaysBundleBand } from '@/components/dashboard/TodaysBundleBand';
 
 import { PendingScholarDataBadge } from '@/components/dashboard/PendingScholarDataBadge';
 import { VerificationStatsWidget } from '@/components/reports/VerificationStatsWidget';
@@ -167,7 +168,10 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        {/* Tomorrow's lesson packs — first thing on the page */}
+        {/* Today's Day 7 bundle — front and centre, above everything else */}
+        <TodaysBundleBand />
+
+        {/* Tomorrow's lesson packs */}
         <TomorrowsLessonsBand />
 
         {/* Header */}

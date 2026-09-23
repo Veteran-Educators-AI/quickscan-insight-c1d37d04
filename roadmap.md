@@ -30,6 +30,18 @@
 - [x] Preserve privacy, verification, no-guessing, no-delete, and no-publish rules
 
 
+## Job 6 — Day 7 bundle around a pre-printed worksheet (Wed 23 Sep)
+- [ ] Read all four skills (print-format, format-coverage, tip-alignment, lesson-content)
+- [ ] Build Day 7 Algebra II P5/P9 bundle around the printed "Worksheet 7" (10 items, repair R1-R3, sets of 6)
+- [ ] Verify all 10 item answers, 4 check totals, exit-ticket Form A/B answers independently
+- [ ] Match student names to roster exactly (no fuzzy match; surface unmatched)
+- [ ] Lesson plan with four-rules section, TIP alignment, computed 17-slide count
+- [ ] 17-slide deck: four-rules, vocabulary, minute badges, standards footers, TIP reference
+- [ ] Who Does Which: teacher copy + board deck (one slide per group per period, no set numbers)
+- [ ] Exit tickets Form A/B, answer key, all through hillcrest helpers
+- [ ] Put today's bundle front and centre on the home page
+- [ ] No publish to Live, no data deletion
+
 ## Job 5 — TIP alignment proof layer — done
 - [x] Replace lesson-plan format coverage with TIP alignment tables and source note
 - [x] Change deck teacher-reference slides to TIP alignment
