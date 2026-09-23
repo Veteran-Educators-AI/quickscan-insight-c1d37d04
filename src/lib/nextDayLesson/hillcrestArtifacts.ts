@@ -497,12 +497,13 @@ export function calendarLessonHtml(input: { className: string; dateLabel: string
     `<h2>The period</h2><table><tr><th>Min</th><th>What happens</th></tr><tr><td>5</td><td>Do now</td></tr><tr><td>10</td><td>Launch the new idea</td></tr><tr><td>15</td><td>Worked examples together</td></tr><tr><td>10</td><td>Independent practice</td></tr><tr><td>5</td><td>Exit ticket</td></tr></table><h2>Notes</h2><div class="gbox" style="height:160px"></div>` + E;
 }
 
-export function speakerNoteWithFormat(slide: SlideDraft, index: number) {
+export function speakerNoteWithFormat(slide: { kind: string; speakerNotes?: string }, index: number) {
   const existing = slide.speakerNotes?.trim() || 'Say the answers out loud and connect this slide to the printed material.';
   if (/^\[Format:/.test(existing)) return existing;
   const tagByKind: Record<string, string> = {
     title: 'pacing calendar and evidence source',
     'do-now': 'Side 1, section 1 - do now',
+    'key-vocabulary': 'Side 2 help card - key vocabulary',
     'reteach-worked': 'the real-paper item',
     teaching: `Side 1, section ${Math.min(4, index + 1)}`,
     'independent-work': 'Sides 3-4 - independent problem pool',
