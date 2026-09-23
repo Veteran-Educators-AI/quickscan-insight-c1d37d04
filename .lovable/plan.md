@@ -17,6 +17,11 @@ Make every next-day lesson artifact use the Hillcrest print/deck format exactly,
   5. lesson plan
   6. lesson slides PowerPoint
   7. Who Does Which board deck PowerPoint
+- Generate the format-coverage proof from the pack data:
+  - lesson-plan section with all 18 required rows
+  - final two teacher-reference slides in the lesson deck
+  - `[Format: ...]` opening tag on every other slide speaker note
+  - explicit `Not met` rows and teacher choice notes for format-rule exceptions
 - Update the home-page Tomorrow’s lessons cards so the date/topic remain visible and each of the seven files has its own direct download button.
 
 ## Rules to preserve
@@ -32,8 +37,9 @@ Make every next-day lesson artifact use the Hillcrest print/deck format exactly,
 - Existing next-day lesson draft data will be adapted into the Hillcrest artifact structures rather than creating a parallel lesson format.
 - The deck helpers will use pptxgenjs with a custom 13.333 × 7.5 layout, instance-based `ShapeType`, and safe text runs for subscripts/empty strings.
 - Existing stored packs may need regeneration to fully include the new four-set/check-total structures; the UI will block or show a clear unavailable state if verification data is incomplete.
+- Statistics packs will report non-integer-answer exceptions explicitly as `Not met` where the format rule cannot be satisfied, rather than hiding or softening the exception.
 
 ## Verification
 - Check the build log after edits.
 - Verify the home-page download controls are present.
-- Spot-check generated print/deck output paths for the Hillcrest structure and protected student-facing wording.
+- Spot-check generated print/deck output paths for the Hillcrest structure, protected student-facing wording, and generated format-coverage rows.
