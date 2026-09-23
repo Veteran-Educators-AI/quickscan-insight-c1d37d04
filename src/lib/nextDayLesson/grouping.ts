@@ -40,18 +40,18 @@ function pick(pool: number[], count: number, offset: number): number[] {
   return Array.from(new Set(out));
 }
 
-/** Choose the item numbers for each of the three groups from the pooled sheet. */
+/** Choose the item numbers for each of the four sets from the pooled sheet. */
 function itemSets(items: WorksheetItemDraft[]): number[][] {
   const repair = items.filter((i) => i.isRepair).map((i) => i.itemNumber);
   const rest = items.filter((i) => !i.isRepair).map((i) => i.itemNumber);
   const all = items.map((i) => i.itemNumber);
 
   const heaviestRepair = repair.length ? repair : all.slice(0, ITEMS_PER_STUDENT);
-  // Ordered pool: repair items first, then the rest. Each group takes a window
-  // of the pool (so the three sets really differ) and always keeps some repair
-  // work. Group 1 sits on the repair end; group 3 on the new-work end.
+  // Ordered pool: repair items first, then the rest. Each set takes a window
+  // of the pool (so the four sets really differ) and always keeps some repair
+  // work. Set 1 sits on the repair end; Set 4 on the new-work end.
   const ordered = [...heaviestRepair, ...rest.filter((n) => !heaviestRepair.includes(n))];
-  const step = Math.max(1, Math.floor(ordered.length / 3));
+  const step = Math.max(1, Math.floor(ordered.length / 4));
 
   const window = (offset: number, guaranteedRepair: number): number[] => {
     const set = new Set<number>(pick(heaviestRepair, Math.min(guaranteedRepair, heaviestRepair.length), offset));
@@ -70,7 +70,7 @@ function itemSets(items: WorksheetItemDraft[]): number[][] {
     return out.sort((a, b) => a - b);
   };
 
-  return [fill(window(0, 5)), fill(window(step, 3)), fill(window(step * 2, 1))];
+  return [fill(window(0, 5)), fill(window(step, 4)), fill(window(step * 2, 2)), fill(window(step * 3, 1))];
 }
 
 
@@ -87,8 +87,7 @@ export function buildGrouping(
   items: WorksheetItemDraft[],
   rosterStudents: { id: string; name: string; realName?: string }[]
 ): GroupingPlan {
-  const [setOne, setTwo, setThree] = itemSets(items);
-  const sets = [setOne, setTwo, setThree];
+  const sets = itemSets(items);
 
   const ranked = digest.students.slice().sort((a, b) => scoreOf(a) - scoreOf(b));
   const groups: StudentGroup[] = sets.map((itemNumbers, index) => ({
@@ -99,10 +98,10 @@ export function buildGrouping(
     students: [],
   }));
 
-  // Lowest scores get the repair-heavy set. Thirds, remainder to the lower sets.
-  const perGroup = Math.ceil(ranked.length / 3) || 1;
+  // Lowest scores get the repair-heavy set. Fourths, remainder to the lower sets.
+  const perGroup = Math.ceil(ranked.length / 4) || 1;
   ranked.forEach((student, index) => {
-    const groupIndex = Math.min(2, Math.floor(index / perGroup));
+    const groupIndex = Math.min(3, Math.floor(index / perGroup));
     groups[groupIndex].students.push({
       studentId: student.studentId,
       name: student.name,

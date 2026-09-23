@@ -270,7 +270,7 @@ function PackCard({
             <p className="text-muted-foreground">
               {draft.worksheet.items.length} worksheet questions (every answer checked) · each student works{' '}
               {draft.grouping.itemsPerStudent} · {draft.exitTicket.items.length}-question exit ticket ·{' '}
-              {draft.slides.length} slides
+              {draft.slides.length + 2} slides (last two teacher-reference)
             </p>
             <p className="flex flex-wrap gap-x-3 gap-y-1">
               {draft.grouping.groups.map((group) => (
