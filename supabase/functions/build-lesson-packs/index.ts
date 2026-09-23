@@ -42,7 +42,7 @@ function hashCode(str: string): number {
   return Math.abs(hash);
 }
 
-/** Pack drafts never carry a real name: code name if Scholar gave one, else an animal. */
+/** Screen-facing names stay code-name safe; board/teacher exports get realName separately. */
 function pseudonymiser(pseudonyms: Map<string, string | null>) {
   const used = new Set<string>();
   const cache = new Map<string, string>();
