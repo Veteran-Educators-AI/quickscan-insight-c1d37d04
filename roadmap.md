@@ -21,3 +21,10 @@
 - [x] Distribute: print pack in one tab, practice pushed to Scholar, board deck downloaded, all recorded
 - [x] Honest states: no results -> calendar lesson only; generating; distributed today
 - [x] Yesterday strip; "Save to tomorrow's card" on the draft screen
+
+## Job 4 — Hillcrest house-format daily bundle — in progress
+- [ ] Add verbatim `public/hillcrest-print.css` and Hillcrest print/deck helper modules
+- [ ] Route all seven daily artifacts through the Hillcrest format
+- [ ] Put all seven current-day bundle downloads front and centre on the home page
+- [ ] Add format coverage proof to lesson plans, decks, and speaker notes
+- [ ] Preserve privacy, verification, no-guessing, no-delete, and no-publish rules
