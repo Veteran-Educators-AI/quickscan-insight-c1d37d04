@@ -25,6 +25,7 @@ import { EditStudentDialog } from '@/components/classes/EditStudentDialog';
 import { SyncRosterToScholarButton } from '@/components/classes/SyncRosterToScholarButton';
 import { PushAssignmentDialog } from '@/components/reports/PushAssignmentDialog';
 import { PaperScanResultsPanel } from '@/components/reports/PaperScanResultsPanel';
+import { ResultsDigestPanel } from '@/components/reports/ResultsDigestPanel';
 
 interface Student {
   id: string;
@@ -489,7 +490,7 @@ export default function ClassDetail() {
 
         {/* Tabs for Students and Gradebook */}
         <Tabs defaultValue="students" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
             <TabsTrigger value="students" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Students ({students.length})
@@ -498,11 +499,19 @@ export default function ClassDetail() {
               <BookOpen className="h-4 w-4" />
               Gradebook
             </TabsTrigger>
+            <TabsTrigger value="digest" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Results Digest
+            </TabsTrigger>
             <TabsTrigger value="paper-scans" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Paper Scans
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="digest">
+            {id && <ResultsDigestPanel classId={id} className={classData?.name} />}
+          </TabsContent>
 
           <TabsContent value="paper-scans">
             {id && <PaperScanResultsPanel classId={id} title="Scanned paper results for this class" />}
