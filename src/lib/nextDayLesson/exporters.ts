@@ -440,44 +440,123 @@ export function presentationPdf(draft: NextDayDraft): ExportFile {
 
 // -------------------------------------------------------------------- worksheet
 
+const courseOf = (draft: NextDayDraft) =>
+  /stat/i.test(draft.className) ? 'Statistics' : /alg/i.test(draft.className) ? 'Algebra II' : draft.className;
+const standardsOf = (draft: NextDayDraft) => (draft.lessonPlan?.standards || []).join(', ');
+
 function worksheetHeader(w: PdfWriter, draft: NextDayDraft) {
-  w.text(draft.worksheet.title || draft.nextLessonTitle, { size: 18, bold: true });
-  w.text(`${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90 });
-  w.text('Name: ______________________________    Class period (digit): ____    Check total: ________', {
-    size: 10,
-    gap: 6,
-  });
-  if (draft.worksheet.instructions) w.text(draft.worksheet.instructions, { size: 10, color: 60 });
-  w.text(
-    `Work only the ${draft.grouping.itemsPerStudent} item numbers written on the board for you. Add your answers together — that sum is your check total.`,
-    { size: 10, color: 60, gap: 6 }
-  );
-  w.rule();
+  const doc = w.doc;
+  const title = draft.worksheet.title || draft.nextLessonTitle;
+  // running header, top right
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  doc.text(safe(`${courseOf(draft)} · ${title}`), PAGE_W - MARGIN, MARGIN - 14, { align: 'right' });
+  w.y = MARGIN + 10;
+  w.text(title, { size: 20, bold: true, gap: 2 });
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(11);
+  doc.setTextColor(60);
+  const stds = standardsOf(draft);
+  doc.text(safe(`${courseOf(draft)} · Practice sheet${stds ? ` · NYS ${stds}` : ''}`), MARGIN, w.y + 4);
+  w.y += 26;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(20);
+  doc.text('Name: _______________________________   ID: __________   Date: ______________   Period: ______', MARGIN, w.y);
+  w.y += 16;
+
+  // Directions box
+  const directions =
+    (draft.worksheet.instructions ? draft.worksheet.instructions + ' ' : '') +
+    `Everyone has the same sheet. Work only the ${draft.grouping.itemsPerStudent} items listed on your card (the item lists are also on the board). Write your final answers on the answer strip at the end and show your work under each item. When you finish, add your ${draft.grouping.itemsPerStudent} answers and compare with the CHECK total your teacher gives your set.`;
+  doc.setFontSize(10);
+  const lines = doc.splitTextToSize(safe(directions), PAGE_W - MARGIN * 2 - 16);
+  const h = 26 + lines.length * 13;
+  doc.setDrawColor(40);
+  doc.setLineWidth(0.8);
+  doc.rect(MARGIN, w.y, PAGE_W - MARGIN * 2, h);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Directions', MARGIN + 8, w.y + 15);
+  doc.setFont('helvetica', 'normal');
+  lines.forEach((l: string, i: number) => doc.text(l, MARGIN + 8, w.y + 29 + i * 13));
+  doc.setLineWidth(0.2);
+  w.y += h + 22;
+}
+
+function worksheetFooter(w: PdfWriter, draft: NextDayDraft) {
+  const doc = w.doc;
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(110);
+    const stds = standardsOf(draft);
+    if (stds) doc.text(safe(stds), MARGIN, PAGE_H - MARGIN / 2);
+    doc.text(`${p} / ${pages}`, PAGE_W - MARGIN, PAGE_H - MARGIN / 2, { align: 'right' });
+  }
 }
 
 export function worksheetPdf(draft: NextDayDraft): ExportFile {
   const w = new PdfWriter();
   worksheetHeader(w, draft);
+  const doc = w.doc;
+  const WORK = 120; // open work space under each item, like the printed sheets
   for (const item of draft.worksheet.items) {
-    // Keep the question and its answer box on the same page.
-    const promptLines = w.doc.splitTextToSize(`${item.itemNumber}.  ${item.prompt}`, PAGE_W - MARGIN * 2).length;
-    w.room(promptLines * 15 + 54 + 20);
-    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 12, gap: 2 });
-    w.box(54, 'show your work');
+    doc.setFontSize(12);
+    const body = doc.splitTextToSize(safe(item.prompt), PAGE_W - MARGIN * 2 - 24);
+    w.room(body.length * 15 + WORK);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20);
+    doc.text(`${item.itemNumber}.`, MARGIN + 4, w.y);
+    doc.setFont('helvetica', 'normal');
+    body.forEach((l: string, i: number) => doc.text(l, MARGIN + 24, w.y + i * 15));
+    w.y += body.length * 15 + WORK;
   }
+
+  // Answer strip
+  const n = draft.worksheet.items.length;
+  const cols = 7;
+  const rows = Math.ceil(n / cols);
+  const cellW = (PAGE_W - MARGIN * 2) / cols;
+  w.room(40 + rows * 34 + 30);
+  doc.setFillColor(55);
+  doc.rect(MARGIN, w.y, PAGE_W - MARGIN * 2, 20, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(255);
+  doc.text('Answer strip', MARGIN + 8, w.y + 14);
+  w.y += 20;
+  doc.setTextColor(20);
+  doc.setDrawColor(40);
+  for (let i = 0; i < n; i++) {
+    const r = Math.floor(i / cols), c = i % cols;
+    const x = MARGIN + c * cellW, y = w.y + r * 34;
+    doc.rect(x, y, cellW, 34);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(String(draft.worksheet.items[i].itemNumber), x + 4, y + 11);
+  }
+  w.y += rows * 34 + 18;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('My CHECK total: ____________', MARGIN, w.y);
+  w.y += 16;
+  worksheetFooter(w, draft);
   return { name: `${slug(draft.className)}-worksheet.pdf`, blob: w.blob() };
 }
 
 
 export async function worksheetDocx(draft: NextDayDraft): Promise<ExportFile> {
+  const stds = standardsOf(draft);
   const children: any[] = [
     docHeading(draft.worksheet.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
-    docText(`${draft.className} · ${draft.nextLessonDate}`),
-    docText('Name: ______________________________    Class period (digit): ____    Check total: ________'),
-    ...(draft.worksheet.instructions ? [docText(draft.worksheet.instructions)] : []),
+    docText(`${courseOf(draft)} · Practice sheet${stds ? ` · NYS ${stds}` : ''}`, { italics: true }),
+    docText('Name: ______________________________   ID: ________   Date: ____________   Period: ______'),
+    docText('Directions', { bold: true }),
     docText(
-      `Work only the ${draft.grouping.itemsPerStudent} item numbers written on the board for you. Add your answers together — that sum is your check total.`,
-      { italics: true }
+      `${draft.worksheet.instructions ? draft.worksheet.instructions + ' ' : ''}Everyone has the same sheet. Work only the ${draft.grouping.itemsPerStudent} items listed on your card (the item lists are also on the board). Write your final answers on the answer strip at the end and show your work under each item. When you finish, add your ${draft.grouping.itemsPerStudent} answers and compare with the CHECK total your teacher gives your set.`
     ),
   ];
   for (const item of draft.worksheet.items) {
@@ -543,39 +622,76 @@ export async function answerKeyDocx(draft: NextDayDraft): Promise<ExportFile> {
 
 function exitTicketHalf(w: PdfWriter, draft: NextDayDraft, top: number) {
   const doc = w.doc;
-  const height = PAGE_H / 2 - 30;
-  doc.setDrawColor(150);
-  doc.setLineDashPattern([4, 4], 0);
-  if (top === 1) doc.line(MARGIN / 2, PAGE_H / 2, PAGE_W - MARGIN / 2, PAGE_H / 2);
-  doc.setLineDashPattern([], 0);
+  const half = PAGE_H / 2;
+  const boxTop = top === 0 ? MARGIN / 2 : half + 12;
+  const boxH = half - MARGIN / 2 - 12;
+  const inner = PAGE_W - MARGIN * 2;
 
-  const baseY = top === 0 ? MARGIN : PAGE_H / 2 + 20;
+  // cut line
+  if (top === 1) {
+    doc.setDrawColor(120);
+    doc.setLineDashPattern([4, 3], 0);
+    doc.line(MARGIN / 2, half, PAGE_W - MARGIN / 2, half);
+    doc.setLineDashPattern([], 0);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(120);
+    doc.text('cut here', MARGIN / 2, half - 3);
+  }
+  // outer border
+  doc.setDrawColor(60);
+  doc.setLineWidth(0.8);
+  doc.rect(MARGIN - 10, boxTop, inner + 20, boxH);
+  doc.setLineWidth(0.2);
+
+  // dark banner label
+  const banner = safe((draft.exitTicket.title || 'Exit ticket').toUpperCase());
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(20);
-  doc.text(safe(draft.exitTicket.title || 'Exit ticket'), MARGIN, baseY);
-
-  doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(safe(`${draft.className} · ${draft.nextLessonDate}`), MARGIN, baseY + 14);
+  const bw = doc.getTextWidth(banner) + 16;
+  doc.setFillColor(50);
+  doc.rect(MARGIN, boxTop + 12, bw, 16, 'F');
+  doc.setTextColor(255);
+  doc.text(banner, MARGIN + 8, boxTop + 23.5);
 
+  // Name / Period / Date line
+  let y = boxTop + 50;
+  doc.setTextColor(20);
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Name: ____________________________', MARGIN, baseY + 32);
-  doc.roundedRect(PAGE_W - MARGIN - 150, baseY + 20, 150, 22, 3, 3);
-  doc.setFontSize(8);
-  doc.text('Class period (one digit):', PAGE_W - MARGIN - 144, baseY + 34);
+  doc.text('Name', MARGIN, y);
+  doc.text('Period — write the digit', MARGIN + inner * 0.52, y);
+  doc.text('Date', MARGIN + inner * 0.84, y);
+  doc.setDrawColor(40);
+  doc.line(MARGIN, y + 3, MARGIN + inner * 0.48, y + 3);
+  doc.line(MARGIN + inner * 0.52, y + 3, MARGIN + inner * 0.8, y + 3);
+  doc.line(MARGIN + inner * 0.84, y + 3, MARGIN + inner, y + 3);
+  y += 18;
 
-  let y = baseY + 58;
-  doc.setFontSize(11);
+  // intro line
+  const n = draft.exitTicket.items.length;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  const lead = 'Exit ticket — ';
+  doc.text(lead, MARGIN, y);
+  doc.setFont('helvetica', 'normal');
+  const intro = doc.splitTextToSize(
+    `Put your class period in that box, not your grade. ${n} questions, ${Math.max(3, n + 1)} minutes. Answer what you can — a blank tells me something too.`,
+    inner - doc.getTextWidth(lead)
+  );
+  intro.forEach((l: string, i: number) => doc.text(l, MARGIN + (i === 0 ? doc.getTextWidth(lead) : 0), y + i * 11));
+  y += intro.length * 11 + 14;
+
+  // questions with open space
+  const space = Math.max(40, (boxTop + boxH - 14 - y) / n - 16);
   for (const item of draft.exitTicket.items) {
-    const lines = doc.splitTextToSize(`${item.itemNumber}. ${safe(item.prompt)}`, PAGE_W - MARGIN * 2);
-    for (const line of lines) {
-      doc.text(line, MARGIN, y);
-      y += 14;
-    }
-    doc.setDrawColor(190);
-    doc.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, Math.min(46, (height - (y - baseY)) / 2), 3, 3);
-    y += 54;
+    doc.setFontSize(11);
+    const body = doc.splitTextToSize(safe(item.prompt), inner - 20);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${item.itemNumber}.`, MARGIN, y);
+    doc.setFont('helvetica', 'normal');
+    body.forEach((l: string, i: number) => doc.text(l, MARGIN + 18, y + i * 14));
+    y += body.length * 14 + space;
   }
 }
 
@@ -587,12 +703,16 @@ export function exitTicketPdf(draft: NextDayDraft): ExportFile {
 }
 
 export async function exitTicketDocx(draft: NextDayDraft): Promise<ExportFile> {
+  const n = draft.exitTicket.items.length;
   const half = (): any[] => [
-    docHeading(draft.exitTicket.title || 'Exit ticket', HeadingLevel.HEADING_2),
-    docText(`${draft.className} · ${draft.nextLessonDate}`),
-    docText('Name: ____________________________        Class period (one digit): [    ]'),
+    docText((draft.exitTicket.title || 'Exit ticket').toUpperCase(), { bold: true }),
+    docText('Name ______________________    Period — write the digit ______    Date __________'),
+    docText(
+      `Exit ticket — Put your class period in that box, not your grade. ${n} questions, ${Math.max(3, n + 1)} minutes. Answer what you can — a blank tells me something too.`,
+      { italics: true }
+    ),
     ...draft.exitTicket.items.flatMap((item) => [
-      docText(`${item.itemNumber}. ${item.prompt}`),
+      docText(`${item.itemNumber}.  ${item.prompt}`, { bold: true }),
       docText(' '),
       docText(' '),
       docText(' '),
