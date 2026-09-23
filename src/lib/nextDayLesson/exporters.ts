@@ -691,6 +691,10 @@ export async function zipAll(draft: NextDayDraft): Promise<ExportFile> {
 }
 
 export function download(file: ExportFile) {
+  if (file.blob.type.includes('html') && file.name.endsWith('.pdf')) {
+    file.blob.text().then((html) => openHillcrestHtml(html, file.name));
+    return;
+  }
   const url = URL.createObjectURL(file.blob);
   const anchor = document.createElement('a');
   anchor.href = url;
