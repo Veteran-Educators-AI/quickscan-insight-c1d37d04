@@ -454,6 +454,13 @@ export function presentationPdf(draft: NextDayDraft): ExportFile {
 const courseOf = (draft: NextDayDraft) =>
   /stat/i.test(draft.className) ? 'Statistics' : /alg/i.test(draft.className) ? 'Algebra II' : draft.className;
 const standardsOf = (draft: NextDayDraft) => (draft.lessonPlan?.standards || []).join(', ');
+const studentBoardName = (student: { name: string; realName?: string }) => student.realName?.trim() || student.name;
+const periodOf = (draft: NextDayDraft) => {
+  const match = draft.className.match(/period\s*(\d+)/i) || draft.className.match(/\bp\s*(\d+)/i);
+  return match ? `Period ${match[1]}` : draft.className;
+};
+const dayFooterOf = (draft: NextDayDraft) =>
+  [courseOf(draft), draft.dayNumber ? `Day ${draft.dayNumber}` : '', draft.nextLessonTitle].filter(Boolean).join(' · ');
 
 function worksheetHeader(w: PdfWriter, draft: NextDayDraft) {
   const doc = w.doc;
@@ -761,51 +768,70 @@ export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile>
   pptx.layout = 'LAYOUT_16x9';
   pptx.title = `${draft.className} — who does which problems`;
 
-  const cover = pptx.addSlide();
-  cover.background = { color: DECK_BG };
-  cover.addText('Today you work these problems', {
-    x: 0.6, y: 1.9, w: 8.8, h: 1.2, fontSize: 40, bold: true, color: 'FFFFFF', fontFace: 'Arial',
+  const BROWN = '8A5A2B';
+  const INK = '252525';
+  const MUTED = '646464';
+  const LINE = '777777';
+  const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
+  const firstSlide = pptx.addSlide();
+  firstSlide.background = { color: 'FFFFFF' };
+  firstSlide.addText('WORKSHEET SIDES 2-3', {
+    x: 0.72, y: 0.35, w: 2.4, h: 0.25, fontSize: 7.5, bold: true, color: MUTED, fontFace: 'Georgia',
   });
-  cover.addText(`${draft.className} · ${draft.nextLessonDate}`, {
-    x: 0.6, y: 3.2, w: 8.8, h: 0.5, fontSize: 20, color: DECK_ACCENT, fontFace: 'Arial',
+  firstSlide.addShape('rect' as any, { x: 7.05, y: 0.31, w: 1.9, h: 0.23, fill: { color: BROWN }, line: { color: BROWN } });
+  firstSlide.addText(periodOf(draft).toUpperCase(), {
+    x: 7.05, y: 0.325, w: 1.9, h: 0.18, fontSize: 7.5, bold: true, color: 'FFFFFF', fontFace: 'Georgia', align: 'center',
   });
-  cover.addNotes('Put this on the board as students come in. Read the group names, then the item numbers.');
+  firstSlide.addText(`${periodOf(draft)} · find your name`, {
+    x: 0.72, y: 0.58, w: 7.9, h: 0.45, fontSize: 22, bold: true, color: INK, fontFace: 'Georgia',
+  });
+  firstSlide.addShape('line' as any, { x: 0.72, y: 1.08, w: 8.15, h: 0, line: { color: 'BBBBBB', width: 0.7 } });
 
-  for (const group of draft.grouping.groups) {
-    const s = pptx.addSlide();
-    s.background = { color: 'FFFFFF' };
-    s.addText(group.label, {
-      x: 0.6, y: 0.4, w: 5.6, h: 0.8, fontSize: 34, bold: true, color: '10213A', fontFace: 'Arial',
+  const nameRows = (names: string[]) => {
+    const perLine = names.length > 6 ? 5 : 6;
+    const rows: string[] = [];
+    for (let i = 0; i < names.length; i += perLine) rows.push(names.slice(i, i + perLine).join('   ·   '));
+    return rows.join('\n');
+  };
+  const groupBox = (group: NextDayDraft['grouping']['groups'][number], y: number) => {
+    const names = group.students.map(studentBoardName);
+    const fontSize = names.length >= 8 ? 8.5 : names.length >= 6 ? 9.5 : 10.5;
+    firstSlide.addShape('rect' as any, { x: 0.72, y, w: 8.15, h: 0.82, fill: { color: 'F7F7F4', transparency: 12 }, line: { color: LINE, width: 0.75 } });
+    firstSlide.addText(`Items ${group.itemNumbers.join(', ')}     ·     check total ${group.checkTotal}`, {
+      x: 0.9, y: y + 0.1, w: 7.7, h: 0.17, fontSize: 9.5, bold: true, color: BROWN, fontFace: 'Georgia',
     });
-    s.addShape('roundRect' as pptxgen.ShapeType, {
-      x: 6.3, y: 0.4, w: 3.1, h: 1.5, fill: { color: 'EDF2F7' }, line: { color: 'CBD5E0', width: 1 },
+    firstSlide.addText(nameRows(names), {
+      x: 0.9, y: y + 0.35, w: 7.7, h: 0.34, fontSize, color: INK, fontFace: 'Arial',
     });
-    s.addText(`Problems\n${group.itemNumbers.join(', ')}`, {
-      x: 6.4, y: 0.5, w: 2.9, h: 0.9, fontSize: 18, bold: true, color: '10213A', fontFace: 'Arial', align: 'center',
+  };
+
+  draft.grouping.groups.slice(0, 3).forEach((group, index) => groupBox(group, 1.28 + index * 1.07));
+  if (fallback) {
+    firstSlide.addText(`Name not here? Items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, {
+      x: 0.86, y: 4.72, w: 7.7, h: 0.25, fontSize: 10, bold: true, color: INK, fontFace: 'Arial',
     });
-    s.addText(`Check total: ${group.checkTotal}`, {
-      x: 6.4, y: 1.45, w: 2.9, h: 0.35, fontSize: 14, color: '444444', fontFace: 'Arial', align: 'center',
-    });
-    s.addText(
-      group.students.map((st) => ({ text: st.name, options: { breakLine: true } })),
-      { x: 0.7, y: 1.5, w: 5.4, h: 3.4, fontSize: 20, color: '222222', fontFace: 'Arial', valign: 'top' }
-    );
-    s.addNotes(
-      `${group.label}: ${group.students.length} student(s), problems ${group.itemNumbers.join(', ')}, check total ${group.checkTotal}. Reasons stay off the board — see the teacher list.`
-    );
   }
+  firstSlide.addText(dayFooterOf(draft), { x: 0.86, y: 5.15, w: 5.8, h: 0.15, fontSize: 5.5, color: MUTED, fontFace: 'Arial' });
+  firstSlide.addNotes('Put this on the board as students come in. Use the real roster names shown here; reasons stay off the board and remain in the teacher list.');
 
   const last = pptx.addSlide();
   last.background = { color: 'FFFFFF' };
-  last.addText('See me for your problems', {
-    x: 0.6, y: 0.4, w: 8.8, h: 0.8, fontSize: 32, bold: true, color: '10213A', fontFace: 'Arial',
+  last.addText('Name not here?', {
+    x: 0.72, y: 0.58, w: 7.9, h: 0.5, fontSize: 22, bold: true, color: INK, fontFace: 'Georgia',
   });
+  last.addShape('line' as any, { x: 0.72, y: 1.12, w: 8.15, h: 0, line: { color: 'BBBBBB', width: 0.7 } });
   last.addText(
     draft.grouping.noResultsYet.length
-      ? draft.grouping.noResultsYet.map((s) => ({ text: s.name, options: { breakLine: true } }))
+      ? draft.grouping.noResultsYet.map((s) => ({ text: studentBoardName(s), options: { breakLine: true } }))
       : [{ text: 'Everyone has results — no one is waiting.', options: {} }],
-    { x: 0.7, y: 1.5, w: 8.6, h: 3.2, fontSize: 20, color: '222222', fontFace: 'Arial', valign: 'top' }
+    { x: 0.86, y: 1.55, w: 7.9, h: 2.9, fontSize: 17, color: INK, fontFace: 'Arial', valign: 'top' }
   );
+  if (fallback) {
+    last.addText(`Start with items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, {
+      x: 0.86, y: 4.7, w: 7.7, h: 0.25, fontSize: 10, bold: true, color: BROWN, fontFace: 'Arial',
+    });
+  }
+  last.addText(dayFooterOf(draft), { x: 0.86, y: 5.15, w: 5.8, h: 0.15, fontSize: 5.5, color: MUTED, fontFace: 'Arial' });
   last.addNotes('These students have no scanned results yet, or their paper is still unclaimed. Give them a set by hand and make sure their paper gets named.');
 
   const data = (await pptx.write({ outputType: 'blob' })) as Blob;
@@ -814,37 +840,80 @@ export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile>
 
 export function whoDoesWhichPdf(draft: NextDayDraft): ExportFile {
   const doc = new jsPDF({ unit: 'pt', orientation: 'landscape', format: [960, 540] });
+  const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
+  const footer = dayFooterOf(draft);
+  const namesToRows = (names: string[]) => {
+    const perLine = names.length > 6 ? 5 : 6;
+    const rows: string[] = [];
+    for (let i = 0; i < names.length; i += perLine) rows.push(names.slice(i, i + perLine).join('   ·   '));
+    return rows;
+  };
   const page = (title: string, names: string[], right?: string[]) => {
     doc.setFillColor('#FFFFFF');
     doc.rect(0, 0, 960, 540, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(34);
-    doc.setTextColor(16, 33, 58);
+    doc.setFontSize(28);
+    doc.setTextColor(37, 37, 37);
     doc.text(safe(title), 50, 80);
     if (right?.length) {
       doc.setFontSize(18);
-      doc.setTextColor(30);
+      doc.setTextColor(138, 90, 43);
       right.forEach((line, i) => doc.text(safe(line), 640, 80 + i * 26));
     }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(20);
     doc.setTextColor(30);
     names.slice(0, 14).forEach((name, i) => doc.text(safe(name), 60, 140 + i * 28));
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(safe(footer), 60, 505);
   };
 
-  page('Today you work these problems', [`${draft.className} · ${draft.nextLessonDate}`]);
-  for (const group of draft.grouping.groups) {
-    doc.addPage([960, 540], 'landscape');
-    page(group.label, group.students.map((s) => s.name), [
-      `Problems ${group.itemNumbers.join(', ')}`,
-      `Check total: ${group.checkTotal}`,
-    ]);
+  doc.setFillColor('#FFFFFF');
+  doc.rect(0, 0, 960, 540, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('WORKSHEET SIDES 2-3', 65, 45);
+  doc.setFillColor(138, 90, 43);
+  doc.rect(720, 38, 190, 18, 'F');
+  doc.setTextColor(255);
+  doc.text(periodOf(draft).toUpperCase(), 815, 51, { align: 'center' });
+  doc.setFontSize(30);
+  doc.setTextColor(37, 37, 37);
+  doc.text(`${periodOf(draft)} · find your name`, 65, 80);
+  doc.setDrawColor(187);
+  doc.line(65, 96, 910, 96);
+  draft.grouping.groups.slice(0, 3).forEach((group, index) => {
+    const y = 130 + index * 105;
+    doc.setDrawColor(119);
+    doc.setFillColor(247, 247, 244);
+    doc.rect(65, y, 845, 82, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(138, 90, 43);
+    doc.text(`Items ${group.itemNumbers.join(', ')}     ·     check total ${group.checkTotal}`, 84, y + 23);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(group.students.length >= 8 ? 11 : 13);
+    doc.setTextColor(37, 37, 37);
+    namesToRows(group.students.map(studentBoardName)).forEach((row, rowIndex) => doc.text(safe(row), 84, y + 48 + rowIndex * 18));
+  });
+  if (fallback) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(37, 37, 37);
+    doc.text(`Name not here? Items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, 84, 475);
   }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100);
+  doc.text(safe(footer), 84, 515);
+
   doc.addPage([960, 540], 'landscape');
   page(
-    'See me for your problems',
+    'Name not here?',
     draft.grouping.noResultsYet.length
-      ? draft.grouping.noResultsYet.map((s) => s.name)
+      ? draft.grouping.noResultsYet.map(studentBoardName)
       : ['Everyone has results — no one is waiting.']
   );
   return { name: `${slug(draft.className)}-who-does-which.pdf`, blob: doc.output('blob') };
@@ -857,7 +926,7 @@ function teacherRows(draft: NextDayDraft): string[][] {
   for (const group of draft.grouping.groups) {
     for (const student of group.students) {
       rows.push([
-        student.name,
+        studentBoardName(student),
         group.label,
         group.itemNumbers.join(', '),
         String(group.checkTotal),
@@ -866,7 +935,7 @@ function teacherRows(draft: NextDayDraft): string[][] {
     }
   }
   for (const student of draft.grouping.noResultsYet) {
-    rows.push([student.name, 'not set', '—', '—', 'No results received yet']);
+    rows.push([studentBoardName(student), 'not set', '—', '—', 'No results received yet']);
   }
   return rows;
 }
@@ -880,7 +949,7 @@ export function teacherListPdf(draft: NextDayDraft): ExportFile {
   for (const group of draft.grouping.groups) {
     w.heading(`${group.label} — items ${group.itemNumbers.join(', ')} — check total ${group.checkTotal}`);
     for (const student of group.students) {
-      w.text(`${student.name}${student.score !== null ? ` (${Math.round(student.score)}%)` : ''} — ${student.evidence}`, {
+      w.text(`${studentBoardName(student)}${student.score !== null ? ` (${Math.round(student.score)}%)` : ''} — ${student.evidence}`, {
         indent: 10,
         gap: 2,
         size: 10,
@@ -890,7 +959,7 @@ export function teacherListPdf(draft: NextDayDraft): ExportFile {
   if (draft.grouping.noResultsYet.length) {
     w.heading('No results received yet');
     for (const student of draft.grouping.noResultsYet) {
-      w.text(`${student.name} — set by hand; paper still to be claimed`, { indent: 10, gap: 2, size: 10 });
+      w.text(`${studentBoardName(student)} — set by hand; paper still to be claimed`, { indent: 10, gap: 2, size: 10 });
     }
   }
   return { name: `${slug(draft.className)}-teacher-list.pdf`, blob: w.blob() };
