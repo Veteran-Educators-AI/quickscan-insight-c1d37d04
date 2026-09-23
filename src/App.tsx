@@ -26,6 +26,7 @@ const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const Classes = React.lazy(() => import("./pages/Classes"));
 const ClassNew = React.lazy(() => import("./pages/ClassNew"));
 const ClassDetail = React.lazy(() => import("./pages/ClassDetail"));
+const NextDayLesson = React.lazy(() => import("./pages/NextDayLesson"));
 const Questions = React.lazy(() => import("./pages/Questions"));
 const QuestionNew = React.lazy(() => import("./pages/QuestionNew"));
 const Scan = React.lazy(() => import("./pages/Scan"));
@@ -175,6 +176,7 @@ function AppRoutes() {
         <Route path="/classes" element={<ProtectedRoute><Classes /></ProtectedRoute>} />
         <Route path="/classes/new" element={<ProtectedRoute><ClassNew /></ProtectedRoute>} />
         <Route path="/classes/:id" element={<ProtectedRoute><ClassDetail /></ProtectedRoute>} />
+        <Route path="/classes/:id/next-day-lesson" element={<ProtectedRoute><NextDayLesson /></ProtectedRoute>} />
         <Route path="/questions" element={<ProtectedRoute><Questions /></ProtectedRoute>} />
         <Route path="/questions/new" element={<ProtectedRoute><QuestionNew /></ProtectedRoute>} />
         <Route path="/assessments" element={<Navigate to="/questions" replace />} />
