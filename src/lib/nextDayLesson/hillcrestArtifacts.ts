@@ -25,7 +25,6 @@ const math = (value: unknown) =>
     .replace(/->/g, '&rarr;')
     .replace(/…/g, '&hellip;');
 
-const pct = (n: number | null | undefined) => (n === null || n === undefined ? 'not enough attempts' : `${n}%`);
 const courseOf = (draft: NextDayDraft) => /stat/i.test(draft.className) ? 'Statistics' : /alg/i.test(draft.className) ? 'Algebra II' : draft.className;
 const periodDigit = (draft: NextDayDraft) => {
   const match = draft.className.match(/period\s*(\d+)/i) || draft.className.match(/\bp\s*(\d+)/i);
@@ -90,7 +89,7 @@ export function worksheetHtml(draft: NextDayDraft) {
   const course = courseOf(draft);
   const title = draft.worksheet.title || draft.nextLessonTitle;
   const day = draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day not set';
-  const period = periodDigit(draft) || '&mdash;';
+  const period = periodDigit(draft) || 'the digit';
   const items = draft.worksheet.items.slice(0, 14);
   const side3 = items.slice(0, 7).map((it, i) => renderWorksheetItem(draft, it, i)).join('');
   const side4 = items.slice(7, 14).map((it, i) => renderWorksheetItem(draft, it, i + 7)).join('');
@@ -128,16 +127,16 @@ export function worksheetHtml(draft: NextDayDraft) {
 
 export function exitTicketsHtml(draft: NextDayDraft) {
   const course = courseOf(draft);
-  const period = periodDigit(draft) || '&mdash;';
+  const period = periodDigit(draft) || 'the digit';
   const renderSlip = (form: 'A' | 'B') => `<div class="slip">${head(`${course} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} &middot; ${esc(draft.nextLessonDate)} &middot; Form ${form}`, `Exit Ticket &mdash; ${esc(draft.exitTicket.title || draft.nextLessonTitle)}`)}<p class="sans">Name ${F('l')} &nbsp; Period <span class="pbox"></span> Date ${F()}</p><p class="sans" style="font-size:8.4pt">In the box: write ${esc(period)} (your class period, not your grade). A blank answer tells me something different from a wrong answer.</p><div class="qs3">${draft.exitTicket.items.slice(0, 3).map((q, i) => `<div class="q"><b>${i + 1}</b><span class="math">${math(q.prompt)}</span></div><div class="ruleline"></div>`).join('')}</div><p class="sans" style="margin-top:8px">How sure are you? (circle) &nbsp; 1 not yet &nbsp; 2 a little &nbsp; 3 mostly &nbsp; 4 I could teach it</p></div>`;
   return H + '<style>@page{margin:6mm 11mm}.slip{font-size:11pt}</style>' + renderSlip('A') + renderSlip('B') + E;
 }
 
 export function answerKeyHtml(draft: NextDayDraft) {
   const course = courseOf(draft);
-  const rows = draft.worksheet.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.workedSolution || it.verify || '')}<br><b>${math(it.answer || it.answerNumeric ?? '')}</b></td><td>${math(it.answerNumeric ?? it.answer)}</td><td>${math(it.skillTag || 'Check the method and the final value.')}</td><td>${math(it.errorTagIfWrong || 'Record the written error.')}</td></tr>`).join('');
+  const rows = draft.worksheet.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.workedSolution || it.verify || '')}<br><b>${math(it.answer || (it.answerNumeric ?? ''))}</b></td><td>${math(it.answerNumeric ?? it.answer)}</td><td>${math(it.skillTag || 'Check the method and the final value.')}</td><td>${math(it.errorTagIfWrong || 'Record the written error.')}</td></tr>`).join('');
   const totals = draft.grouping.groups.map((group, index) => `<tr><td>${index + 1}</td><td>${group.itemNumbers.join(', ')}</td><td><b>${group.checkTotal}</b></td><td>${firstSixTotal(draft, group.itemNumbers)}</td></tr>`).join('');
-  const exitRows = draft.exitTicket.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.answer || it.answerNumeric ?? '')}</td><td>${math(it.skillTag || '')}</td></tr>`).join('');
+  const exitRows = draft.exitTicket.items.map((it) => `<tr><td>${it.itemNumber}</td><td>${math(it.answer || (it.answerNumeric ?? ''))}</td><td>${math(it.skillTag || '')}</td></tr>`).join('');
   return H + head(`Teacher copy &middot; ${course} &middot; ${esc(draft.className)} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} &middot; every value verified before print`, `${esc(draft.nextLessonTitle)} &mdash; Answer key and grading table`) +
     `<table><tr><th>#</th><th>Answer</th><th>Strip</th><th>What to look for</th><th>Wrong answer &rarr; note</th></tr>${rows}</table>` +
     `<h2>Check totals</h2><table><tr><th>Set</th><th>Items</th><th>Check total</th><th>First-six subtotal</th></tr>${totals}</table>` +
@@ -213,7 +212,7 @@ export function lessonPlanHtml(draft: NextDayDraft) {
   const rows = formatCoverageRows(draft);
   const coverage = rows.map((row) => `<tr><td><b>${esc(row.element)}</b></td><td><span class="mono">${row.where}</span></td><td>${row.what}</td></tr>`).join('');
   const totalSlides = (draft.slides?.length || 0) + 2;
-  const materials = [`Slides (${totalSlides}, the last two teacher-reference &mdash; hide them before you present)`, 'Worksheet, four sides', 'Exit tickets, Form A and Form B', 'Who Does Which list and board deck', ...(draft.lessonPlan.materials || [])];
+  const materials = [`Slides (${totalSlides}, the last two teacher-reference — hide them before you present)`, 'Worksheet, four sides', 'Exit tickets, Form A and Form B', 'Who Does Which list and board deck', ...(draft.lessonPlan.materials || [])];
   return H + head(`Teacher copy &middot; ${esc(courseOf(draft))} &middot; ${esc(draft.className)} &middot; Hillcrest 28Q505 &middot; Mr. Francois`, `${esc(draft.nextLessonTitle)} &mdash; Lesson plan`) +
     `<table><tr><th>Date and topic</th><td>${esc(draft.nextLessonDate)} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day not set'} &middot; ${esc(draft.nextLessonTitle)}</td></tr><tr><th>Aim</th><td><b>${math(draft.lessonPlan.aim || draft.nextLessonTitle)}</b></td></tr><tr><th>Students will</th><td><ol><li>${math(draft.lessonPlan.objective || 'Repair the skill named by the last results.')}</li><li>Use the help card to complete assigned items.</li><li>Check answers against a total before handing in work.</li></ol></td></tr><tr><th>Built from</th><td>${builtFromLine(draft)}</td></tr><tr><th>Materials</th><td>${materials.map((m) => esc(m)).join('<br>')}</td></tr></table>` +
     `<h2>Standards</h2><p>${stdChips(draft) || '<span class="mono">Standards not supplied</span>'}</p>` +
