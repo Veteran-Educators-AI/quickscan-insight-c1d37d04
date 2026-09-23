@@ -1203,6 +1203,87 @@ export type Database = {
           },
         ]
       }
+      lesson_packs: {
+        Row: {
+          class_id: string
+          created_at: string
+          day_number: number | null
+          distributed_at: string | null
+          distribution: Json
+          draft: Json | null
+          error_message: string | null
+          id: string
+          lesson_title: string | null
+          pack_date: string
+          papers: number
+          source_worksheet_code: string | null
+          source_worksheet_date: string | null
+          source_worksheet_title: string | null
+          status: string
+          student_count: number
+          teacher_id: string
+          updated_at: string
+          what_this_fixes: string | null
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          day_number?: number | null
+          distributed_at?: string | null
+          distribution?: Json
+          draft?: Json | null
+          error_message?: string | null
+          id?: string
+          lesson_title?: string | null
+          pack_date: string
+          papers?: number
+          source_worksheet_code?: string | null
+          source_worksheet_date?: string | null
+          source_worksheet_title?: string | null
+          status?: string
+          student_count?: number
+          teacher_id: string
+          updated_at?: string
+          what_this_fixes?: string | null
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          day_number?: number | null
+          distributed_at?: string | null
+          distribution?: Json
+          draft?: Json | null
+          error_message?: string | null
+          id?: string
+          lesson_title?: string | null
+          pack_date?: string
+          papers?: number
+          source_worksheet_code?: string | null
+          source_worksheet_date?: string | null
+          source_worksheet_title?: string | null
+          status?: string
+          student_count?: number
+          teacher_id?: string
+          updated_at?: string
+          what_this_fixes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_packs_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lesson_packs_teacher_id_fkey"
+            columns: ["teacher_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_plans: {
         Row: {
           aim: string | null

@@ -23,6 +23,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import { RemediationCompletionsBadge } from '@/components/dashboard/RemediationCompletionsBadge';
+import { TomorrowsLessonsBand } from '@/components/dashboard/TomorrowsLessonsBand';
+
 import { PendingScholarDataBadge } from '@/components/dashboard/PendingScholarDataBadge';
 import { VerificationStatsWidget } from '@/components/reports/VerificationStatsWidget';
 import { StudentsNeedingHelpWidget } from '@/components/reports/StudentsNeedingHelpWidget';
@@ -165,7 +167,11 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="space-y-8">
+        {/* Tomorrow's lesson packs — first thing on the page */}
+        <TomorrowsLessonsBand />
+
         {/* Header */}
+
         <div className="animate-fade-in flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">

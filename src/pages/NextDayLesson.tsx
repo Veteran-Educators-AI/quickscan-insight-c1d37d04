@@ -52,6 +52,9 @@ import {
   CALL_LABEL,
   type ScanRow,
 } from '@/lib/resultsDigest';
+import { whatThisFixes } from '@/hooks/useLessonPacks';
+import { isoDate, nextSchoolDay } from '@/data/pacingCalendars';
+
 import { verifyItems } from '@/lib/nextDayLesson/verifyMath';
 import { buildGrouping, checkTotalFor } from '@/lib/nextDayLesson/grouping';
 import type { NextDayDraft, WorksheetItemDraft } from '@/lib/nextDayLesson/types';
@@ -97,6 +100,8 @@ export default function NextDayLesson() {
   const [draft, setDraft] = useState<NextDayDraft | null>(null);
   const [busyFile, setBusyFile] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [saving, setSaving] = useState(false);
+
 
   const { data: classRow } = useQuery({
     queryKey: ['next-day-class', id],
@@ -846,7 +851,46 @@ export default function NextDayLesson() {
                   Nothing has gone to students or back to Scholar. Press send when the draft is how you want it.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={unverifiedItems.length > 0 || saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      const { data: auth } = await supabase.auth.getUser();
+                      const { error } = await supabase.from('lesson_packs' as any).upsert(
+                        {
+                          teacher_id: auth.user!.id,
+                          class_id: id!,
+                          pack_date: isoDate(nextSchoolDay(new Date())),
+                          status: 'ready',
+                          lesson_title: draft.nextLessonTitle,
+                          source_worksheet_code: draft.builtFrom.worksheetCode,
+                          source_worksheet_title: draft.builtFrom.worksheetTitle,
+                          source_worksheet_date: draft.builtFrom.worksheetDate
+                            ? draft.builtFrom.worksheetDate.slice(0, 10)
+                            : null,
+                          papers: draft.builtFrom.papers,
+                          student_count: draft.builtFrom.studentCount,
+                          what_this_fixes: whatThisFixes(digest),
+                          draft: draft as any,
+                        },
+                        { onConflict: 'teacher_id,class_id,pack_date' }
+                      );
+                      if (error) throw error;
+                      toast.success("Saved to tomorrow's card on the home page.");
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : 'Could not save the pack.');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                  Save to tomorrow's card
+                </Button>
+
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button disabled={unverifiedItems.length > 0 || sent}>

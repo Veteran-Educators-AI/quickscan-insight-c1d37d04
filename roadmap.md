@@ -13,3 +13,11 @@
 - [x] Login hero line under the wordmark
 - [x] App header line under the wordmark (md and up)
 - [x] Dashboard subheading under the page title
+
+## Job 3 — "Tomorrow's lessons" band on the home page — done
+- [x] `lesson_packs` table (pack per class per day, status, distribution record)
+- [x] Pacing position from `src/data/pacingCalendars.ts` (anchors: ALG2P9 day 7, STATS7/8 day 17 on 2026-09-23)
+- [x] Band above everything on the dashboard, one card per class, downloads on the card
+- [x] Distribute: print pack in one tab, practice pushed to Scholar, board deck downloaded, all recorded
+- [x] Honest states: no results -> calendar lesson only; generating; distributed today
+- [x] Yesterday strip; "Save to tomorrow's card" on the draft screen

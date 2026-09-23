@@ -817,3 +817,107 @@ export function download(file: ExportFile) {
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+
+// ------------------------------------------------- one combined print-ready PDF
+
+/**
+ * Everything the printer needs in one document, in the order it is handed out:
+ * worksheet, exit ticket (two per page), then the teacher-only answer key.
+ */
+export function printPackPdf(draft: NextDayDraft): ExportFile {
+  const w = new PdfWriter();
+
+  worksheetHeader(w, draft);
+  for (const item of draft.worksheet.items) {
+    const promptLines = w.doc.splitTextToSize(`${item.itemNumber}.  ${item.prompt}`, PAGE_W - MARGIN * 2).length;
+    w.room(promptLines * 15 + 54 + 20);
+    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 12, gap: 2 });
+    w.box(54, 'show your work');
+  }
+
+  w.doc.addPage([PAGE_W, PAGE_H]);
+  w.y = MARGIN;
+  exitTicketHalf(w, draft, 0);
+  exitTicketHalf(w, draft, 1);
+
+  w.doc.addPage([PAGE_W, PAGE_H]);
+  w.y = MARGIN;
+  w.text('Answer key — teacher only', { size: 16, bold: true });
+  w.text(`${draft.worksheet.title} · ${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90 });
+  w.text(builtFromLine(draft), { size: 9, color: 110 });
+  w.rule();
+  for (const item of draft.worksheet.items) {
+    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 11, bold: true, gap: 2 });
+    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, gap: 2 });
+    w.text(`If wrong, record error tag: ${item.errorTagIfWrong || '(none given)'}`, { indent: 12, size: 10 });
+  }
+  w.rule();
+  w.heading('Check totals');
+  for (const group of draft.grouping.groups) {
+    w.text(`${group.label} — items ${group.itemNumbers.join(', ')} — check total ${group.checkTotal}`, { indent: 10, gap: 2 });
+  }
+  w.heading('Exit ticket answers');
+  for (const item of draft.exitTicket.items) {
+    w.text(`${item.itemNumber}. ${item.prompt}`, { size: 10, bold: true, gap: 2 });
+    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, size: 10 });
+  }
+
+  return { name: `${slug(draft.className)}-print-pack.pdf`, blob: w.blob() };
+}
+
+// ------------------------------------------ plain calendar lesson (no results)
+
+export interface CalendarLessonInput {
+  className: string;
+  dateLabel: string;
+  dayNumber: number | null;
+  title: string;
+  unitLabel: string | null;
+  standards: string[];
+}
+
+/**
+ * For a class with no results received: the calendar lesson only. It carries no
+ * percentages, no item calls and no student names, because there is no data —
+ * it is a blank frame for the teacher to teach from.
+ */
+export function calendarLessonPdf(input: CalendarLessonInput): ExportFile {
+  const w = new PdfWriter();
+  w.text(input.title, { size: 18, bold: true });
+  w.text(
+    `${input.className} · ${input.dateLabel}${input.dayNumber ? ` · Day ${input.dayNumber}` : ''}${
+      input.unitLabel ? ` · ${input.unitLabel}` : ''
+    }`,
+    { size: 10, color: 90 }
+  );
+  if (input.standards.length > 0) w.text(`Standards: ${input.standards.join(', ')}`, { size: 10, color: 90 });
+  w.text('No scored results have been received for this class, so this plan contains no class data — only the calendar lesson.', {
+    size: 10,
+    color: 110,
+  });
+  w.rule();
+  const timeline: [number, string][] = [
+    [5, 'Do now'],
+    [10, 'Launch — the new idea'],
+    [15, 'Worked examples together'],
+    [10, 'Independent practice'],
+    [5, 'Exit ticket'],
+  ];
+  w.heading('Period at a glance (45 minutes)');
+  for (const [minutes, label] of timeline) {
+    w.text(`${minutes} min — ${label}`, { indent: 10, gap: 2 });
+    w.box(28);
+  }
+  w.heading('Notes');
+  w.box(120);
+  return { name: `${slug(input.className)}-calendar-lesson.pdf`, blob: w.blob() };
+}
+
+/** Open a generated file in one new tab, ready for the printer. */
+export function openInNewTab(file: ExportFile) {
+  const url = URL.createObjectURL(file.blob);
+  const tab = window.open(url, '_blank');
+  if (!tab) URL.revokeObjectURL(url);
+  else setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return !!tab;
+}
