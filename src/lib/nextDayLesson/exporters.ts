@@ -63,7 +63,7 @@ const safe = (text: string): string =>
     .replace(/\u00b1/g, '+/-')
     .replace(/\u221a/g, 'sqrt')
     .replace(/\u03c0/g, 'pi')
-    .replace(/\u00b7/g, '*')
+    .replace(/\u00b7/g, '-')
     .replace(/\u2022/g, '-')
     .replace(/\u2026/g, '...')
     // Anything else outside Latin-1 would render as a stray glyph.
