@@ -49,8 +49,27 @@ const safe = (text: string): string =>
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/\u2212/g, '-')
+    .replace(/[\u2013\u2014]/g, '-')
     .replace(/\u00d7/g, 'x')
-    .replace(/\u00f7/g, '/');
+    .replace(/\u00f7/g, '/')
+    // Arrows and maths symbols the built-in PDF fonts cannot draw.
+    .replace(/[\u2192\u21d2\u27f6\u27f9]/g, '->')
+    .replace(/[\u2190\u21d0]/g, '<-')
+    .replace(/[\u2194\u21d4]/g, '<->')
+    .replace(/\u2264/g, '<=')
+    .replace(/\u2265/g, '>=')
+    .replace(/\u2260/g, '!=')
+    .replace(/\u2248/g, '~=')
+    .replace(/\u00b1/g, '+/-')
+    .replace(/\u221a/g, 'sqrt')
+    .replace(/\u03c0/g, 'pi')
+    .replace(/\u00b7/g, '*')
+    .replace(/\u2022/g, '-')
+    .replace(/\u2026/g, '...')
+    // Anything else outside Latin-1 would render as a stray glyph.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\u0000-\u00ff]/g, '');
+
 
 const slug = (text: string) => (text || 'file').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 
