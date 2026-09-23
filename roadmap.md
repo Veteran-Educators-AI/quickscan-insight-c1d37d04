@@ -28,3 +28,11 @@
 - [x] Put all seven current-day bundle downloads front and centre on the home page
 - [x] Add format coverage proof to lesson plans, decks, and speaker notes
 - [x] Preserve privacy, verification, no-guessing, no-delete, and no-publish rules
+
+
+## Job 5 — TIP alignment proof layer — done
+- [x] Replace lesson-plan format coverage with TIP alignment tables and source note
+- [x] Change deck teacher-reference slides to TIP alignment
+- [x] Restore deck standards footers, minute badges, and key vocabulary slide
+- [x] Regenerate slide counts and period slide ranges from the deck structure
+- [x] Keep no-publish and no-delete constraints
