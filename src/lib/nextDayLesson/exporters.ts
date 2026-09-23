@@ -43,6 +43,7 @@ import {
   lessonDeckSlideCount,
   lessonPeriodRows,
   lessonPlanHtml,
+  presentationPdfHtml,
   printPackHtml,
   setMap,
   speakerNoteWithFormat,
@@ -453,7 +454,7 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
 
 export function presentationPdf(draft: NextDayDraft): ExportFile {
   assertReadyForExport(draft);
-  return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
+  return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(presentationPdfHtml(draft)) };
 }
 
 // -------------------------------------------------------------------- worksheet
