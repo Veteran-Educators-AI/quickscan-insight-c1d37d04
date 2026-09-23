@@ -292,8 +292,10 @@ export function lessonPlanPdf(draft: NextDayDraft): ExportFile {
 export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
   assertReadyForExport(draft);
   const plan = draft.lessonPlan;
-  const coverage = formatCoverageRows(draft);
-  const totalSlides = (draft.slides?.length || 0) + 2;
+  const tipRows = tipAlignmentRows(draft);
+  const findingRows = tipFindingRows(draft);
+  const periodRows = lessonPeriodRows(draft);
+  const totalSlides = lessonDeckSlideCount(draft);
   const children: any[] = [
     docHeading(plan.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
     docText(`${draft.className} · ${draft.nextLessonDate} · ${plan.durationMinutes || 45} minutes`),
@@ -312,14 +314,23 @@ export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
     docText((plan.standards || []).join(', ') || 'Standards not supplied'),
     docHeading('The period'),
     docTable(
-      [['Minutes', 'Slides', 'What happens'], ...(plan.timeline || []).map((step, index) => [String(step.minutes), String(index + 1), `${step.label}: ${step.detail}`])],
+      [['Minutes', 'Slides', 'What happens'], ...periodRows.map((step) => [String(step.minutes), step.slides.replace(/&ndash;/g, '–'), `${step.label}: ${step.detail}`])],
       [1200, 1200, 7260]
     ),
-    docHeading('Format coverage — where each required element is done'),
-    docTable([['Required element', 'Where', 'Exactly what does it'], ...coverage.map((row) => [row.element, row.where.replace(/<[^>]*>/g, ''), row.what.replace(/<[^>]*>/g, '')])], [2800, 1800, 5060]),
-    ...(coverage.some((row) => row.met === false)
-      ? [docText('Format exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
+    docHeading('TIP alignment — what the plan prescribes and where it happens today'),
+    docText('The activities are the ones prescribed in the observation report; each row names the minutes in which the activity happens and the artifact that shows it.', { italics: true }),
+    docTable([['What the plan prescribes', 'Where it happens in this period', 'The artifact that evidences it'], ...tipRows.map((row) => [row.prescribed, row.met === false ? `Not met. ${row.where}` : row.where, row.artifact])], [2600, 3900, 3160]),
+    ...(tipRows.some((row) => row.met === false)
+      ? [docText('TIP alignment exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
       : []),
+    docHeading('The findings this lesson answers'),
+    docTable([['The finding, as written', 'What this lesson puts in front of the observer'], ...findingRows.map((row) => [row.finding, row.met === false ? `Not met. ${row.answer}` : row.answer])], [3600, 6060]),
+    ...(findingRows.some((row) => row.met === false)
+      ? [docText('Finding exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
+      : []),
+    docHeading('Source'),
+    docText(TIP_SOURCE_TEXT),
+    docText(`House format: ${houseFormatLine(draft)}`, { bold: true }),
     docHeading('Where this sits on the calendar'),
     docText(`Yesterday: ${draft.builtFrom.worksheetTitle}`),
     docText(`Today: ${draft.nextLessonTitle}`),
