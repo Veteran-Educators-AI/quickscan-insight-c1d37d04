@@ -1,0 +1,84 @@
+@page { size: 8.5in 11in; margin: 10mm 11mm 9mm 11mm; }
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Liberation Serif",Georgia,serif;font-size:9.5pt;line-height:1.3;color:#111}
+.sans,h1,h2,h3{font-family:"Liberation Sans",Arial,sans-serif}
+.head{background:#111;color:#fff;padding:5px 9px;margin-bottom:6px}
+.head .t{font-family:"Liberation Sans";font-size:12.4pt;font-weight:bold}
+.head .m{font-family:"Liberation Sans";font-size:7pt;letter-spacing:.7px;text-transform:uppercase;opacity:.87}
+.nameline{display:flex;gap:11px;font-family:"Liberation Sans";font-size:8.2pt;margin-bottom:7px}
+.nameline div{flex:1;border-bottom:1px solid #222;padding-bottom:1px}
+h2{font-family:"Liberation Sans";font-size:10.2pt;margin:8px 0 4px;padding:2.5px 7px;background:#e8e8e8;border-left:3.5px solid #111}
+h3{font-family:"Liberation Sans";font-size:9.2pt;margin:7px 0 3px}
+p{margin:3px 0}
+.side{font-family:"Liberation Sans";font-size:7pt;letter-spacing:1.1px;text-transform:uppercase;
+ color:#fff;background:#111;display:inline-block;padding:2px 8px;margin-bottom:5px}
+.side.own{background:#7a2020}
+.banner{border:1.4px solid #111;padding:4px 8px;margin:0 0 7px;font-family:"Liberation Sans";font-size:8.2pt}
+.fill{display:inline-block;border-bottom:1.1px solid #333;min-width:96px;height:13px;margin:0 2px}
+.fill.s{min-width:44px}.fill.l{min-width:176px}
+.gbox{border:1px solid #777;padding:5px 8px;margin:5px 0}
+.gbox.k{border-width:1.8px;border-color:#111}
+.gbox .cap{font-family:"Liberation Sans";font-size:7pt;text-transform:uppercase;letter-spacing:.7px;color:#666;margin-bottom:3px}
+.two{display:flex;gap:9px}.two>div{flex:1}
+.math{font-size:10.4pt}
+.mono{font-family:"Liberation Mono","Courier New",monospace;font-size:8.6pt}
+.qs3 .q{display:flex;gap:6px;margin:3px 0;align-items:baseline}
+.qs3 .q b{flex:0 0 auto;width:15px;height:15px;border-radius:50%;background:#111;color:#fff;
+ font-family:"Liberation Sans";font-size:7.6pt;text-align:center;line-height:15px}
+/* strips */
+.astrip{margin:5px 0 7px}
+.arow3{display:flex;align-items:flex-end}
+.lbl{font-family:"Liberation Sans";font-size:6.4pt;text-transform:uppercase;letter-spacing:.3px;color:#8a8a8a;
+ width:66px;flex:0 0 auto;text-align:right;padding-right:6px;padding-bottom:3px;white-space:nowrap}
+.pos{height:15px;border:1px dashed #999;margin:0 5px 3px;background:#fff;line-height:15px;
+ font-family:"Liberation Sans";font-size:8pt;text-align:center}
+.term{font-size:12.6pt;font-weight:bold;padding-bottom:2px}
+.dots{font-size:12.6pt;font-weight:bold;letter-spacing:1px;color:#888}
+.jb{height:13px;border-bottom:1.1px solid #333;margin:0 2px 0;text-align:center;
+ font-family:"Liberation Sans";font-size:8pt;line-height:13px;color:#a00}
+.qline{display:flex;gap:9px;font-family:"Liberation Sans";font-size:8pt;margin-top:3px;margin-left:66px}
+.qline span{flex:1;border-bottom:.9px solid #666;padding-bottom:1px}
+.item{margin:0 0 6px;page-break-inside:avoid}
+.item .n{font-family:"Liberation Sans";font-weight:bold;font-size:9.6pt;margin-right:4px}
+.work{border-bottom:1px dotted #999;height:16px;margin-top:4px}
+.work2{border-bottom:1px dotted #999;height:16px}
+table{width:100%;border-collapse:collapse;margin:4px 0 6px;font-size:8.8pt}
+th{background:#e8e8e8;font-family:"Liberation Sans";font-size:7.2pt;text-transform:uppercase;
+ letter-spacing:.3px;text-align:left;padding:3px 5px;border:.8px solid #888}
+td{padding:4px 5px;border:.8px solid #bbb;vertical-align:top}
+.ck{display:inline-block;width:10px;height:10px;border:1.1px solid #333;margin-right:5px;vertical-align:-1px}
+.std{font-family:"Liberation Sans";font-size:7.2pt;color:#444;background:#f2f2f2;border:.8px solid #ccc;
+ padding:1px 4px;display:inline-block;margin:0 2px 2px 0}
+.foot{margin-top:5px;padding-top:3px;border-top:.8px solid #bbb;font-family:"Liberation Sans";font-size:7pt;color:#666}
+.pb{page-break-before:always}
+.red{color:#a00}
+.astrip,.gbox,.item{page-break-inside:avoid}
+h2,h3{page-break-after:avoid}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.box4{border:1.4px solid #111;padding:4px 7px}
+.box4 .cap{font-family:"Liberation Sans";font-size:8pt;font-weight:bold;letter-spacing:.8px;text-transform:uppercase;margin-bottom:3px}
+table.sq{width:auto;margin:3px 0}
+table.sq td,table.sq th{width:38px;height:22px;text-align:center;border:1px solid #555;font-size:10pt;padding:1px}
+table.sq th{background:#eee;font-size:8pt;text-transform:none}
+.big{font-size:11pt}
+.item{border-top:.8px solid #ccc;padding-top:5px}
+.tag{font-family:"Liberation Sans";font-size:7.2pt;background:#eee;border:.8px solid #bbb;padding:0 4px;margin-left:4px;letter-spacing:.2px}
+.stepl{margin:3px 0 3px 18px;font-size:10pt}
+.ruleline{margin:5px 0 3px 18px;border-bottom:1.1px solid #333;height:22px;width:78%}
+.hint{margin:2px 0 0 18px;font-size:8.6pt;color:#444;font-style:italic}
+.flexg{display:flex;gap:10px;align-items:flex-start}
+.opts{margin:3px 0 0 18px;display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:10pt}
+.ref{border:1.2px dashed #555;padding:4px 7px;margin:4px 0;font-size:9.4pt}
+.stripbox{border:1.6px solid #111;padding:6px 9px}
+.stripgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px 8px;margin-top:5px}
+.stripgrid div{font-family:"Liberation Sans";font-size:9pt;border-bottom:1px solid #333;height:26px;padding-top:9px}
+.slip{height:5.25in;font-size:11.5pt;border-bottom:1.2px dashed #777;padding:4px 2px 0;position:relative}
+.slip:last-child{border-bottom:none}
+.pbox{display:inline-block;width:34px;height:24px;border:1.6px solid #111;vertical-align:middle;margin:0 4px}
+.tb{display:inline-block;width:42px;height:26px;border:1.2px solid #333;vertical-align:middle;margin:0 3px}
+.gap{display:flex;align-items:flex-end;margin:4px 0 4px 18px}
+.gap .c{text-align:center;width:52px}
+.gap .c .p{font-family:"Liberation Sans";font-size:8.5pt;color:#555}
+.gap .c .v{border:1.4px solid #111;height:28px;line-height:26px;font-size:12pt;font-weight:bold;margin:0 3px}
+.gap .c .v.e{border-style:dashed;border-color:#777}
+.gap .j{width:40px;text-align:center;font-family:"Liberation Sans";font-size:8pt;color:#a00;padding-bottom:4px}
