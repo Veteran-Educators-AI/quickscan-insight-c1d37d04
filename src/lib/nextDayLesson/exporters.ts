@@ -356,7 +356,7 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
   const kickerFor: Record<string, string> = {
     title: 'TODAY',
     'do-now': '5 MINUTES · INDIVIDUALLY, THEN PARTNER',
-    reteach: 'REPAIR · FROM YESTERDAY\'S PAPERS',
+    'reteach-worked': 'REPAIR · FROM YESTERDAY\'S PAPERS',
     teaching: 'NEW LEARNING · WE DO',
     'independent-work': 'INDEPENDENT PRACTICE · YOUR ITEMS ONLY',
     'exit-ticket': '4 MINUTES · ON YOUR OWN',
