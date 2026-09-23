@@ -257,13 +257,33 @@ function builtFromLine(draft: NextDayDraft): string {
   return `Built from results actually received: ${b.className} · ${b.worksheetCode} (${b.worksheetTitle}) · ${when} · ${b.papers} paper(s) from ${b.studentCount} student(s).`;
 }
 
+
+function assertReadyForExport(draft: NextDayDraft) {
+  const unchecked = [...(draft.worksheet.items || []), ...(draft.exitTicket.items || [])].filter((item) => item.verified !== true);
+  if (unchecked.length > 0) {
+    throw new Error(`This pack cannot be exported until every number is checked. Unchecked item(s): ${unchecked.map((i) => i.itemNumber).join(', ')}.`);
+  }
+  const badTotals = (draft.grouping.groups || []).filter((group) => {
+    const sum = group.itemNumbers.reduce((total, n) => {
+      const found = draft.worksheet.items.find((item) => item.itemNumber === n);
+      return total + (typeof found?.answerNumeric === 'number' ? found.answerNumeric : 0);
+    }, 0);
+    return Math.abs(Math.round(sum * 1000) / 1000 - group.checkTotal) > 1e-6;
+  });
+  if (badTotals.length > 0) {
+    throw new Error(`This pack cannot be exported because a check total is stale: ${badTotals.map((g) => g.label).join(', ')}.`);
+  }
+}
+
 // ------------------------------------------------------------------ lesson plan
 
 export function lessonPlanPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-lesson-plan.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
 }
 
 export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const plan = draft.lessonPlan;
   const coverage = formatCoverageRows(draft);
   const totalSlides = (draft.slides?.length || 0) + 2;
@@ -310,6 +330,7 @@ const DECK_BG = '10213A';
 const DECK_ACCENT = 'F2B237';
 
 export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const pptx = mk();
   pptx.author = 'Nycologic Ai';
   pptx.title = draft.lessonPlan.title || draft.nextLessonTitle;
@@ -351,7 +372,7 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
     const s = base(pptx, `Format coverage — ${pageIndex + 1} of 2`, 'TEACHER REFERENCE · NOT FOR DISPLAY', 'DO NOT PROJECT');
     s.addTable(
       [['Required element', 'Where it is done'], ...rows.map((row) => [row.element, row.where.replace(/<[^>]*>/g, '')])],
-      { x: 0.6, y: 1.68, w: 12.1, h: 4.9, colW: [4.6, 7.5], rowH: 0.5, fontSize: 14, valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial' }
+      { x: 0.6, y: 1.68, w: 12.1, h: 4.9, colW: [4.6, 7.5], rowH: 0.5, fontSize: 14, valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial' } as any
     );
     foot(s, 'Teacher reference · keep these two slides out of presentation mode');
     s.addNotes('These two slides are for you and for an observer. Hide them before you present.');
@@ -362,6 +383,7 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
 }
 
 export function presentationPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
 }
 
@@ -433,10 +455,12 @@ function worksheetFooter(w: PdfWriter, draft: NextDayDraft) {
 }
 
 export function worksheetPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-worksheet.pdf`, blob: hillcrestHtmlBlob(worksheetHtml(draft)) };
 }
 
 export async function worksheetDocx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const stds = standardsOf(draft);
   const children: any[] = [
     docHeading(draft.worksheet.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
@@ -466,10 +490,12 @@ function keyRows(items: WorksheetItemDraft[]): string[][] {
 }
 
 export function answerKeyPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-answer-key.pdf`, blob: hillcrestHtmlBlob(answerKeyHtml(draft)) };
 }
 
 export async function answerKeyDocx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const children: any[] = [
     docHeading('Answer key — teacher only', HeadingLevel.HEADING_1),
     docText(`${draft.worksheet.title} · ${draft.className} · ${draft.nextLessonDate}`),
@@ -561,10 +587,12 @@ function exitTicketHalf(w: PdfWriter, draft: NextDayDraft, top: number) {
 }
 
 export function exitTicketPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-exit-ticket.pdf`, blob: hillcrestHtmlBlob(exitTicketsHtml(draft)) };
 }
 
 export async function exitTicketDocx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const n = draft.exitTicket.items.length;
   const half = (): any[] => [
     docText((draft.exitTicket.title || 'Exit ticket').toUpperCase(), { bold: true }),
@@ -577,12 +605,14 @@ export async function exitTicketDocx(draft: NextDayDraft): Promise<ExportFile> {
 }
 
 export function exitTicketKeyPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-exit-ticket-key.pdf`, blob: hillcrestHtmlBlob(answerKeyHtml(draft)) };
 }
 
 // -------------------------------------------------------------- who does which
 
 export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const pptx = mk();
   pptx.title = `${draft.className} — who does which problems`;
   const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
@@ -620,6 +650,7 @@ export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile>
 }
 
 export function whoDoesWhichPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-who-does-which.pdf`, blob: hillcrestHtmlBlob(whoDoesWhichHtml(draft)) };
 }
 
@@ -645,10 +676,12 @@ function teacherRows(draft: NextDayDraft): string[][] {
 }
 
 export function teacherListPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-teacher-list.pdf`, blob: hillcrestHtmlBlob(teacherListHtml(draft)) };
 }
 
 export async function teacherListDocx(draft: NextDayDraft): Promise<ExportFile> {
+  assertReadyForExport(draft);
   const children: any[] = [
     docHeading('Who does which — teacher list', HeadingLevel.HEADING_1),
     docText(`${draft.className} · ${draft.nextLessonDate}`),
@@ -712,6 +745,7 @@ export function download(file: ExportFile) {
  * worksheet, exit ticket (two per page), then the teacher-only answer key.
  */
 export function printPackPdf(draft: NextDayDraft): ExportFile {
+  assertReadyForExport(draft);
   return { name: `${slug(draft.className)}-print-pack.pdf`, blob: hillcrestHtmlBlob(printPackHtml(draft)) };
 }
 
