@@ -14,7 +14,6 @@
 
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
-import pptxgen from 'pptxgenjs';
 import {
   Document,
   Packer,
@@ -32,6 +31,24 @@ import {
   PageBreak,
 } from 'docx';
 import type { NextDayDraft, WorksheetItemDraft } from './types';
+import { hillcrestHtmlBlob, openHillcrestHtml } from '@/lib/hillcrestPdf';
+import { base, foot, GOLD, INK, LINE, MUTE, mk, RED, SOFT, T } from '@/lib/hillcrestDeck';
+import {
+  answerKeyHtml,
+  calendarLessonHtml,
+  exitTicketsHtml,
+  firstSixTotal,
+  formatCoverageRows,
+  lessonPlanHtml,
+  printPackHtml,
+  setMap,
+  speakerNoteWithFormat,
+  studentBoardName as hillcrestStudentBoardName,
+  teacherListHtml,
+  totalMap,
+  whoDoesWhichHtml,
+  worksheetHtml,
+} from './hillcrestArtifacts';
 
 export interface ExportFile {
   name: string;
@@ -243,94 +260,46 @@ function builtFromLine(draft: NextDayDraft): string {
 // ------------------------------------------------------------------ lesson plan
 
 export function lessonPlanPdf(draft: NextDayDraft): ExportFile {
-  const plan = draft.lessonPlan;
-  const w = new PdfWriter();
-  w.text(plan.title || draft.nextLessonTitle, { size: 20, bold: true });
-  w.text(`${draft.className} · ${draft.nextLessonDate} · ${plan.durationMinutes || 45} minutes`, { size: 11, color: 90 });
-  w.text(builtFromLine(draft), { size: 9, color: 110, gap: 8 });
-  w.rule();
-
-  w.text(`Aim: ${plan.aim}`, { bold: true });
-  if (plan.objective) w.text(`Objective: ${plan.objective}`);
-  if (plan.standards?.length) w.text(`Standards: ${plan.standards.join(', ')}`);
-
-  w.heading('Period at a glance');
-  for (const step of plan.timeline || []) {
-    w.text(`${step.minutes} min — ${step.label}: ${step.detail}`, { indent: 10, gap: 2 });
-  }
-
-  w.heading('Reteach — what today showed');
-  if (plan.reteach?.summary) w.text(plan.reteach.summary);
-  for (const item of plan.reteach?.items || []) {
-    w.text(
-      `Item ${item.itemNumber} — ${item.percentCorrect ?? 0}% correct${item.skillTag ? ` (${item.skillTag})` : ''}`,
-      { bold: true, gap: 2 }
-    );
-    if (item.wrongAnswersQuoted?.length) {
-      w.text(`Students wrote: ${item.wrongAnswersQuoted.map((a) => `"${a}"`).join(', ')}`, { indent: 14, gap: 2 });
-    }
-    if (item.whatWentWrong) w.text(`What went wrong: ${item.whatWentWrong}`, { indent: 14, gap: 2 });
-    if (item.howToRepair) w.text(`Repair: ${item.howToRepair}`, { indent: 14 });
-  }
-  for (const line of plan.reteach?.script || []) w.text(`• ${line}`, { indent: 10, gap: 2 });
-
-  if (plan.materials?.length) {
-    w.heading('Materials');
-    for (const m of plan.materials) w.text(`• ${m}`, { indent: 10, gap: 2 });
-  }
-  if (plan.differentiationNotes?.length) {
-    w.heading('Differentiation');
-    for (const d of plan.differentiationNotes) w.text(`• ${d}`, { indent: 10, gap: 2 });
-  }
-  if (plan.assessmentNote) {
-    w.heading('Assessment');
-    w.text(plan.assessmentNote);
-  }
-
-  return { name: `${slug(draft.className)}-lesson-plan.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-lesson-plan.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
 }
 
 export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
   const plan = draft.lessonPlan;
+  const coverage = formatCoverageRows(draft);
+  const totalSlides = (draft.slides?.length || 0) + 2;
   const children: any[] = [
     docHeading(plan.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
     docText(`${draft.className} · ${draft.nextLessonDate} · ${plan.durationMinutes || 45} minutes`),
     docText(builtFromLine(draft), { italics: true }),
-    docHeading('Aim and standards'),
-    docText(`Aim: ${plan.aim}`),
-    ...(plan.objective ? [docText(`Objective: ${plan.objective}`)] : []),
-    ...(plan.standards?.length ? [docText(`Standards: ${plan.standards.join(', ')}`)] : []),
-    docHeading('Period at a glance'),
+    docHeading('Identity'),
     docTable(
-      [['Minutes', 'Segment', 'What happens'], ...(plan.timeline || []).map((s) => [String(s.minutes), s.label, s.detail])],
-      [1200, 2400, 5760]
+      [
+        ['Date and topic', `${draft.nextLessonDate}${draft.dayNumber ? ` · Day ${draft.dayNumber}` : ''} · ${draft.nextLessonTitle}`],
+        ['Aim', plan.aim || draft.nextLessonTitle],
+        ['Built from', builtFromLine(draft)],
+        ['Materials', `Slides (${totalSlides}, the last two teacher-reference — hide them before you present); worksheet sides; exit tickets; Who Does Which`],
+      ],
+      [2200, 7460]
     ),
-    docHeading('Reteach — what today showed'),
-    ...(plan.reteach?.summary ? [docText(plan.reteach.summary)] : []),
+    docHeading('Standards'),
+    docText((plan.standards || []).join(', ') || 'Standards not supplied'),
+    docHeading('The period'),
+    docTable(
+      [['Minutes', 'Slides', 'What happens'], ...(plan.timeline || []).map((step, index) => [String(step.minutes), String(index + 1), `${step.label}: ${step.detail}`])],
+      [1200, 1200, 7260]
+    ),
+    docHeading('Format coverage — where each required element is done'),
+    docTable([['Required element', 'Where', 'Exactly what does it'], ...coverage.map((row) => [row.element, row.where.replace(/<[^>]*>/g, ''), row.what.replace(/<[^>]*>/g, '')])], [2800, 1800, 5060]),
+    ...(coverage.some((row) => row.met === false)
+      ? [docText('Format exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
+      : []),
+    docHeading('Where this sits on the calendar'),
+    docText(`Yesterday: ${draft.builtFrom.worksheetTitle}`),
+    docText(`Today: ${draft.nextLessonTitle}`),
+    docText('Regents: Thursday 17 June 2027.'),
+    docHeading('Supports'),
+    ...(plan.differentiationNotes?.length ? plan.differentiationNotes.map(docBullet) : [docBullet('Side 2 help card, answer strip, and check totals.')]),
   ];
-
-  for (const item of plan.reteach?.items || []) {
-    children.push(
-      docText(
-        `Item ${item.itemNumber} — ${item.percentCorrect ?? 0}% correct${item.skillTag ? ` (${item.skillTag})` : ''}`,
-        { bold: true }
-      )
-    );
-    if (item.wrongAnswersQuoted?.length) {
-      children.push(docText(`Students wrote: ${item.wrongAnswersQuoted.map((a) => `"${a}"`).join(', ')}`, { indent: 360 }));
-    }
-    if (item.whatWentWrong) children.push(docText(`What went wrong: ${item.whatWentWrong}`, { indent: 360 }));
-    if (item.howToRepair) children.push(docText(`Repair: ${item.howToRepair}`, { indent: 360 }));
-  }
-  for (const line of plan.reteach?.script || []) children.push(docBullet(line));
-
-  if (plan.materials?.length) {
-    children.push(docHeading('Materials'), ...plan.materials.map(docBullet));
-  }
-  if (plan.differentiationNotes?.length) {
-    children.push(docHeading('Differentiation'), ...plan.differentiationNotes.map(docBullet));
-  }
-  if (plan.assessmentNote) children.push(docHeading('Assessment'), docText(plan.assessmentNote));
 
   return { name: `${slug(draft.className)}-lesson-plan.docx`, blob: await buildDocx(children) };
 }
@@ -341,112 +310,59 @@ const DECK_BG = '10213A';
 const DECK_ACCENT = 'F2B237';
 
 export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile> {
-  const pptx = new pptxgen();
-  pptx.layout = 'LAYOUT_16x9';
+  const pptx = mk();
   pptx.author = 'Nycologic Ai';
   pptx.title = draft.lessonPlan.title || draft.nextLessonTitle;
+  const footerText = `${courseOf(draft)} · ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} · ${draft.nextLessonTitle} · ${draft.nextLessonDate}`;
 
-  // Classroom deck style (matches the teacher's Lesson slides): light page,
-  // small teal kicker, teal title, pale content card, cream "sentence starters"
-  // side card, orange timer, footer with lesson/unit left and standards right.
-  const TEAL = '2F6F73';
-  const ORANGE = 'C9782B';
-  const CARD = 'E9EEF3';
-  const CREAM = 'F7F0DC';
-  const kickerFor: Record<string, string> = {
-    title: 'TODAY',
-    'do-now': '5 MINUTES · INDIVIDUALLY, THEN PARTNER',
-    'reteach-worked': 'REPAIR · FROM YESTERDAY\'S PAPERS',
-    teaching: 'NEW LEARNING · WE DO',
-    'independent-work': 'INDEPENDENT PRACTICE · YOUR ITEMS ONLY',
-    'exit-ticket': '4 MINUTES · ON YOUR OWN',
-    debrief: 'DEBRIEF · WHOLE CLASS',
-  };
-  const timerFor: Record<string, string> = { 'do-now': '5:00', 'independent-work': '15:00', 'exit-ticket': '4:00' };
-  const starters = ['"I notice that..."', '"I wonder whether..."', '"The number that would help me is... because..."', '"I disagree because..."'];
-  const withStarters = new Set(['do-now', 'debrief', 'teaching']);
-  const stds = standardsOf(draft);
-  const footerLeft = `${draft.nextLessonTitle}${draft.lessonPlan?.title && draft.lessonPlan.title !== draft.nextLessonTitle ? ' · ' + draft.lessonPlan.title : ''} · ${courseOf(draft)}`;
-
-  for (const slide of draft.slides || []) {
-    const s = pptx.addSlide();
-    s.background = { color: 'FFFFFF' };
+  (draft.slides || []).forEach((slide, index) => {
     const kind = String(slide.kind);
+    if (kind === 'title') {
+      const s = pptx.addSlide();
+      s.background = { color: INK };
+      s.addText(slide.title || draft.nextLessonTitle, { x: 0.7, y: 1.15, w: 11.8, h: 1.1, fontSize: 46, bold: true, color: 'FFFFFF', fontFace: 'Georgia', margin: 0 });
+      s.addShape(pptx.ShapeType.rect, { x: 0.7, y: 2.45, w: 2.5, h: 0.04, fill: { color: 'FFFFFF' } });
+      s.addText(`${draft.className} · ${draft.dayNumber ? `Unit day ${draft.dayNumber}` : 'Unit day'} · ${draft.nextLessonDate} · Mr. Francois`, { x: 0.7, y: 2.72, w: 11.8, h: 0.35, fontSize: 14, color: LINE, fontFace: 'Arial', margin: 0 });
+      if (slide.bullets?.length) T(s, slide.bullets.slice(0, 3), { x: 0.7, y: 3.35, w: 10.8, h: 1.5, fontSize: 22, color: 'FFFFFF' });
+      foot(s, footerText);
+      s.addNotes(speakerNoteWithFormat(slide, index));
+      return;
+    }
+    const kickerByKind: Record<string, string> = { 'do-now': 'DO NOW', 'reteach-worked': 'REPAIR FROM YESTERDAY', teaching: `SIDE 1 · ${Math.min(4, index)}`, 'independent-work': 'SIDES 3–4', 'exit-ticket': 'EXIT TICKET', debrief: 'DEBRIEF' };
+    const tagByKind: Record<string, string> = { 'do-now': 'DO NOW', 'independent-work': 'SIDES 3–4', 'exit-ticket': 'EXIT TICKET' };
+    const s = base(pptx, slide.title || 'Lesson slide', kickerByKind[kind] || kind.toUpperCase(), tagByKind[kind]);
+    const bullets = (slide.bullets || []).slice(0, 5);
+    if (kind === 'reteach-worked') {
+      s.addShape(pptx.ShapeType.rect, { x: 0.75, y: 1.72, w: 11.8, h: 2.3, fill: { color: SOFT }, line: { color: RED, width: 1.1 } });
+      T(s, bullets, { x: 1.0, y: 1.95, w: 11.2, h: 1.9, fontSize: 23, color: INK });
+    } else {
+      T(s, bullets, { x: 0.85, y: 1.72, w: 7.2, h: 3.6, fontSize: kind === 'debrief' ? 20 : 24, color: INK });
+      if (['do-now', 'teaching', 'debrief'].includes(kind)) {
+        s.addShape(pptx.ShapeType.rect, { x: 8.45, y: 1.72, w: 3.45, h: 2.55, fill: { color: SOFT }, line: { color: SOFT } });
+        T(s, ['Sentence starters', 'I notice that...', 'The number that helps is...', 'I can check by...'], { x: 8.68, y: 1.95, w: 3.0, h: 2.1, fontSize: 15, color: INK, bold: false });
+      }
+    }
+    foot(s, footerText);
+    s.addNotes(speakerNoteWithFormat(slide, index));
+  });
 
-    s.addText((kickerFor[kind] || kind.toUpperCase()).toUpperCase(), {
-      x: 0.6, y: 0.3, w: 8.8, h: 0.3, fontSize: 10, bold: true, color: TEAL, fontFace: 'Calibri', charSpacing: 1,
-    });
-    s.addText(slide.title || '', {
-      x: 0.6, y: 0.55, w: 8.8, h: kind === 'title' ? 1.2 : 0.7,
-      fontSize: kind === 'title' ? 40 : 30, bold: true, color: TEAL, fontFace: 'Calibri', valign: 'top',
-    });
-
-    const side = withStarters.has(kind);
-    const cardW = side ? 6.1 : 8.8;
-    const cardY = kind === 'title' ? 1.9 : 1.45;
-    s.addShape('rect' as any, { x: 0.6, y: cardY, w: cardW, h: 3.0, fill: { color: CARD }, line: { color: CARD } });
-    const body = kind === 'title'
-      ? [`${draft.className} · ${draft.nextLessonDate}`, ...(slide.bullets || [])]
-      : slide.bullets || [];
-    s.addText(
-      body.map((b) => ({ text: b, options: { bullet: body.length > 1, breakLine: true } })),
-      { x: 0.8, y: cardY + 0.15, w: cardW - 0.4, h: 2.7, fontSize: 18, color: '4A5560', fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 6 }
+  const coverage = formatCoverageRows(draft);
+  [coverage.slice(0, 9), coverage.slice(9, 18)].forEach((rows, pageIndex) => {
+    const s = base(pptx, `Format coverage — ${pageIndex + 1} of 2`, 'TEACHER REFERENCE · NOT FOR DISPLAY', 'DO NOT PROJECT');
+    s.addTable(
+      [['Required element', 'Where it is done'], ...rows.map((row) => [row.element, row.where.replace(/<[^>]*>/g, '')])],
+      { x: 0.6, y: 1.68, w: 12.1, h: 4.9, colW: [4.6, 7.5], rowH: 0.5, fontSize: 14, valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial' }
     );
-
-    if (side) {
-      s.addShape('rect' as any, { x: 6.9, y: cardY, w: 2.5, h: 3.0, fill: { color: CREAM }, line: { color: CREAM } });
-      s.addText('Sentence starters', { x: 7.05, y: cardY + 0.1, w: 2.2, h: 0.35, fontSize: 12, bold: true, color: ORANGE, fontFace: 'Calibri' });
-      s.addText(
-        starters.map((t) => ({ text: t, options: { bullet: true, breakLine: true } })),
-        { x: 7.05, y: cardY + 0.5, w: 2.25, h: 2.4, fontSize: 11, color: '4A5560', fontFace: 'Calibri', valign: 'top' }
-      );
-    }
-
-    if (timerFor[kind]) {
-      s.addText(`⏱ ${timerFor[kind]}`, { x: 0.6, y: 4.6, w: 2, h: 0.35, fontSize: 14, bold: true, color: ORANGE, fontFace: 'Calibri' });
-    }
-
-    s.addText(footerLeft, { x: 0.6, y: 5.1, w: 6, h: 0.3, fontSize: 8, color: '8A949E', fontFace: 'Calibri' });
-    if (stds) s.addText(`NYS ${stds}`, { x: 6.6, y: 5.1, w: 2.8, h: 0.3, fontSize: 8, color: '8A949E', fontFace: 'Calibri', align: 'right' });
-    s.addNotes(slide.speakerNotes || '');
-  }
+    foot(s, 'Teacher reference · keep these two slides out of presentation mode');
+    s.addNotes('These two slides are for you and for an observer. Hide them before you present.');
+  });
 
   const data = (await pptx.write({ outputType: 'blob' })) as Blob;
   return { name: `${slug(draft.className)}-presentation.pptx`, blob: data };
 }
 
 export function presentationPdf(draft: NextDayDraft): ExportFile {
-  const doc = new jsPDF({ unit: 'pt', orientation: 'landscape', format: [960, 540] });
-  (draft.slides || []).forEach((slide, index) => {
-    if (index > 0) doc.addPage([960, 540], 'landscape');
-    const dark = slide.kind === 'title' || slide.kind === 'debrief';
-    doc.setFillColor(dark ? '#10213A' : '#FFFFFF');
-    doc.rect(0, 0, 960, 540, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(slide.kind === 'title' ? 40 : 28);
-    doc.setTextColor(dark ? 255 : 16);
-    const title = doc.splitTextToSize(safe(slide.title || ''), 860);
-    title.forEach((line: string, i: number) => doc.text(line, 50, 80 + i * 34));
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(18);
-    doc.setTextColor(dark ? 230 : 40);
-    let y = 90 + title.length * 34;
-    for (const bullet of slide.bullets || []) {
-      const lines = doc.splitTextToSize(`• ${safe(bullet)}`, 840);
-      for (const line of lines) {
-        if (y > 440) break;
-        doc.text(line, 60, y);
-        y += 26;
-      }
-    }
-
-    doc.setFontSize(9);
-    doc.setTextColor(dark ? 150 : 130);
-    const notes = doc.splitTextToSize(`Speaker notes: ${safe(slide.speakerNotes || '')}`, 860);
-    doc.text(notes.slice(0, 3), 50, 490);
-  });
-  return { name: `${slug(draft.className)}-presentation.pdf`, blob: doc.output('blob') };
+  return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
 }
 
 // -------------------------------------------------------------------- worksheet
@@ -517,70 +433,19 @@ function worksheetFooter(w: PdfWriter, draft: NextDayDraft) {
 }
 
 export function worksheetPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-  worksheetHeader(w, draft);
-  const doc = w.doc;
-  const WORK = 120; // open work space under each item, like the printed sheets
-  for (const item of draft.worksheet.items) {
-    doc.setFontSize(12);
-    const body = doc.splitTextToSize(safe(item.prompt), PAGE_W - MARGIN * 2 - 24);
-    w.room(body.length * 15 + WORK);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(20);
-    doc.text(`${item.itemNumber}.`, MARGIN + 4, w.y);
-    doc.setFont('helvetica', 'normal');
-    body.forEach((l: string, i: number) => doc.text(l, MARGIN + 24, w.y + i * 15));
-    w.y += body.length * 15 + WORK;
-  }
-
-  // Answer strip
-  const n = draft.worksheet.items.length;
-  const cols = 7;
-  const rows = Math.ceil(n / cols);
-  const cellW = (PAGE_W - MARGIN * 2) / cols;
-  w.room(40 + rows * 34 + 30);
-  doc.setFillColor(55, 55, 55);
-  doc.rect(MARGIN, w.y, PAGE_W - MARGIN * 2, 20, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255);
-  doc.text('Answer strip', MARGIN + 8, w.y + 14);
-  w.y += 20;
-  doc.setTextColor(20);
-  doc.setDrawColor(40);
-  for (let i = 0; i < n; i++) {
-    const r = Math.floor(i / cols), c = i % cols;
-    const x = MARGIN + c * cellW, y = w.y + r * 34;
-    doc.rect(x, y, cellW, 34);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(String(draft.worksheet.items[i].itemNumber), x + 4, y + 11);
-  }
-  w.y += rows * 34 + 18;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('My CHECK total: ____________', MARGIN, w.y);
-  w.y += 16;
-  worksheetFooter(w, draft);
-  return { name: `${slug(draft.className)}-worksheet.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-worksheet.pdf`, blob: hillcrestHtmlBlob(worksheetHtml(draft)) };
 }
-
 
 export async function worksheetDocx(draft: NextDayDraft): Promise<ExportFile> {
   const stds = standardsOf(draft);
   const children: any[] = [
     docHeading(draft.worksheet.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
     docText(`${courseOf(draft)} · Practice sheet${stds ? ` · NYS ${stds}` : ''}`, { italics: true }),
-    docText('Name: ______________________________   ID: ________   Date: ____________   Period: ______'),
-    docText('Directions', { bold: true }),
-    docText(
-      `${draft.worksheet.instructions ? draft.worksheet.instructions + ' ' : ''}Everyone has the same sheet. Work only the ${draft.grouping.itemsPerStudent} items listed on your card (the item lists are also on the board). Write your final answers on the answer strip at the end and show your work under each item. When you finish, add your ${draft.grouping.itemsPerStudent} answers and compare with the CHECK total your teacher gives your set.`
-    ),
+    docText('Name ______________________________   Period — write the digit ______   Date ____________'),
+    docText('Everyone has the same sheet. Work only the 8 items on the list next to your name. Write answers on the strip and compare your check total.'),
   ];
   for (const item of draft.worksheet.items) {
-    children.push(docText(`${item.itemNumber}.  ${item.prompt}`, { bold: false }));
-    children.push(docText(' '));
-    children.push(docText(' '));
+    children.push(docText(`${item.itemNumber}.  ${item.prompt}`, { bold: true }), docText(' '), docText(' '));
   }
   return { name: `${slug(draft.className)}-worksheet.docx`, blob: await buildDocx(children) };
 }
@@ -601,25 +466,7 @@ function keyRows(items: WorksheetItemDraft[]): string[][] {
 }
 
 export function answerKeyPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-  w.text('Answer key — teacher only', { size: 18, bold: true });
-  w.text(`${draft.worksheet.title} · ${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90, gap: 6 });
-  w.text(builtFromLine(draft), { size: 9, color: 110 });
-  w.rule();
-  for (const item of draft.worksheet.items) {
-    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 11, bold: true, gap: 2 });
-    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, gap: 2 });
-    if (item.workedSolution) w.text(`Working: ${item.workedSolution}`, { indent: 12, gap: 2 });
-    w.text(`Checked: ${item.verifyNote || item.verify}`, { indent: 12, size: 9, color: 100, gap: 2 });
-    w.text(`If wrong, record error tag: ${item.errorTagIfWrong || '(none given)'}`, { indent: 12, size: 10, gap: 2 });
-    if (item.skillTag) w.text(`Skill: ${item.skillTag}`, { indent: 12, size: 9, color: 100 });
-  }
-  w.rule();
-  w.heading('Check totals');
-  for (const group of draft.grouping.groups) {
-    w.text(`${group.label} — items ${group.itemNumbers.join(', ')} — check total ${group.checkTotal}`, { indent: 10, gap: 2 });
-  }
-  return { name: `${slug(draft.className)}-answer-key.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-answer-key.pdf`, blob: hillcrestHtmlBlob(answerKeyHtml(draft)) };
 }
 
 export async function answerKeyDocx(draft: NextDayDraft): Promise<ExportFile> {
@@ -630,7 +477,7 @@ export async function answerKeyDocx(draft: NextDayDraft): Promise<ExportFile> {
     docTable(keyRows(draft.worksheet.items), [700, 2400, 2400, 2200, 2160]),
     docHeading('Check totals'),
     ...draft.grouping.groups.map((g) =>
-      docBullet(`${g.label} — items ${g.itemNumbers.join(', ')} — check total ${g.checkTotal}`)
+      docBullet(`${g.label} — items ${g.itemNumbers.join(', ')} — check total ${g.checkTotal} — first six ${firstSixTotal(draft, g.itemNumbers)}`)
     ),
   ];
   return { name: `${slug(draft.className)}-answer-key.docx`, blob: await buildDocx(children) };
@@ -714,10 +561,7 @@ function exitTicketHalf(w: PdfWriter, draft: NextDayDraft, top: number) {
 }
 
 export function exitTicketPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-  exitTicketHalf(w, draft, 0);
-  exitTicketHalf(w, draft, 1);
-  return { name: `${slug(draft.className)}-exit-ticket.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-exit-ticket.pdf`, blob: hillcrestHtmlBlob(exitTicketsHtml(draft)) };
 }
 
 export async function exitTicketDocx(draft: NextDayDraft): Promise<ExportFile> {
@@ -725,198 +569,58 @@ export async function exitTicketDocx(draft: NextDayDraft): Promise<ExportFile> {
   const half = (): any[] => [
     docText((draft.exitTicket.title || 'Exit ticket').toUpperCase(), { bold: true }),
     docText('Name ______________________    Period — write the digit ______    Date __________'),
-    docText(
-      `Exit ticket — Put your class period in that box, not your grade. ${n} questions, ${Math.max(3, n + 1)} minutes. Answer what you can — a blank tells me something too.`,
-      { italics: true }
-    ),
-    ...draft.exitTicket.items.flatMap((item) => [
-      docText(`${item.itemNumber}.  ${item.prompt}`, { bold: true }),
-      docText(' '),
-      docText(' '),
-      docText(' '),
-    ]),
+    docText(`Exit ticket — Put your class period in that box, not your grade. ${n} questions.`, { italics: true }),
+    ...draft.exitTicket.items.flatMap((item) => [docText(`${item.itemNumber}.  ${item.prompt}`, { bold: true }), docText(' '), docText(' ')]),
   ];
-  const children = [
-    ...half(),
-    new Paragraph({ children: [new TextRun('— — — — — — — — — cut here — — — — — — — — —')] }),
-    new Paragraph({ children: [new PageBreak()] }),
-    ...half(),
-  ];
+  const children = [...half(), new Paragraph({ children: [new TextRun('— — — — — — — — — cut here — — — — — — — — —')] }), new Paragraph({ children: [new PageBreak()] }), ...half()];
   return { name: `${slug(draft.className)}-exit-ticket.docx`, blob: await buildDocx(children) };
 }
 
 export function exitTicketKeyPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-  w.text('Exit ticket key — teacher only', { size: 16, bold: true });
-  w.text(`${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90, gap: 6 });
-  for (const item of draft.exitTicket.items) {
-    w.text(`${item.itemNumber}. ${item.prompt}`, { bold: true, gap: 2 });
-    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, gap: 2 });
-    w.text(`Checked: ${item.verifyNote || item.verify}`, { indent: 12, size: 9, color: 100, gap: 2 });
-    w.text(`Skill isolated: ${item.skillTag || '—'} · if wrong record: ${item.errorTagIfWrong || '—'}`, {
-      indent: 12,
-      size: 10,
-    });
-  }
-  return { name: `${slug(draft.className)}-exit-ticket-key.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-exit-ticket-key.pdf`, blob: hillcrestHtmlBlob(answerKeyHtml(draft)) };
 }
 
 // -------------------------------------------------------------- who does which
 
 export async function whoDoesWhichPptx(draft: NextDayDraft): Promise<ExportFile> {
-  const pptx = new pptxgen();
-  pptx.layout = 'LAYOUT_16x9';
+  const pptx = mk();
   pptx.title = `${draft.className} — who does which problems`;
-
-  const BROWN = '8A5A2B';
-  const INK = '252525';
-  const MUTED = '646464';
-  const LINE = '777777';
   const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
+
   const firstSlide = pptx.addSlide();
   firstSlide.background = { color: 'FFFFFF' };
-  firstSlide.addText('WORKSHEET SIDES 2-3', {
-    x: 0.72, y: 0.35, w: 2.4, h: 0.25, fontSize: 7.5, bold: true, color: MUTED, fontFace: 'Georgia',
-  });
-  firstSlide.addShape('rect' as any, { x: 7.05, y: 0.31, w: 1.9, h: 0.23, fill: { color: BROWN }, line: { color: BROWN } });
-  firstSlide.addText(periodOf(draft).toUpperCase(), {
-    x: 7.05, y: 0.325, w: 1.9, h: 0.18, fontSize: 7.5, bold: true, color: 'FFFFFF', fontFace: 'Georgia', align: 'center',
-  });
-  firstSlide.addText(`${periodOf(draft)} · find your name`, {
-    x: 0.72, y: 0.58, w: 7.9, h: 0.45, fontSize: 22, bold: true, color: INK, fontFace: 'Georgia',
-  });
-  firstSlide.addShape('line' as any, { x: 0.72, y: 1.08, w: 8.15, h: 0, line: { color: 'BBBBBB', width: 0.7 } });
+  firstSlide.addText('Find your name. Do the 8 items next to it.', { x: 0.75, y: 1.55, w: 11.7, h: 0.75, fontSize: 34, bold: true, color: INK, fontFace: 'Georgia', align: 'center' });
+  firstSlide.addText('Everyone does 8. Everyone checks a total.', { x: 0.75, y: 2.55, w: 11.7, h: 0.45, fontSize: 20, color: MUTE, fontFace: 'Arial', align: 'center' });
+  firstSlide.addNotes('[Format: the board version.] Put this on the board as students come in. Names, item numbers, and totals only.');
 
-  const nameRows = (names: string[]) => {
-    const perLine = names.length > 6 ? 5 : 6;
-    const rows: string[] = [];
-    for (let i = 0; i < names.length; i += perLine) rows.push(names.slice(i, i + perLine).join('   ·   '));
-    return rows.join('\n');
-  };
-  const groupBox = (group: NextDayDraft['grouping']['groups'][number], y: number) => {
-    const names = group.students.map(studentBoardName);
-    const fontSize = names.length >= 8 ? 8.5 : names.length >= 6 ? 9.5 : 10.5;
-    firstSlide.addShape('rect' as any, { x: 0.72, y, w: 8.15, h: 0.82, fill: { color: 'F7F7F4', transparency: 12 }, line: { color: LINE, width: 0.75 } });
-    firstSlide.addText(`Items ${group.itemNumbers.join(', ')}     ·     check total ${group.checkTotal}`, {
-      x: 0.9, y: y + 0.1, w: 7.7, h: 0.17, fontSize: 9.5, bold: true, color: BROWN, fontFace: 'Georgia',
-    });
-    firstSlide.addText(nameRows(names), {
-      x: 0.9, y: y + 0.35, w: 7.7, h: 0.34, fontSize, color: INK, fontFace: 'Arial',
-    });
-  };
-
-  draft.grouping.groups.slice(0, 3).forEach((group, index) => groupBox(group, 1.28 + index * 1.07));
-  if (fallback) {
-    firstSlide.addText(`Name not here? Items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, {
-      x: 0.86, y: 4.72, w: 7.7, h: 0.25, fontSize: 10, bold: true, color: INK, fontFace: 'Arial',
-    });
-  }
-  firstSlide.addText(dayFooterOf(draft), { x: 0.86, y: 5.15, w: 5.8, h: 0.15, fontSize: 5.5, color: MUTED, fontFace: 'Arial' });
-  firstSlide.addNotes('Put this on the board as students come in. Use the real roster names shown here; reasons stay off the board and remain in the teacher list.');
-
-  const last = pptx.addSlide();
-  last.background = { color: 'FFFFFF' };
-  last.addText('Name not here?', {
-    x: 0.72, y: 0.58, w: 7.9, h: 0.5, fontSize: 22, bold: true, color: INK, fontFace: 'Georgia',
+  const boardSlide = base(pptx, `${periodOf(draft)} · find your name`, 'WORKSHEET SIDES 3–4', periodOf(draft).toUpperCase());
+  let y = 1.6;
+  draft.grouping.groups.forEach((group) => {
+    const names = group.students.map(hillcrestStudentBoardName);
+    const boxH = 0.5 + 0.36 * Math.max(1, Math.ceil(names.length / 3));
+    boardSlide.addShape(pptx.ShapeType.rect, { x: 0.75, y, w: 11.85, h: boxH, fill: { color: SOFT }, line: { color: INK, width: 1 } });
+    boardSlide.addText(`Items ${group.itemNumbers.join(', ')} · check total ${group.checkTotal}`, { x: 1.0, y: y + 0.14, w: 11.35, h: 0.25, fontSize: 13, bold: true, color: GOLD, fontFace: 'Arial' });
+    boardSlide.addText(names.join('    ·    ') || 'No names in this group', { x: 1.0, y: y + 0.48, w: 11.2, h: Math.max(0.3, boxH - 0.55), fontSize: 17, color: INK, fontFace: 'Arial', fit: 'shrink' });
+    y += boxH + 0.12;
   });
-  last.addShape('line' as any, { x: 0.72, y: 1.12, w: 8.15, h: 0, line: { color: 'BBBBBB', width: 0.7 } });
-  last.addText(
-    draft.grouping.noResultsYet.length
-      ? draft.grouping.noResultsYet.map((s) => ({ text: studentBoardName(s), options: { breakLine: true } }))
-      : [{ text: 'Everyone has results — no one is waiting.', options: {} }],
-    { x: 0.86, y: 1.55, w: 7.9, h: 2.9, fontSize: 17, color: INK, fontFace: 'Arial', valign: 'top' }
-  );
-  if (fallback) {
-    last.addText(`Start with items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, {
-      x: 0.86, y: 4.7, w: 7.7, h: 0.25, fontSize: 10, bold: true, color: BROWN, fontFace: 'Arial',
-    });
-  }
-  last.addText(dayFooterOf(draft), { x: 0.86, y: 5.15, w: 5.8, h: 0.15, fontSize: 5.5, color: MUTED, fontFace: 'Arial' });
-  last.addNotes('These students have no scanned results yet, or their paper is still unclaimed. Give them a set by hand and make sure their paper gets named.');
+  if (fallback) boardSlide.addText(`Name not here? Items ${fallback.itemNumbers.join(', ')} (check total ${fallback.checkTotal})`, { x: 0.75, y: 6.55, w: 11.6, h: 0.3, fontSize: 14, bold: true, color: INK, fontFace: 'Arial' });
+  foot(boardSlide, dayFooterOf(draft));
+  boardSlide.addNotes('[Format: the board version.] No set numbers, no reasons, no scores — only names, item numbers and the check total.');
+
+  const done = base(pptx, 'Finished early?', 'BOARD DIRECTIONS');
+  const items = draft.worksheet.items;
+  const square = items[10]?.itemNumber || items[0]?.itemNumber || 1;
+  const diamond = items[12]?.itemNumber || items[1]?.itemNumber || 2;
+  T(done, [`■ Do item ${square} first.`, `◆ Then do item ${diamond}.`, 'Write one sentence explaining how you checked it.'], { x: 1.0, y: 1.85, w: 10.8, h: 2.3, fontSize: 30, color: INK });
+  foot(done, dayFooterOf(draft));
+  done.addNotes('[Format: the ■ → ◆ Set 4 pair.] The square task is first, then the diamond follow-up.');
 
   const data = (await pptx.write({ outputType: 'blob' })) as Blob;
   return { name: `${slug(draft.className)}-who-does-which.pptx`, blob: data };
 }
 
 export function whoDoesWhichPdf(draft: NextDayDraft): ExportFile {
-  const doc = new jsPDF({ unit: 'pt', orientation: 'landscape', format: [960, 540] });
-  const fallback = draft.grouping.groups[1] || draft.grouping.groups[0];
-  const footer = dayFooterOf(draft);
-  const namesToRows = (names: string[]) => {
-    const perLine = names.length > 6 ? 5 : 6;
-    const rows: string[] = [];
-    for (let i = 0; i < names.length; i += perLine) rows.push(names.slice(i, i + perLine).join('   ·   '));
-    return rows;
-  };
-  const page = (title: string, names: string[], right?: string[]) => {
-    doc.setFillColor('#FFFFFF');
-    doc.rect(0, 0, 960, 540, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(28);
-    doc.setTextColor(37, 37, 37);
-    doc.text(safe(title), 50, 80);
-    if (right?.length) {
-      doc.setFontSize(18);
-      doc.setTextColor(138, 90, 43);
-      right.forEach((line, i) => doc.text(safe(line), 640, 80 + i * 26));
-    }
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(20);
-    doc.setTextColor(30);
-    names.slice(0, 14).forEach((name, i) => doc.text(safe(name), 60, 140 + i * 28));
-    doc.setFontSize(8);
-    doc.setTextColor(100);
-    doc.text(safe(footer), 60, 505);
-  };
-
-  doc.setFillColor('#FFFFFF');
-  doc.rect(0, 0, 960, 540, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text('WORKSHEET SIDES 2-3', 65, 45);
-  doc.setFillColor(138, 90, 43);
-  doc.rect(720, 38, 190, 18, 'F');
-  doc.setTextColor(255);
-  doc.text(periodOf(draft).toUpperCase(), 815, 51, { align: 'center' });
-  doc.setFontSize(30);
-  doc.setTextColor(37, 37, 37);
-  doc.text(`${periodOf(draft)} · find your name`, 65, 80);
-  doc.setDrawColor(187);
-  doc.line(65, 96, 910, 96);
-  draft.grouping.groups.slice(0, 3).forEach((group, index) => {
-    const y = 130 + index * 105;
-    doc.setDrawColor(119);
-    doc.setFillColor(247, 247, 244);
-    doc.rect(65, y, 845, 82, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(138, 90, 43);
-    doc.text(`Items ${group.itemNumbers.join(', ')}     ·     check total ${group.checkTotal}`, 84, y + 23);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(group.students.length >= 8 ? 11 : 13);
-    doc.setTextColor(37, 37, 37);
-    namesToRows(group.students.map(studentBoardName)).forEach((row, rowIndex) => doc.text(safe(row), 84, y + 48 + rowIndex * 18));
-  });
-  if (fallback) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(37, 37, 37);
-    doc.text(`Name not here? Items ${fallback.itemNumbers.join(', ')}  (check total ${fallback.checkTotal})`, 84, 475);
-  }
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(100);
-  doc.text(safe(footer), 84, 515);
-
-  doc.addPage([960, 540], 'landscape');
-  page(
-    'Name not here?',
-    draft.grouping.noResultsYet.length
-      ? draft.grouping.noResultsYet.map(studentBoardName)
-      : ['Everyone has results — no one is waiting.']
-  );
-  return { name: `${slug(draft.className)}-who-does-which.pdf`, blob: doc.output('blob') };
+  return { name: `${slug(draft.className)}-who-does-which.pdf`, blob: hillcrestHtmlBlob(whoDoesWhichHtml(draft)) };
 }
 
 // ------------------------------------------------------------- teacher-only list
@@ -941,28 +645,7 @@ function teacherRows(draft: NextDayDraft): string[][] {
 }
 
 export function teacherListPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-  w.text('Who does which — teacher list', { size: 18, bold: true });
-  w.text(`${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90, gap: 4 });
-  w.text(builtFromLine(draft), { size: 9, color: 110 });
-  w.rule();
-  for (const group of draft.grouping.groups) {
-    w.heading(`${group.label} — items ${group.itemNumbers.join(', ')} — check total ${group.checkTotal}`);
-    for (const student of group.students) {
-      w.text(`${studentBoardName(student)}${student.score !== null ? ` (${Math.round(student.score)}%)` : ''} — ${student.evidence}`, {
-        indent: 10,
-        gap: 2,
-        size: 10,
-      });
-    }
-  }
-  if (draft.grouping.noResultsYet.length) {
-    w.heading('No results received yet');
-    for (const student of draft.grouping.noResultsYet) {
-      w.text(`${studentBoardName(student)} — set by hand; paper still to be claimed`, { indent: 10, gap: 2, size: 10 });
-    }
-  }
-  return { name: `${slug(draft.className)}-teacher-list.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-teacher-list.pdf`, blob: hillcrestHtmlBlob(teacherListHtml(draft)) };
 }
 
 export async function teacherListDocx(draft: NextDayDraft): Promise<ExportFile> {
@@ -1025,44 +708,7 @@ export function download(file: ExportFile) {
  * worksheet, exit ticket (two per page), then the teacher-only answer key.
  */
 export function printPackPdf(draft: NextDayDraft): ExportFile {
-  const w = new PdfWriter();
-
-  worksheetHeader(w, draft);
-  for (const item of draft.worksheet.items) {
-    const promptLines = w.doc.splitTextToSize(`${item.itemNumber}.  ${item.prompt}`, PAGE_W - MARGIN * 2).length;
-    w.room(promptLines * 15 + 54 + 20);
-    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 12, gap: 2 });
-    w.box(54, 'show your work');
-  }
-
-  w.doc.addPage([PAGE_W, PAGE_H]);
-  w.y = MARGIN;
-  exitTicketHalf(w, draft, 0);
-  exitTicketHalf(w, draft, 1);
-
-  w.doc.addPage([PAGE_W, PAGE_H]);
-  w.y = MARGIN;
-  w.text('Answer key — teacher only', { size: 16, bold: true });
-  w.text(`${draft.worksheet.title} · ${draft.className} · ${draft.nextLessonDate}`, { size: 10, color: 90 });
-  w.text(builtFromLine(draft), { size: 9, color: 110 });
-  w.rule();
-  for (const item of draft.worksheet.items) {
-    w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 11, bold: true, gap: 2 });
-    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, gap: 2 });
-    w.text(`If wrong, record error tag: ${item.errorTagIfWrong || '(none given)'}`, { indent: 12, size: 10 });
-  }
-  w.rule();
-  w.heading('Check totals');
-  for (const group of draft.grouping.groups) {
-    w.text(`${group.label} — items ${group.itemNumbers.join(', ')} — check total ${group.checkTotal}`, { indent: 10, gap: 2 });
-  }
-  w.heading('Exit ticket answers');
-  for (const item of draft.exitTicket.items) {
-    w.text(`${item.itemNumber}. ${item.prompt}`, { size: 10, bold: true, gap: 2 });
-    w.text(`Answer: ${item.answer || item.answerNumeric}`, { indent: 12, size: 10 });
-  }
-
-  return { name: `${slug(draft.className)}-print-pack.pdf`, blob: w.blob() };
+  return { name: `${slug(draft.className)}-print-pack.pdf`, blob: hillcrestHtmlBlob(printPackHtml(draft)) };
 }
 
 // ------------------------------------------ plain calendar lesson (no results)
@@ -1082,39 +728,15 @@ export interface CalendarLessonInput {
  * it is a blank frame for the teacher to teach from.
  */
 export function calendarLessonPdf(input: CalendarLessonInput): ExportFile {
-  const w = new PdfWriter();
-  w.text(input.title, { size: 18, bold: true });
-  w.text(
-    `${input.className} · ${input.dateLabel}${input.dayNumber ? ` · Day ${input.dayNumber}` : ''}${
-      input.unitLabel ? ` · ${input.unitLabel}` : ''
-    }`,
-    { size: 10, color: 90 }
-  );
-  if (input.standards.length > 0) w.text(`Standards: ${input.standards.join(', ')}`, { size: 10, color: 90 });
-  w.text('No scored results have been received for this class, so this plan contains no class data — only the calendar lesson.', {
-    size: 10,
-    color: 110,
-  });
-  w.rule();
-  const timeline: [number, string][] = [
-    [5, 'Do now'],
-    [10, 'Launch — the new idea'],
-    [15, 'Worked examples together'],
-    [10, 'Independent practice'],
-    [5, 'Exit ticket'],
-  ];
-  w.heading('Period at a glance (45 minutes)');
-  for (const [minutes, label] of timeline) {
-    w.text(`${minutes} min — ${label}`, { indent: 10, gap: 2 });
-    w.box(28);
-  }
-  w.heading('Notes');
-  w.box(120);
-  return { name: `${slug(input.className)}-calendar-lesson.pdf`, blob: w.blob() };
+  return { name: `${slug(input.className)}-calendar-lesson.pdf`, blob: hillcrestHtmlBlob(calendarLessonHtml(input)) };
 }
 
 /** Open a generated file in one new tab, ready for the printer. */
 export function openInNewTab(file: ExportFile) {
+  if (file.blob.type.includes('html')) {
+    file.blob.text().then((html) => openHillcrestHtml(html, file.name));
+    return true;
+  }
   const url = URL.createObjectURL(file.blob);
   const tab = window.open(url, '_blank');
   if (!tab) URL.revokeObjectURL(url);
