@@ -8,6 +8,34 @@ export interface CoverageRow {
   met?: boolean;
 }
 
+export interface TipPlanRow {
+  prescribed: string;
+  where: string;
+  artifact: string;
+  met?: boolean;
+}
+
+export interface TipFindingRow {
+  finding: string;
+  answer: string;
+  met?: boolean;
+}
+
+export interface LessonDeckEntry {
+  key: string;
+  slideNumber: number;
+  kind: SlideDraft['kind'] | 'key-vocabulary';
+  title: string;
+  bullets: string[];
+  speakerNotes: string;
+  sourceSlide?: SlideDraft;
+  minutes?: number;
+  timelineLabel?: string;
+  timelineDetail?: string;
+}
+
+export const TIP_SOURCE_TEXT = 'Prescribed activities are quoted from the April 2026 observation report as reproduced in Mr. Francois\'s own written input to the plan, not from an issued Teacher Improvement Plan document I have read. If the issued plan is loaded later, re-cut this table against that plan\'s own wording.';
+
 const esc = (value: unknown) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -32,6 +60,11 @@ const periodDigit = (draft: NextDayDraft) => {
 };
 const standards = (draft: NextDayDraft) => draft.lessonPlan.standards || [];
 const stdChips = (draft: NextDayDraft) => standards(draft).map((s) => `<span class="std">${esc(s)}</span>`).join(' ');
+export const standardsText = (draft: NextDayDraft) => {
+  const supplied = standards(draft).filter(Boolean);
+  if (supplied.length > 0) return supplied.join(' · ');
+  return /stat/i.test(draft.className) ? 'AI-S.ID.1 · AI-S.ID.2 · AI-S.ID.3' : 'AII-F.BF.2 · AII-F.LE.2 · AII-F.IF.3';
+};
 const builtFromLine = (draft: NextDayDraft) => {
   const b = draft.builtFrom;
   const when = b.worksheetDate ? new Date(b.worksheetDate).toLocaleDateString() : 'undated';
@@ -54,6 +87,142 @@ export function firstSixTotal(draft: NextDayDraft, itemNumbers: number[]) {
     return sum + (typeof found?.answerNumeric === 'number' ? found.answerNumeric : 0);
   }, 0);
   return Math.round(total * 1000) / 1000;
+}
+
+export function vocabularyRows(draft: NextDayDraft): [string, string][] {
+  if (/stat/i.test(draft.className)) {
+    return [
+      ['Data value', 'One number in the set.'],
+      ['Median', 'The middle value after the data are ordered.'],
+      ['Quartile', 'A cut point that splits the ordered data into fourths.'],
+      ['Spread', 'How far apart the data values are.'],
+      ['Outlier', 'A value far enough away that it may change the summary.'],
+    ];
+  }
+  return [
+    ['Sequence', 'A list of numbers in order.'],
+    ['Term', 'One value in the sequence.'],
+    ['First term', 'The value you start with.'],
+    ['Common difference or ratio', 'The change you use from one term to the next.'],
+    ['Check total', 'The sum of your assigned answers.'],
+  ];
+}
+
+function adjustedTimeline(draft: NextDayDraft) {
+  const duration = draft.lessonPlan.durationMinutes || 45;
+  const raw = (draft.lessonPlan.timeline || []).map((step) => ({ ...step }));
+  const hasVocabulary = raw.some((step) => /vocab|word/i.test(`${step.label} ${step.detail}`));
+  const doNowIndex = raw.findIndex((step) => /do\s*now|warm/i.test(`${step.label} ${step.detail}`));
+  if (!hasVocabulary) {
+    const insertAt = doNowIndex >= 0 ? doNowIndex + 1 : Math.min(1, raw.length);
+    const donorIndex = raw.findIndex((step, index) => index >= insertAt && step.minutes >= 6);
+    const donor = donorIndex >= 0 ? donorIndex : raw.findIndex((step) => step.minutes >= 6);
+    if (donor >= 0) raw[donor].minutes = Math.max(1, raw[donor].minutes - 3);
+    raw.splice(insertAt, 0, { minutes: 3, label: 'Key vocabulary', detail: 'Five words from the Side 2 help card, in plain language, before students need them.' });
+  }
+  const total = raw.reduce((sum, step) => sum + step.minutes, 0);
+  if (raw.length > 0 && total !== duration) {
+    const last = raw[raw.length - 1];
+    last.minutes = Math.max(1, last.minutes + duration - total);
+  }
+  return raw;
+}
+
+export function lessonDeckEntries(draft: NextDayDraft): LessonDeckEntry[] {
+  const entries: LessonDeckEntry[] = [];
+  let insertedVocabulary = false;
+  const pushSlide = (slide: SlideDraft) => {
+    entries.push({
+      key: `slide-${entries.length + 1}-${slide.kind}`,
+      slideNumber: entries.length + 1,
+      kind: slide.kind,
+      title: slide.title,
+      bullets: slide.bullets || [],
+      speakerNotes: slide.speakerNotes || '',
+      sourceSlide: slide,
+    });
+  };
+
+  for (const slide of draft.slides || []) {
+    pushSlide(slide);
+    if (!insertedVocabulary && slide.kind === 'do-now') {
+      entries.push({
+        key: `slide-${entries.length + 1}-key-vocabulary`,
+        slideNumber: entries.length + 1,
+        kind: 'key-vocabulary',
+        title: 'Key vocabulary',
+        bullets: vocabularyRows(draft).map(([word, meaning]) => `${word}: ${meaning}`),
+        speakerNotes: 'Read each word quickly and point students to the same table on Side 2.',
+      });
+      insertedVocabulary = true;
+    }
+  }
+
+  if (!insertedVocabulary) {
+    const insertAfter = Math.min(1, entries.length);
+    entries.splice(insertAfter, 0, {
+      key: `slide-vocab`,
+      slideNumber: insertAfter + 1,
+      kind: 'key-vocabulary',
+      title: 'Key vocabulary',
+      bullets: vocabularyRows(draft).map(([word, meaning]) => `${word}: ${meaning}`),
+      speakerNotes: 'Read each word quickly and point students to the same table on Side 2.',
+    });
+  }
+
+  entries.forEach((entry, index) => { entry.slideNumber = index + 1; });
+
+  const used = new Set<number>();
+  const findEntry = (label: string, detail: string, fallback: number) => {
+    const text = `${label} ${detail}`.toLowerCase();
+    const rules: Array<[RegExp, LessonDeckEntry['kind'][]]> = [
+      [/do\s*now|warm/, ['do-now']],
+      [/vocab|word/, ['key-vocabulary']],
+      [/reteach|repair|yesterday|error/, ['reteach-worked']],
+      [/independent|practice|own|work time/, ['independent-work']],
+      [/exit|ticket/, ['exit-ticket']],
+      [/debrief|answer/, ['debrief']],
+      [/teach|launch|model|example|new/, ['teaching', 'reteach-worked']],
+    ];
+    for (const [re, kinds] of rules) {
+      if (!re.test(text)) continue;
+      const found = entries.findIndex((entry, index) => !used.has(index) && kinds.includes(entry.kind));
+      if (found >= 0) return found;
+    }
+    const open = entries.findIndex((entry, index) => !used.has(index) && entry.kind !== 'title');
+    return open >= 0 ? open : Math.min(fallback, Math.max(0, entries.length - 1));
+  };
+
+  adjustedTimeline(draft).forEach((step, index) => {
+    const entryIndex = findEntry(step.label, step.detail, index + 1);
+    used.add(entryIndex);
+    const entry = entries[entryIndex];
+    if (entry) {
+      entry.minutes = step.minutes;
+      entry.timelineLabel = step.label;
+      entry.timelineDetail = step.detail;
+    }
+  });
+
+  return entries;
+}
+
+export const lessonDeckSlideCount = (draft: NextDayDraft) => lessonDeckEntries(draft).length + 2;
+
+export function lessonPeriodRows(draft: NextDayDraft) {
+  const entries = lessonDeckEntries(draft);
+  const timed = entries.filter((entry) => typeof entry.minutes === 'number').sort((a, b) => a.slideNumber - b.slideNumber);
+  return timed.map((entry, index) => {
+    const next = timed[index + 1]?.slideNumber ?? (entries.length + 1);
+    const end = Math.max(entry.slideNumber, next - 1);
+    const slides = end > entry.slideNumber ? `${entry.slideNumber}&ndash;${end}` : `${entry.slideNumber}`;
+    return {
+      minutes: entry.minutes || 0,
+      slides,
+      label: entry.timelineLabel || entry.title,
+      detail: entry.timelineDetail || entry.bullets.join(' '),
+    };
+  });
 }
 
 function worksheetTag(draft: NextDayDraft, worksheetItem: WorksheetItemDraft, index: number) {
