@@ -52,6 +52,9 @@ import {
   CALL_LABEL,
   type ScanRow,
 } from '@/lib/resultsDigest';
+import { whatThisFixes } from '@/hooks/useLessonPacks';
+import { isoDate, nextSchoolDay } from '@/data/pacingCalendars';
+
 import { verifyItems } from '@/lib/nextDayLesson/verifyMath';
 import { buildGrouping, checkTotalFor } from '@/lib/nextDayLesson/grouping';
 import type { NextDayDraft, WorksheetItemDraft } from '@/lib/nextDayLesson/types';
@@ -97,6 +100,8 @@ export default function NextDayLesson() {
   const [draft, setDraft] = useState<NextDayDraft | null>(null);
   const [busyFile, setBusyFile] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [saving, setSaving] = useState(false);
+
 
   const { data: classRow } = useQuery({
     queryKey: ['next-day-class', id],
