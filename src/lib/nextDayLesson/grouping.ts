@@ -47,16 +47,19 @@ function itemSets(items: WorksheetItemDraft[]): number[][] {
   const all = items.map((i) => i.itemNumber);
 
   const heaviestRepair = repair.length ? repair : all.slice(0, ITEMS_PER_STUDENT);
-  // Group 1: mostly repair items. Group 2: a mix. Group 3: least repair, most new work.
-  const setOne = Array.from(
-    new Set([...pick(heaviestRepair, Math.min(5, ITEMS_PER_STUDENT), 0), ...pick(rest, ITEMS_PER_STUDENT, 0)])
-  ).slice(0, ITEMS_PER_STUDENT);
-  const setTwo = Array.from(
-    new Set([...pick(heaviestRepair, 3, 1), ...pick(rest, ITEMS_PER_STUDENT, 2)])
-  ).slice(0, ITEMS_PER_STUDENT);
-  const setThree = Array.from(
-    new Set([...pick(heaviestRepair, 1, 2), ...pick(rest.slice().reverse(), ITEMS_PER_STUDENT, 0)])
-  ).slice(0, ITEMS_PER_STUDENT);
+  // Ordered pool: repair items first, then the rest. Each group takes a window
+  // of the pool (so the three sets really differ) and always keeps some repair
+  // work. Group 1 sits on the repair end; group 3 on the new-work end.
+  const ordered = [...heaviestRepair, ...rest.filter((n) => !heaviestRepair.includes(n))];
+  const step = Math.max(1, Math.floor(ordered.length / 3));
+
+  const window = (offset: number, guaranteedRepair: number): number[] => {
+    const set = new Set<number>(pick(heaviestRepair, Math.min(guaranteedRepair, heaviestRepair.length), offset));
+    for (let i = 0; set.size < ITEMS_PER_STUDENT && i < ordered.length; i += 1) {
+      set.add(ordered[(offset + i) % ordered.length]);
+    }
+    return Array.from(set).slice(0, ITEMS_PER_STUDENT);
+  };
 
   const fill = (set: number[]) => {
     const out = set.slice();
@@ -67,8 +70,9 @@ function itemSets(items: WorksheetItemDraft[]): number[][] {
     return out.sort((a, b) => a - b);
   };
 
-  return [fill(setOne), fill(setTwo), fill(setThree)];
+  return [fill(window(0, 5)), fill(window(step, 3)), fill(window(step * 2, 1))];
 }
+
 
 export function checkTotalFor(items: WorksheetItemDraft[], itemNumbers: number[]): number {
   const sum = itemNumbers.reduce((total, n) => {
