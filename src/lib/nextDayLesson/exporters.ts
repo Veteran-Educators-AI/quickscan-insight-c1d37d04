@@ -32,19 +32,27 @@ import {
 } from 'docx';
 import type { NextDayDraft, WorksheetItemDraft } from './types';
 import { hillcrestHtmlBlob, openHillcrestHtml } from '@/lib/hillcrestPdf';
-import { base, foot, GOLD, INK, LINE, MUTE, mk, RED, SOFT, T } from '@/lib/hillcrestDeck';
+import { base, foot, GOLD, INK, LINE, MUTE, mk, R, RED, SOFT, T } from '@/lib/hillcrestDeck';
 import {
   answerKeyHtml,
   calendarLessonHtml,
   exitTicketsHtml,
   firstSixTotal,
-  formatCoverageRows,
+  houseFormatLine,
+  lessonDeckEntries,
+  lessonDeckSlideCount,
+  lessonPeriodRows,
   lessonPlanHtml,
+  presentationPdfHtml,
   printPackHtml,
   setMap,
   speakerNoteWithFormat,
+  standardsText,
   studentBoardName as hillcrestStudentBoardName,
   teacherListHtml,
+  tipAlignmentRows,
+  tipFindingRows,
+  TIP_SOURCE_TEXT,
   totalMap,
   whoDoesWhichHtml,
   worksheetHtml,
@@ -273,6 +281,11 @@ function assertReadyForExport(draft: NextDayDraft) {
   if (badTotals.length > 0) {
     throw new Error(`This pack cannot be exported because a check total is stale: ${badTotals.map((g) => g.label).join(', ')}.`);
   }
+  const periodMinutes = lessonPeriodRows(draft).reduce((sum, row) => sum + row.minutes, 0);
+  const targetMinutes = draft.lessonPlan.durationMinutes || 45;
+  if (periodMinutes !== targetMinutes) {
+    throw new Error(`This pack cannot be exported because the deck minute badges add to ${periodMinutes}, not ${targetMinutes}.`);
+  }
 }
 
 // ------------------------------------------------------------------ lesson plan
@@ -285,8 +298,10 @@ export function lessonPlanPdf(draft: NextDayDraft): ExportFile {
 export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
   assertReadyForExport(draft);
   const plan = draft.lessonPlan;
-  const coverage = formatCoverageRows(draft);
-  const totalSlides = (draft.slides?.length || 0) + 2;
+  const tipRows = tipAlignmentRows(draft);
+  const findingRows = tipFindingRows(draft);
+  const periodRows = lessonPeriodRows(draft);
+  const totalSlides = lessonDeckSlideCount(draft);
   const children: any[] = [
     docHeading(plan.title || draft.nextLessonTitle, HeadingLevel.HEADING_1),
     docText(`${draft.className} · ${draft.nextLessonDate} · ${plan.durationMinutes || 45} minutes`),
@@ -305,14 +320,23 @@ export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
     docText((plan.standards || []).join(', ') || 'Standards not supplied'),
     docHeading('The period'),
     docTable(
-      [['Minutes', 'Slides', 'What happens'], ...(plan.timeline || []).map((step, index) => [String(step.minutes), String(index + 1), `${step.label}: ${step.detail}`])],
+      [['Minutes', 'Slides', 'What happens'], ...periodRows.map((step) => [String(step.minutes), step.slides.replace(/&ndash;/g, '–'), `${step.label}: ${step.detail}`])],
       [1200, 1200, 7260]
     ),
-    docHeading('Format coverage — where each required element is done'),
-    docTable([['Required element', 'Where', 'Exactly what does it'], ...coverage.map((row) => [row.element, row.where.replace(/<[^>]*>/g, ''), row.what.replace(/<[^>]*>/g, '')])], [2800, 1800, 5060]),
-    ...(coverage.some((row) => row.met === false)
-      ? [docText('Format exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
+    docHeading('TIP alignment — what the plan prescribes and where it happens today'),
+    docText('The activities are the ones prescribed in the observation report; each row names the minutes in which the activity happens and the artifact that shows it.', { italics: true }),
+    docTable([['What the plan prescribes', 'Where it happens in this period', 'The artifact that evidences it'], ...tipRows.map((row) => [row.prescribed, row.met === false ? `Not met. ${row.where}` : row.where, row.artifact])], [2600, 3900, 3160]),
+    ...(tipRows.some((row) => row.met === false)
+      ? [docText('TIP alignment exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
       : []),
+    docHeading('The findings this lesson answers'),
+    docTable([['The finding, as written', 'What this lesson puts in front of the observer'], ...findingRows.map((row) => [row.finding, row.met === false ? `Not met. ${row.answer}` : row.answer])], [3600, 6060]),
+    ...(findingRows.some((row) => row.met === false)
+      ? [docText('Finding exception: the teacher can live with it for this lesson, change the pack, or change the rule.', { bold: true })]
+      : []),
+    docHeading('Source'),
+    docText(TIP_SOURCE_TEXT),
+    docText(`House format: ${houseFormatLine(draft)}`, { bold: true }),
     docHeading('Where this sits on the calendar'),
     docText(`Yesterday: ${draft.builtFrom.worksheetTitle}`),
     docText(`Today: ${draft.nextLessonTitle}`),
@@ -329,31 +353,68 @@ export async function lessonPlanDocx(draft: NextDayDraft): Promise<ExportFile> {
 const DECK_BG = '10213A';
 const DECK_ACCENT = 'F2B237';
 
+function deckFooter(s: any, left: string, standards: string, color = MUTE) {
+  s.addText(left, { x: 0.6, y: 6.95, w: 7.2, h: 0.3, fontSize: 10, color, fontFace: 'Arial' });
+  s.addText(standards, { x: 7.95, y: 6.95, w: 4.75, h: 0.3, fontSize: 10, color, fontFace: 'Arial', align: 'right' });
+}
+
+function lessonBase(d: any, title: string, kicker: string, tag: string | undefined, minutes?: number) {
+  const S = d.ShapeType;
+  const s = d.addSlide();
+  s.background = { color: 'FFFFFF' };
+  s.addShape(S.rect, { x: 0, y: 0, w: 13.333, h: 0.13, fill: { color: INK } });
+  const kickerX = typeof minutes === 'number' ? 1.75 : 0.6;
+  if (typeof minutes === 'number') {
+    s.addShape(S.rect, { x: 0.6, y: 0.24, w: 1.0, h: 0.34, fill: { color: INK }, line: { color: INK } });
+    s.addText(`${minutes} min`, { x: 0.6, y: 0.24, w: 1.0, h: 0.34, fontSize: 12, bold: true, color: 'FFFFFF', fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0 });
+  }
+  s.addText(kicker, { x: kickerX, y: 0.28, w: 8.5, h: 0.3, fontSize: 12, color: MUTE, fontFace: 'Arial', bold: true, charSpacing: 1.5, margin: 0 });
+  if (tag) {
+    s.addShape(S.rect, { x: 9.35, y: 0.25, w: 3.4, h: 0.38, fill: { color: GOLD } });
+    s.addText(tag, { x: 9.35, y: 0.25, w: 3.4, h: 0.38, fontSize: 12, bold: true, color: 'FFFFFF', fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0 });
+  }
+  s.addText(R(title), { x: 0.6, y: 0.62, w: 12.1, h: 0.7, fontSize: 30, bold: true, color: INK, fontFace: 'Georgia', margin: 0 });
+  s.addShape(S.rect, { x: 0.6, y: 1.36, w: 12.1, h: 0.02, fill: { color: LINE } });
+  return s;
+}
+
 export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile> {
   assertReadyForExport(draft);
   const pptx = mk();
   pptx.author = 'Nycologic Ai';
   pptx.title = draft.lessonPlan.title || draft.nextLessonTitle;
   const footerText = `${courseOf(draft)} · ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} · ${draft.nextLessonTitle} · ${draft.nextLessonDate}`;
+  const standards = standardsText(draft);
+  const entries = lessonDeckEntries(draft);
 
-  (draft.slides || []).forEach((slide, index) => {
-    const kind = String(slide.kind);
+  entries.forEach((entry, index) => {
+    const kind = String(entry.kind);
     if (kind === 'title') {
       const s = pptx.addSlide();
       s.background = { color: INK };
-      s.addText(slide.title || draft.nextLessonTitle, { x: 0.7, y: 1.15, w: 11.8, h: 1.1, fontSize: 46, bold: true, color: 'FFFFFF', fontFace: 'Georgia', margin: 0 });
+      if (typeof entry.minutes === 'number') {
+        s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 0.24, w: 1.0, h: 0.34, fill: { color: 'FFFFFF' }, line: { color: 'FFFFFF' } });
+        s.addText(`${entry.minutes} min`, { x: 0.6, y: 0.24, w: 1.0, h: 0.34, fontSize: 12, bold: true, color: INK, fontFace: 'Arial', align: 'center', valign: 'middle', margin: 0 });
+      }
+      s.addText(entry.title || draft.nextLessonTitle, { x: 0.7, y: 1.15, w: 11.8, h: 1.1, fontSize: 46, bold: true, color: 'FFFFFF', fontFace: 'Georgia', margin: 0 });
       s.addShape(pptx.ShapeType.rect, { x: 0.7, y: 2.45, w: 2.5, h: 0.04, fill: { color: 'FFFFFF' } });
       s.addText(`${draft.className} · ${draft.dayNumber ? `Unit day ${draft.dayNumber}` : 'Unit day'} · ${draft.nextLessonDate} · Mr. Francois`, { x: 0.7, y: 2.72, w: 11.8, h: 0.35, fontSize: 14, color: LINE, fontFace: 'Arial', margin: 0 });
-      if (slide.bullets?.length) T(s, slide.bullets.slice(0, 3), { x: 0.7, y: 3.35, w: 10.8, h: 1.5, fontSize: 22, color: 'FFFFFF' });
-      foot(s, footerText);
-      s.addNotes(speakerNoteWithFormat(slide, index));
+      if (entry.bullets?.length) T(s, entry.bullets.slice(0, 3), { x: 0.7, y: 3.35, w: 10.8, h: 1.5, fontSize: 22, color: 'FFFFFF' });
+      deckFooter(s, footerText, standards, LINE);
+      s.addNotes(speakerNoteWithFormat(entry, index));
       return;
     }
-    const kickerByKind: Record<string, string> = { 'do-now': 'DO NOW', 'reteach-worked': 'REPAIR FROM YESTERDAY', teaching: `SIDE 1 · ${Math.min(4, index)}`, 'independent-work': 'SIDES 3–4', 'exit-ticket': 'EXIT TICKET', debrief: 'DEBRIEF' };
+    const kickerByKind: Record<string, string> = { 'do-now': 'DO NOW', 'key-vocabulary': 'KEY VOCABULARY', 'reteach-worked': 'REPAIR FROM YESTERDAY', teaching: `SIDE 1 · ${Math.min(4, index)}`, 'independent-work': 'SIDES 3–4', 'exit-ticket': 'EXIT TICKET', debrief: 'DEBRIEF' };
     const tagByKind: Record<string, string> = { 'do-now': 'DO NOW', 'independent-work': 'SIDES 3–4', 'exit-ticket': 'EXIT TICKET' };
-    const s = base(pptx, slide.title || 'Lesson slide', kickerByKind[kind] || kind.toUpperCase(), tagByKind[kind]);
-    const bullets = (slide.bullets || []).slice(0, 5);
-    if (kind === 'reteach-worked') {
+    const s = lessonBase(pptx, entry.title || 'Lesson slide', kickerByKind[kind] || kind.toUpperCase(), tagByKind[kind], entry.minutes);
+    const bullets = (entry.bullets || []).slice(0, 5);
+    if (kind === 'key-vocabulary') {
+      const vocabRows = bullets.map((line) => {
+        const split = line.indexOf(':');
+        return split >= 0 ? [line.slice(0, split), line.slice(split + 1).trim()] : [line, ''];
+      });
+      s.addTable([['Word', 'What it means'], ...vocabRows], { x: 0.85, y: 1.72, w: 11.6, h: 4.5, colW: [3.2, 8.4], rowH: 0.62, fontSize: 20, border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial', valign: 'middle', fill: 'FFFFFF', margin: 0.08 } as any);
+    } else if (kind === 'reteach-worked') {
       s.addShape(pptx.ShapeType.rect, { x: 0.75, y: 1.72, w: 11.8, h: 2.3, fill: { color: SOFT }, line: { color: RED, width: 1.1 } });
       T(s, bullets, { x: 1.0, y: 1.95, w: 11.2, h: 1.9, fontSize: 23, color: INK });
     } else {
@@ -363,19 +424,28 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
         T(s, ['Sentence starters', 'I notice that...', 'The number that helps is...', 'I can check by...'], { x: 8.68, y: 1.95, w: 3.0, h: 2.1, fontSize: 15, color: INK, bold: false });
       }
     }
-    foot(s, footerText);
-    s.addNotes(speakerNoteWithFormat(slide, index));
+    deckFooter(s, footerText, standards);
+    s.addNotes(speakerNoteWithFormat(entry, index));
   });
 
-  const coverage = formatCoverageRows(draft);
-  [coverage.slice(0, 9), coverage.slice(9, 18)].forEach((rows, pageIndex) => {
-    const s = base(pptx, `Format coverage — ${pageIndex + 1} of 2`, 'TEACHER REFERENCE · NOT FOR DISPLAY', 'DO NOT PROJECT');
+  const tipSlides = [
+    {
+      title: 'TIP alignment — what the plan prescribes',
+      rows: tipAlignmentRows(draft).map((row) => [row.prescribed, row.met === false ? `Not met — ${row.where}` : row.where]),
+    },
+    {
+      title: 'TIP alignment — the findings this answers',
+      rows: tipFindingRows(draft).map((row) => [row.finding, row.met === false ? `Not met — ${row.answer}` : row.answer]),
+    },
+  ];
+  tipSlides.forEach((tip) => {
+    const s = base(pptx, tip.title, 'TEACHER REFERENCE · NOT FOR DISPLAY', 'DO NOT PROJECT');
     s.addTable(
-      [['Required element', 'Where it is done'], ...rows.map((row) => [row.element, row.where.replace(/<[^>]*>/g, '')])],
-      { x: 0.6, y: 1.68, w: 12.1, h: 4.9, colW: [4.6, 7.5], rowH: 0.5, fontSize: 14, valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial' } as any
+      [['Prescribed activity / finding', 'Where it happens today'], ...tip.rows],
+      { x: 0.6, y: 1.68, w: 12.1, h: 4.9, colW: [4.3, 7.8], rowH: 0.86, fontSize: 13, valign: 'middle', border: { type: 'solid', color: '999999', pt: 1 }, color: INK, fontFace: 'Arial' } as any
     );
     foot(s, 'Teacher reference · keep these two slides out of presentation mode');
-    s.addNotes('These two slides are for you and for an observer. Hide them before you present.');
+    s.addNotes(`[Format: TIP alignment teacher reference.] Source: ${TIP_SOURCE_TEXT} These two slides are for you and for an observer. Hide them before you present.`);
   });
 
   const data = (await pptx.write({ outputType: 'blob' })) as Blob;
@@ -384,7 +454,7 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
 
 export function presentationPdf(draft: NextDayDraft): ExportFile {
   assertReadyForExport(draft);
-  return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(lessonPlanHtml(draft)) };
+  return { name: `${slug(draft.className)}-presentation.pdf`, blob: hillcrestHtmlBlob(presentationPdfHtml(draft)) };
 }
 
 // -------------------------------------------------------------------- worksheet
