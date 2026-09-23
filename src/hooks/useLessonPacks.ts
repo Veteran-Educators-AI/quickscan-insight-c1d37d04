@@ -241,7 +241,11 @@ export function useLessonPacks() {
 
         const roster = (rosterRows || [])
           .filter((s: any) => !s.archived_at)
-          .map((s: any) => ({ id: s.id, name: getDisplayName(s.id, s.first_name || '', s.last_name || '') }));
+          .map((s: any) => ({
+            id: s.id,
+            name: getDisplayName(s.id, s.first_name || '', s.last_name || ''),
+            realName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          }));
 
         const draft: NextDayDraft = {
           classId: klass.id,
@@ -288,6 +292,7 @@ export function useLessonPacks() {
           grouping: buildGrouping(digest, worksheetItems, roster),
           nextLessonTitle: lessonTitle,
           nextLessonDate: dateLabel,
+          dayNumber,
         };
 
         const row = await upsertPack({

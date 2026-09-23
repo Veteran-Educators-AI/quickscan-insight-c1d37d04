@@ -226,7 +226,11 @@ serve(async (req) => {
 
         const roster = (rosterRows || [])
           .filter((s: any) => !s.archived_at)
-          .map((s: any) => ({ id: s.id, name: displayName(s.id) }));
+          .map((s: any) => ({
+            id: s.id,
+            name: displayName(s.id),
+            realName: `${s.first_name || ""} ${s.last_name || ""}`.trim(),
+          }));
 
         const draft = {
           classId: klass.id,
@@ -273,6 +277,7 @@ serve(async (req) => {
           grouping: buildGrouping(digest, worksheetItems, roster),
           nextLessonTitle: lessonTitle,
           nextLessonDate: dateLabel,
+          dayNumber,
         };
 
         await upsert({

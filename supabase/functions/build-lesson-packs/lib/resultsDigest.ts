@@ -40,6 +40,7 @@ export interface ScanRow {
 export interface StudentMark {
   studentId: string;
   name: string;
+  realName: string;
   mark: Mark;
   verbatim: string | null;
   errorTag: string | null;
@@ -72,6 +73,7 @@ export interface TagDigest {
 export interface StudentDigest {
   studentId: string;
   name: string;
+  realName: string;
   isPaperRecord: boolean;
   score: number | null;
   correct: number;
@@ -185,6 +187,12 @@ function nameOf(row: ScanRow, getDisplayName: NameFn): string {
   return 'Unclaimed paper';
 }
 
+function realNameOf(row: ScanRow): string {
+  if (!row.students) return 'Unclaimed paper';
+  const fullName = `${row.students.first_name || ''} ${row.students.last_name || ''}`.trim();
+  return fullName || 'Unclaimed paper';
+}
+
 /** Build one digest per (worksheet code) from the scan rows of a single class. */
 export function buildAssignmentDigests(
   rows: ScanRow[],
@@ -207,6 +215,7 @@ export function buildAssignmentDigests(
 
     for (const row of groupRows) {
       const name = nameOf(row, getDisplayName);
+      const realName = realNameOf(row);
       const items = asList(row.item_marks);
       const studentMarks: StudentMark[] = [];
       const studentTags = new Set<string>();
@@ -220,6 +229,7 @@ export function buildAssignmentDigests(
         const studentMark: StudentMark = {
           studentId: row.student_id,
           name,
+          realName,
           mark,
           verbatim,
           errorTag,
@@ -278,6 +288,7 @@ export function buildAssignmentDigests(
       students.push({
         studentId: row.student_id,
         name,
+        realName,
         isPaperRecord: !row.students?.email,
         score: row.score === null || row.score === undefined ? null : Number(row.score),
         correct: studentMarks.filter((m) => m.mark === 'correct').length,
