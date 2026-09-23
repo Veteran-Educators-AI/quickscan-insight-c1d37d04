@@ -521,7 +521,7 @@ export function worksheetPdf(draft: NextDayDraft): ExportFile {
   const rows = Math.ceil(n / cols);
   const cellW = (PAGE_W - MARGIN * 2) / cols;
   w.room(40 + rows * 34 + 30);
-  doc.setFillColor(55);
+  doc.setFillColor(55, 55, 55);
   doc.rect(MARGIN, w.y, PAGE_W - MARGIN * 2, 20, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -649,7 +649,7 @@ function exitTicketHalf(w: PdfWriter, draft: NextDayDraft, top: number) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   const bw = doc.getTextWidth(banner) + 16;
-  doc.setFillColor(50);
+  doc.setFillColor(50, 50, 50);
   doc.rect(MARGIN, boxTop + 12, bw, 16, 'F');
   doc.setTextColor(255);
   doc.text(banner, MARGIN + 8, boxTop + 23.5);
