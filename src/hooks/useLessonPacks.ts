@@ -181,7 +181,8 @@ export function useLessonPacks() {
 
         const rows = (scanRows || []) as unknown as ScanRow[];
         const digests = rows.length ? buildAssignmentDigests(rows, getDisplayName) : [];
-        const digest = digests[0];
+        // Results with no item detail can't teach us anything — treat as no results.
+        const digest = digests.filter((d) => d.items.length > 0)[0];
 
         // No results in: calendar lesson only, no invented numbers.
         if (!digest) {

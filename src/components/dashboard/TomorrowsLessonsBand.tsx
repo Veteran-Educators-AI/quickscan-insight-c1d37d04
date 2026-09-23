@@ -253,6 +253,47 @@ function PackCard({
           </p>
         )}
 
+        {/* the generated numbers, straight on the card */}
+        {draft && (
+          <div className="space-y-1.5 rounded-md border bg-muted/40 p-2 text-xs">
+            {draft.lessonPlan.reteach.items.length > 0 && (
+              <p className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground">Items repaired:</span>
+                {draft.lessonPlan.reteach.items.map((item) => (
+                  <Badge key={item.itemNumber} variant="outline" className="text-[11px]">
+                    #{item.itemNumber}
+                    {item.percentCorrect !== null && item.percentCorrect !== undefined ? ` · ${item.percentCorrect}%` : ''}
+                  </Badge>
+                ))}
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              {draft.worksheet.items.length} worksheet questions (every answer checked) · each student works{' '}
+              {draft.grouping.itemsPerStudent} · {draft.exitTicket.items.length}-question exit ticket ·{' '}
+              {draft.slides.length} slides
+            </p>
+            <p className="flex flex-wrap gap-x-3 gap-y-1">
+              {draft.grouping.groups.map((group) => (
+                <span key={group.id}>
+                  <span className="font-medium">{group.label}</span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    — {group.students.length} student{group.students.length === 1 ? '' : 's'} · items{' '}
+                    {group.itemNumbers.join(', ')} · check {group.checkTotal}
+                  </span>
+                </span>
+              ))}
+            </p>
+            {draft.grouping.noResultsYet.length > 0 && (
+              <p className="text-muted-foreground">
+                {draft.grouping.noResultsYet.length} student
+                {draft.grouping.noResultsYet.length === 1 ? '' : 's'} with no results for this assignment yet — on the
+                final slide, unassigned.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* title when the calendar has none */}
         {!pack?.lesson_title && !position.title && (
           <Input
