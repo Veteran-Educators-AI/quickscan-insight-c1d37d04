@@ -63,7 +63,7 @@ const safe = (text: string): string =>
     .replace(/\u00b1/g, '+/-')
     .replace(/\u221a/g, 'sqrt')
     .replace(/\u03c0/g, 'pi')
-    .replace(/\u00b7/g, '*')
+    .replace(/\u00b7/g, '-')
     .replace(/\u2022/g, '-')
     .replace(/\u2026/g, '...')
     // Anything else outside Latin-1 would render as a stray glyph.
@@ -459,11 +459,15 @@ export function worksheetPdf(draft: NextDayDraft): ExportFile {
   const w = new PdfWriter();
   worksheetHeader(w, draft);
   for (const item of draft.worksheet.items) {
+    // Keep the question and its answer box on the same page.
+    const promptLines = w.doc.splitTextToSize(`${item.itemNumber}.  ${item.prompt}`, PAGE_W - MARGIN * 2).length;
+    w.room(promptLines * 15 + 54 + 20);
     w.text(`${item.itemNumber}.  ${item.prompt}`, { size: 12, gap: 2 });
     w.box(54, 'show your work');
   }
   return { name: `${slug(draft.className)}-worksheet.pdf`, blob: w.blob() };
 }
+
 
 export async function worksheetDocx(draft: NextDayDraft): Promise<ExportFile> {
   const children: any[] = [
