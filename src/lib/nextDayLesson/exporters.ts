@@ -346,57 +346,68 @@ export async function presentationPptx(draft: NextDayDraft): Promise<ExportFile>
   pptx.author = 'Nycologic Ai';
   pptx.title = draft.lessonPlan.title || draft.nextLessonTitle;
 
+  // Classroom deck style (matches the teacher's Lesson slides): light page,
+  // small teal kicker, teal title, pale content card, cream "sentence starters"
+  // side card, orange timer, footer with lesson/unit left and standards right.
+  const TEAL = '2F6F73';
+  const ORANGE = 'C9782B';
+  const CARD = 'E9EEF3';
+  const CREAM = 'F7F0DC';
+  const kickerFor: Record<string, string> = {
+    title: 'TODAY',
+    'do-now': '5 MINUTES · INDIVIDUALLY, THEN PARTNER',
+    'reteach-worked': 'REPAIR · FROM YESTERDAY\'S PAPERS',
+    teaching: 'NEW LEARNING · WE DO',
+    'independent-work': 'INDEPENDENT PRACTICE · YOUR ITEMS ONLY',
+    'exit-ticket': '4 MINUTES · ON YOUR OWN',
+    debrief: 'DEBRIEF · WHOLE CLASS',
+  };
+  const timerFor: Record<string, string> = { 'do-now': '5:00', 'independent-work': '15:00', 'exit-ticket': '4:00' };
+  const starters = ['"I notice that..."', '"I wonder whether..."', '"The number that would help me is... because..."', '"I disagree because..."'];
+  const withStarters = new Set(['do-now', 'debrief', 'teaching']);
+  const stds = standardsOf(draft);
+  const footerLeft = `${draft.nextLessonTitle}${draft.lessonPlan?.title && draft.lessonPlan.title !== draft.nextLessonTitle ? ' · ' + draft.lessonPlan.title : ''} · ${courseOf(draft)}`;
+
   for (const slide of draft.slides || []) {
     const s = pptx.addSlide();
-    s.background = { color: slide.kind === 'title' || slide.kind === 'debrief' ? DECK_BG : 'FFFFFF' };
-    const dark = slide.kind === 'title' || slide.kind === 'debrief';
+    s.background = { color: 'FFFFFF' };
+    const kind = String(slide.kind);
 
+    s.addText((kickerFor[kind] || kind.toUpperCase()).toUpperCase(), {
+      x: 0.6, y: 0.3, w: 8.8, h: 0.3, fontSize: 10, bold: true, color: TEAL, fontFace: 'Calibri', charSpacing: 1,
+    });
     s.addText(slide.title || '', {
-      x: 0.6,
-      y: slide.kind === 'title' ? 2.2 : 0.45,
-      w: 8.8,
-      h: slide.kind === 'title' ? 1.4 : 1.0,
-      fontSize: slide.kind === 'title' ? 44 : 32,
-      bold: true,
-      color: dark ? 'FFFFFF' : '10213A',
-      fontFace: 'Arial',
+      x: 0.6, y: 0.55, w: 8.8, h: kind === 'title' ? 1.2 : 0.7,
+      fontSize: kind === 'title' ? 40 : 30, bold: true, color: TEAL, fontFace: 'Calibri', valign: 'top',
     });
 
-    if (slide.kind !== 'title') {
+    const side = withStarters.has(kind);
+    const cardW = side ? 6.1 : 8.8;
+    const cardY = kind === 'title' ? 1.9 : 1.45;
+    s.addShape('rect' as any, { x: 0.6, y: cardY, w: cardW, h: 3.0, fill: { color: CARD }, line: { color: CARD } });
+    const body = kind === 'title'
+      ? [`${draft.className} · ${draft.nextLessonDate}`, ...(slide.bullets || [])]
+      : slide.bullets || [];
+    s.addText(
+      body.map((b) => ({ text: b, options: { bullet: body.length > 1, breakLine: true } })),
+      { x: 0.8, y: cardY + 0.15, w: cardW - 0.4, h: 2.7, fontSize: 18, color: '4A5560', fontFace: 'Calibri', valign: 'top', paraSpaceAfter: 6 }
+    );
+
+    if (side) {
+      s.addShape('rect' as any, { x: 6.9, y: cardY, w: 2.5, h: 3.0, fill: { color: CREAM }, line: { color: CREAM } });
+      s.addText('Sentence starters', { x: 7.05, y: cardY + 0.1, w: 2.2, h: 0.35, fontSize: 12, bold: true, color: ORANGE, fontFace: 'Calibri' });
       s.addText(
-        (slide.bullets || []).map((b) => ({ text: b, options: { bullet: true, breakLine: true } })),
-        {
-          x: 0.7,
-          y: 1.6,
-          w: 8.6,
-          h: 3.4,
-          fontSize: 20,
-          color: dark ? 'EFEFEF' : '222222',
-          fontFace: 'Arial',
-          valign: 'top',
-        }
+        starters.map((t) => ({ text: t, options: { bullet: true, breakLine: true } })),
+        { x: 7.05, y: cardY + 0.5, w: 2.25, h: 2.4, fontSize: 11, color: '4A5560', fontFace: 'Calibri', valign: 'top' }
       );
-    } else {
-      s.addText(`${draft.className} · ${draft.nextLessonDate}`, {
-        x: 0.6,
-        y: 3.7,
-        w: 8.8,
-        h: 0.5,
-        fontSize: 20,
-        color: DECK_ACCENT,
-        fontFace: 'Arial',
-      });
     }
 
-    s.addText(`${draft.className} — ${draft.nextLessonTitle}`, {
-      x: 0.6,
-      y: 4.9,
-      w: 8.8,
-      h: 0.3,
-      fontSize: 10,
-      color: dark ? '8899AA' : '888888',
-      fontFace: 'Arial',
-    });
+    if (timerFor[kind]) {
+      s.addText(`⏱ ${timerFor[kind]}`, { x: 0.6, y: 4.6, w: 2, h: 0.35, fontSize: 14, bold: true, color: ORANGE, fontFace: 'Calibri' });
+    }
+
+    s.addText(footerLeft, { x: 0.6, y: 5.1, w: 6, h: 0.3, fontSize: 8, color: '8A949E', fontFace: 'Calibri' });
+    if (stds) s.addText(`NYS ${stds}`, { x: 6.6, y: 5.1, w: 2.8, h: 0.3, fontSize: 8, color: '8A949E', fontFace: 'Calibri', align: 'right' });
     s.addNotes(slide.speakerNotes || '');
   }
 
