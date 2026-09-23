@@ -310,7 +310,7 @@ export function answerKeyHtml(draft: NextDayDraft) {
     `<table><tr><th>#</th><th>Answer</th><th>Strip</th><th>What to look for</th><th>Wrong answer &rarr; note</th></tr>${rows}</table>` +
     `<h2>Check totals</h2><table><tr><th>Set</th><th>Items</th><th>Check total</th><th>First-six subtotal</th></tr>${totals}</table>` +
     `<h2>Exit-ticket key</h2><table><tr><th>#</th><th>Answer</th><th>Skill</th></tr>${exitRows}</table>` +
-    `<div class="foot">Regents-style item: item ${draft.worksheet.items.at(-1)?.itemNumber ?? 14}, written to the released-question pattern unless the coverage map marks it not met.</div>` + E;
+    `<div class="foot">Regents-style item: item ${draft.worksheet.items.at(-1)?.itemNumber ?? 14}, written to the released-question pattern unless the TIP alignment note marks it not met.</div>` + E;
 }
 
 export function whoDoesWhichHtml(draft: NextDayDraft) {
@@ -484,6 +484,25 @@ export function lessonPlanHtml(draft: NextDayDraft) {
     `<p class="sans" style="font-size:8.2pt"><b>House format:</b> ${math(houseFormatLine(draft))}</p>` +
     `<h2>Where this sits on the calendar</h2><table><tr><th>Yesterday</th><td>${esc(draft.builtFrom.worksheetTitle)}</td></tr><tr><th>Today</th><td>${esc(draft.nextLessonTitle)}</td></tr><tr><th>Tomorrow</th><td>Next pacing-calendar lesson.</td></tr><tr><th>Regents</th><td>Thursday 17 June 2027 &mdash; this skill supports the sequence/function work students will need there.</td></tr></table>` +
     `<h2>Supports</h2><table><tr><th>Scaffold</th><th>How it appears</th></tr><tr><td>Flowchart</td><td>Side 2 help card.</td></tr><tr><td>Pre-made answer strip</td><td>Side 4 strip and board check total.</td></tr><tr><td>Co-teacher cue</td><td>During independent work, compare strips to totals and pull students whose totals do not match.</td></tr></table>` + E;
+}
+
+export function presentationPdfHtml(draft: NextDayDraft) {
+  const entries = lessonDeckEntries(draft);
+  const standards = standardsText(draft);
+  const footer = `${courseOf(draft)} · ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day'} · ${draft.nextLessonTitle} · ${draft.nextLessonDate}`;
+  const slideHtml = entries.map((entry) => {
+    const badge = typeof entry.minutes === 'number' ? `<span class="mono" style="background:#111;color:#fff;padding:2px 7px">${entry.minutes} min</span>` : '';
+    const rows = entry.kind === 'key-vocabulary'
+      ? `<table><tr><th>Word</th><th>What it means</th></tr>${vocabularyRows(draft).map(([word, meaning]) => `<tr><td><b>${esc(word)}</b></td><td>${esc(meaning)}</td></tr>`).join('')}</table>`
+      : `<ul>${entry.bullets.slice(0, 5).map((bullet) => `<li>${math(bullet)}</li>`).join('')}</ul>`;
+    return `<section class="pb"><div class="side">Slide ${entry.slideNumber}</div> ${badge}<h2>${math(entry.title)}</h2>${rows}<div class="foot">${esc(footer)}<span style="float:right">${esc(standards)}</span></div></section>`;
+  }).join('');
+  const tipOne = tipAlignmentRows(draft).map((row) => `<tr><td><b>${esc(row.prescribed)}</b></td><td>${row.met === false ? '<b>Not met</b><br>' : ''}${math(row.where)}</td></tr>`).join('');
+  const tipTwo = tipFindingRows(draft).map((row) => `<tr><td><i>${math(row.finding)}</i></td><td>${row.met === false ? '<b>Not met</b><br>' : ''}${math(row.answer)}</td></tr>`).join('');
+  return H + '<style>@page{size:13.333in 7.5in;margin:8mm 10mm}body{font-size:13pt}.pb{min-height:6.8in}li{margin:7px 0 7px 22px}.side{margin-top:2px}</style>' +
+    slideHtml +
+    `<section class="pb"><div class="side">TEACHER REFERENCE · NOT FOR DISPLAY</div><h2>TIP alignment &mdash; what the plan prescribes</h2><table><tr><th>Prescribed activity</th><th>Where it happens today</th></tr>${tipOne}</table><div class="foot">Teacher reference · keep this out of presentation mode</div></section>` +
+    `<section class="pb"><div class="side">TEACHER REFERENCE · NOT FOR DISPLAY</div><h2>TIP alignment &mdash; the findings this answers</h2><table><tr><th>Finding</th><th>Where it happens today</th></tr>${tipTwo}</table><div class="foot">Teacher reference · keep this out of presentation mode</div></section>` + E;
 }
 
 export function printPackHtml(draft: NextDayDraft) {
