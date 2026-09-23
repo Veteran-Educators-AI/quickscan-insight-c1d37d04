@@ -50,6 +50,7 @@ import { usePushToSisterApp } from '@/hooks/usePushToSisterApp';
 import { useLessonPacks, type LessonPackRow, type TaughtClass } from '@/hooks/useLessonPacks';
 import { positionFor } from '@/data/pacingCalendars';
 import type { NextDayDraft } from '@/lib/nextDayLesson/types';
+import { lessonDeckSlideCount } from '@/lib/nextDayLesson/hillcrestArtifacts';
 import {
   answerKeyPdf,
   calendarLessonPdf,
@@ -270,7 +271,7 @@ function PackCard({
             <p className="text-muted-foreground">
               {draft.worksheet.items.length} worksheet questions (every answer checked) · each student works{' '}
               {draft.grouping.itemsPerStudent} · {draft.exitTicket.items.length}-question exit ticket ·{' '}
-              {draft.slides.length + 2} slides (last two teacher-reference)
+              {lessonDeckSlideCount(draft)} slides (last two teacher-reference)
             </p>
             <p className="flex flex-wrap gap-x-3 gap-y-1">
               {draft.grouping.groups.map((group) => (
