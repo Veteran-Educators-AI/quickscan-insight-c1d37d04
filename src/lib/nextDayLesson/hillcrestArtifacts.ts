@@ -278,7 +278,7 @@ export function worksheetHtml(draft: NextDayDraft) {
     head(`${course} &middot; ${day}`, 'Help card') +
     `<div class="side">Side 2 &nbsp;&middot;&nbsp; help card</div>` +
     `<div class="gbox k"><div class="cap">Decision flow</div><p>Read the representation. Name what is changing. Write the rule. Check it with one value before you move on.</p></div>` +
-    `<table><tr><th>Thing</th><th>What it is</th></tr><tr><td>First term</td><td>The value you start with.</td></tr><tr><td>Change or ratio</td><td>How the pattern moves from one term to the next.</td></tr><tr><td>Check total</td><td>The sum of your assigned answers.</td></tr></table>` +
+    `<table><tr><th>Thing</th><th>What it is</th></tr>${vocabularyRows(draft).map(([word, meaning]) => `<tr><td>${esc(word)}</td><td>${esc(meaning)}</td></tr>`).join('')}</table>` +
     `<div class="g2"><div class="box4"><div class="cap">Worked &middot; from yesterday</div><p class="math">${first ? math(first.prompt) : 'Use the first item.'}</p><p>Check: ${first ? math(first.verifyNote || first.verify || '') : F()}</p></div><div class="box4"><div class="cap">Worked &middot; new numbers</div><p class="math">${second ? math(second.prompt) : 'Use the second item.'}</p><p>Check: ${second ? math(second.verifyNote || second.verify || '') : F()}</p></div></div>` +
     `<h2>Before you hand this in</h2><p><span class="ck"></span>I did only my 8 items. &nbsp; <span class="ck"></span>I wrote answers on the strip. &nbsp; <span class="ck"></span>I compared my total.</p>` +
     sectionFoot(draft, 2) +
@@ -377,16 +377,111 @@ export function coverageNoteHtml(rows: CoverageRow[]) {
   return `<div class="gbox k"><b>Format exception:</b> ${broken.map((row) => esc(row.element)).join('; ')}. The teacher can live with it for this lesson, change the pack, or change the rule.</div>`;
 }
 
-export function lessonPlanHtml(draft: NextDayDraft) {
+const textOnly = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&ndash;/g, '–').replace(/&mdash;/g, '—').replace(/&middot;/g, '·').replace(/&rarr;/g, '→');
+
+export function houseFormatLine(draft: NextDayDraft) {
   const rows = formatCoverageRows(draft);
-  const coverage = rows.map((row) => `<tr><td><b>${esc(row.element)}</b></td><td><span class="mono">${row.where}</span></td><td>${row.what}</td></tr>`).join('');
-  const totalSlides = (draft.slides?.length || 0) + 2;
+  const by = (element: string) => rows.find((row) => row.element.startsWith(element));
+  return `House format: ${textOnly(by('Four sides')?.where || 'Sides 1–4')}; item banding ${textOnly(by('14 items')?.what || '')}; check totals ${textOnly(by('Four sets')?.what || '')}; real-paper ${textOnly(by('One item from a real paper')?.where || 'Not met')}; Regents ${textOnly(by('One Regents-style')?.where || 'Not met')}; ■→◆ pair ${textOnly(by('The ■')?.where || 'Not met')}; ${textOnly(by('Verification')?.what || 'every value verified before printing')}.`;
+}
+
+export function tipAlignmentRows(draft: NextDayDraft): TipPlanRow[] {
+  const periodRows = lessonPeriodRows(draft);
+  const totalMinutes = periodRows.reduce((sum, row) => sum + row.minutes, 0);
+  const minuteChain = periodRows.map((row) => `${row.minutes} min ${textOnly(row.label)} (slides ${textOnly(row.slides)})`).join(' → ');
+  const reteachItems = draft.lessonPlan.reteach.items.map((item) => `item ${item.itemNumber}${item.percentCorrect !== null && item.percentCorrect !== undefined ? ` at ${item.percentCorrect}%` : ''}`).join(', ') || 'no RETEACH item marked';
+  const regents = draft.worksheet.items.at(-1)?.itemNumber ?? 'not set';
+  const groups = draft.grouping.groups.map((group, index) => `Set ${index + 1}: items ${group.itemNumbers.join(', ')} (check ${group.checkTotal}; first six ${firstSixTotal(draft, group.itemNumbers)})`).join('; ');
+  const bands = draft.worksheet.items.length >= 14
+    ? `14-item pool banded 4 foundation (${draft.worksheet.items.slice(0,4).map(i=>i.itemNumber).join(', ')}), 4 core (${draft.worksheet.items.slice(4,8).map(i=>i.itemNumber).join(', ')}), 3 extension (${draft.worksheet.items.slice(8,11).map(i=>i.itemNumber).join(', ')}), 3 depth (${draft.worksheet.items.slice(11,14).map(i=>i.itemNumber).join(', ')}).`
+    : `Item pool has ${draft.worksheet.items.length} items, so the 4/4/3/3 band is not met.`;
+  const sideProgression = `Side 1 guided launch and repair; Side 2 help card and vocabulary; Sides 3–4 independent pool; exit ticket closes the period.`;
+  return [
+    {
+      prescribed: 'Workshop structure in a math classroom',
+      where: `${minuteChain}. Total timed badges: ${totalMinutes} min.`,
+      artifact: `Lesson deck timed slides, worksheet Sides 1–4, exit ticket, and the period table in this plan.`,
+      met: totalMinutes === (draft.lessonPlan.durationMinutes || 45),
+    },
+    {
+      prescribed: 'Checks for understanding and exit tickets aligned to Regents expectations',
+      where: `Checks happen during ${periodRows.filter((row) => /check|ticket|debrief|do now|reteach/i.test(`${row.label} ${row.detail}`)).map((row) => `${row.minutes} min ${textOnly(row.label)} (slides ${textOnly(row.slides)})`).join('; ') || 'the timed lesson blocks'}; exit ticket is ${draft.exitTicket.items.length} question(s); Regents-style item is item ${regents}.`,
+      artifact: `Exit ticket, answer key, and worksheet item ${regents}.`,
+      met: !!draft.exitTicket.items.length && !!draft.worksheet.items.at(-1),
+    },
+    {
+      prescribed: 'Weekly analysis of student work to identify instructional trends',
+      where: `Source: ${draft.builtFrom.worksheetCode}, ${draft.builtFrom.papers} paper(s) from ${draft.builtFrom.studentCount} student(s), scored item by item rather than by percentage; RETEACH calls: ${reteachItems}.`,
+      artifact: `Paper-scan results digest, reteach table, lesson plan Built from row, and answer-key error notes.`,
+      met: draft.builtFrom.papers > 0,
+    },
+    {
+      prescribed: 'Tiered tasks and scaffolded problems',
+      where: `Sides 3–4: four sets of eight items drawn from a ${bands} ${groups}. Side 2 help card carries the scaffold; first-six subtotals support reduced assignments.`,
+      artifact: `Worksheet Side 2, worksheet Sides 3–4, answer key check-total table, Who Does Which teacher list, board deck.`,
+      met: draft.grouping.groups.length === 4 && draft.worksheet.items.length === 14,
+    },
+    {
+      prescribed: 'Each lesson structured with a clear progression',
+      where: `${sideProgression} Calendar position: ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'day not set'}; ${minuteChain}.`,
+      artifact: `Lesson plan, deck slide order, worksheet side tabs, and calendar row.`,
+      met: periodRows.length > 0,
+    },
+  ];
+}
+
+export function tipFindingRows(draft: NextDayDraft): TipFindingRow[] {
+  const periodRows = lessonPeriodRows(draft);
+  const totalMinutes = periodRows.reduce((sum, row) => sum + row.minutes, 0);
+  return [
+    {
+      finding: '“No differentiation, all students given the same task regardless of readiness” (April)',
+      answer: `The room contains four sets of eight item numbers, each with a check total, built from the received item marks. The teacher list shows evidence for placement; the student sheet remains common.`,
+    },
+    {
+      finding: '“Students working on different tasks simultaneously without clear directions or regrouping” (April)',
+      answer: `This design answers both April findings at once: the differentiation is carried on one identical sheet, same four sides, same 14 items, same number of items each; only the list of eight numbers differs, and that list is on the board beside the student's name. Nothing on the sheet says which set anyone is on.`,
+    },
+    {
+      finding: 'Absence of an exit ticket (December)',
+      answer: `The pack includes a two-form exit ticket with ${draft.exitTicket.items.length} question(s), two per page, and the answer key prints the answers by skill.`,
+      met: draft.exitTicket.items.length > 0,
+    },
+    {
+      finding: '“Little or no monitoring of student understanding”',
+      answer: `Monitoring appears in timed checks, answer strips, check totals, first-six subtotals, debrief answers, and the next-day digest built from ${draft.builtFrom.papers} received paper(s).`,
+      met: draft.builtFrom.papers > 0,
+    },
+    {
+      finding: '“Unrealistic time allocations” (April)',
+      answer: `The period table and deck badges are generated from the same timing data and add to ${totalMinutes} minutes for a ${draft.lessonPlan.durationMinutes || 45}-minute period.`,
+      met: totalMinutes === (draft.lessonPlan.durationMinutes || 45),
+    },
+  ];
+}
+
+export function tipExceptionHtml(rows: Array<{ prescribed?: string; finding?: string; met?: boolean }>) {
+  const broken = rows.filter((row) => row.met === false);
+  if (broken.length === 0) return '';
+  return `<div class="gbox k"><b>TIP alignment exception:</b> ${broken.map((row) => esc(row.prescribed || row.finding || 'row')).join('; ')}. The teacher can live with it for this lesson, change the pack, or change the rule.</div>`;
+}
+
+export function lessonPlanHtml(draft: NextDayDraft) {
+  const tipRows = tipAlignmentRows(draft);
+  const findingRows = tipFindingRows(draft);
+  const tipTable = tipRows.map((row) => `<tr><td><b>${esc(row.prescribed)}</b></td><td><span class="mono">${row.met === false ? '<b>Not met</b><br>' : ''}${math(row.where)}</span></td><td>${math(row.artifact)}</td></tr>`).join('');
+  const findingTable = findingRows.map((row) => `<tr><td><i>${math(row.finding)}</i></td><td>${row.met === false ? '<b>Not met</b><br>' : ''}${math(row.answer)}</td></tr>`).join('');
+  const totalSlides = lessonDeckSlideCount(draft);
   const materials = [`Slides (${totalSlides}, the last two teacher-reference — hide them before you present)`, 'Worksheet, four sides', 'Exit tickets, Form A and Form B', 'Who Does Which list and board deck', ...(draft.lessonPlan.materials || [])];
+  const periodRows = lessonPeriodRows(draft);
   return H + head(`Teacher copy &middot; ${esc(courseOf(draft))} &middot; ${esc(draft.className)} &middot; Hillcrest 28Q505 &middot; Mr. Francois`, `${esc(draft.nextLessonTitle)} &mdash; Lesson plan`) +
     `<table><tr><th>Date and topic</th><td>${esc(draft.nextLessonDate)} &middot; ${draft.dayNumber ? `Day ${draft.dayNumber}` : 'Day not set'} &middot; ${esc(draft.nextLessonTitle)}</td></tr><tr><th>Aim</th><td><b>${math(draft.lessonPlan.aim || draft.nextLessonTitle)}</b></td></tr><tr><th>Students will</th><td><ol><li>${math(draft.lessonPlan.objective || 'Repair the skill named by the last results.')}</li><li>Use the help card to complete assigned items.</li><li>Check answers against a total before handing in work.</li></ol></td></tr><tr><th>Built from</th><td>${builtFromLine(draft)}</td></tr><tr><th>Materials</th><td>${materials.map((m) => esc(m)).join('<br>')}</td></tr></table>` +
-    `<h2>Standards</h2><p>${stdChips(draft) || '<span class="mono">Standards not supplied</span>'}</p>` +
-    `<h2>The period</h2><table><tr><th>Min</th><th>Slides</th><th>What happens</th></tr>${(draft.lessonPlan.timeline || []).map((step, index) => `<tr><td>${step.minutes}</td><td>${index + 1}</td><td><b>${math(step.label)}</b><br>${math(step.detail)}</td></tr>`).join('')}</table>` +
-    `<h2>Format coverage &mdash; where each required element is done</h2><table><tr><th>Required element</th><th>Where</th><th>Exactly what does it</th></tr>${coverage}</table>${coverageNoteHtml(rows)}` +
+    `<h2>Standards</h2><p>${stdChips(draft) || `<span class="mono">${esc(standardsText(draft))}</span>`}</p>` +
+    `<h2>The period</h2><table><tr><th>Min</th><th>Slides</th><th>What happens</th></tr>${periodRows.map((step) => `<tr><td>${step.minutes}</td><td>${step.slides}</td><td><b>${math(step.label)}</b><br>${math(step.detail)}</td></tr>`).join('')}</table>` +
+    `<h2>TIP alignment &mdash; what the plan prescribes and where it happens today</h2><p class="sans" style="font-size:8.2pt">The activities are the ones prescribed in the observation report; each row names the minutes in which the activity happens and the artifact that shows it.</p><table><tr><th>What the plan prescribes</th><th>Where it happens in this period</th><th>The artifact that evidences it</th></tr>${tipTable}</table>${tipExceptionHtml(tipRows)}` +
+    `<h2>The findings this lesson answers</h2><table><tr><th>The finding, as written</th><th>What this lesson puts in front of the observer</th></tr>${findingTable}</table>${tipExceptionHtml(findingRows)}` +
+    `<div class="gbox"><div class="cap">Source</div><p>${esc(TIP_SOURCE_TEXT)}</p></div>` +
+    `<p class="sans" style="font-size:8.2pt"><b>House format:</b> ${math(houseFormatLine(draft))}</p>` +
     `<h2>Where this sits on the calendar</h2><table><tr><th>Yesterday</th><td>${esc(draft.builtFrom.worksheetTitle)}</td></tr><tr><th>Today</th><td>${esc(draft.nextLessonTitle)}</td></tr><tr><th>Tomorrow</th><td>Next pacing-calendar lesson.</td></tr><tr><th>Regents</th><td>Thursday 17 June 2027 &mdash; this skill supports the sequence/function work students will need there.</td></tr></table>` +
     `<h2>Supports</h2><table><tr><th>Scaffold</th><th>How it appears</th></tr><tr><td>Flowchart</td><td>Side 2 help card.</td></tr><tr><td>Pre-made answer strip</td><td>Side 4 strip and board check total.</td></tr><tr><td>Co-teacher cue</td><td>During independent work, compare strips to totals and pull students whose totals do not match.</td></tr></table>` + E;
 }
