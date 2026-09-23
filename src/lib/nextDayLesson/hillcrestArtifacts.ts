@@ -382,7 +382,7 @@ const textOnly = (value: string) => value.replace(/<[^>]*>/g, '').replace(/&ndas
 export function houseFormatLine(draft: NextDayDraft) {
   const rows = formatCoverageRows(draft);
   const by = (element: string) => rows.find((row) => row.element.startsWith(element));
-  return `House format: ${textOnly(by('Four sides')?.where || 'Sides 1–4')}; item banding ${textOnly(by('14 items')?.what || '')}; check totals ${textOnly(by('Four sets')?.what || '')}; real-paper ${textOnly(by('One item from a real paper')?.where || 'Not met')}; Regents ${textOnly(by('One Regents-style')?.where || 'Not met')}; ■→◆ pair ${textOnly(by('The ■')?.where || 'Not met')}; ${textOnly(by('Verification')?.what || 'every value verified before printing')}.`;
+  return `${textOnly(by('Four sides')?.where || 'Sides 1–4')}; item banding ${textOnly(by('14 items')?.what || '')}; check totals ${textOnly(by('Four sets')?.what || '')}; real-paper ${textOnly(by('One item from a real paper')?.where || 'Not met')}; Regents ${textOnly(by('One Regents-style')?.where || 'Not met')}; ■→◆ pair ${textOnly(by('The ■')?.where || 'Not met')}; ${textOnly(by('Verification')?.what || 'every value verified before printing')}.`;
 }
 
 export function tipAlignmentRows(draft: NextDayDraft): TipPlanRow[] {
