@@ -87,6 +87,8 @@ export interface StudentGroup {
   checkTotal: number;
   students: {
     studentId: string;
+    /** Exact roster name, used only for the board/teacher exports. */
+    realName?: string;
     name: string;
     evidence: string;
     score: number | null;
@@ -96,7 +98,7 @@ export interface StudentGroup {
 export interface GroupingPlan {
   groups: StudentGroup[];
   /** students in the class with no results received yet */
-  noResultsYet: { studentId: string; name: string }[];
+  noResultsYet: { studentId: string; name: string; realName?: string }[];
   itemsPerStudent: number;
 }
 
@@ -119,4 +121,5 @@ export interface NextDayDraft {
   grouping: GroupingPlan;
   nextLessonTitle: string;
   nextLessonDate: string;
+  dayNumber?: number | null;
 }

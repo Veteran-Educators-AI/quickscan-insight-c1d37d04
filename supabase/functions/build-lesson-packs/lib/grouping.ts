@@ -85,7 +85,7 @@ export function checkTotalFor(items: WorksheetItemDraft[], itemNumbers: number[]
 export function buildGrouping(
   digest: AssignmentDigest,
   items: WorksheetItemDraft[],
-  rosterStudents: { id: string; name: string }[]
+  rosterStudents: { id: string; name: string; realName?: string }[]
 ): GroupingPlan {
   const [setOne, setTwo, setThree] = itemSets(items);
   const sets = [setOne, setTwo, setThree];
@@ -106,6 +106,7 @@ export function buildGrouping(
     groups[groupIndex].students.push({
       studentId: student.studentId,
       name: student.name,
+      realName: student.realName,
       evidence: evidenceLine(student),
       score: student.score,
     });
@@ -114,7 +115,7 @@ export function buildGrouping(
   const withResults = new Set(digest.students.map((s) => s.studentId));
   const noResultsYet = rosterStudents
     .filter((s) => !withResults.has(s.id))
-    .map((s) => ({ studentId: s.id, name: s.name }));
+    .map((s) => ({ studentId: s.id, name: s.name, realName: s.realName }));
 
   return { groups, noResultsYet, itemsPerStudent: ITEMS_PER_STUDENT };
 }

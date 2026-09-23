@@ -120,7 +120,45 @@ export function useLessonPacks() {
         .eq('teacher_id', user!.id)
         .in('pack_date', [dates.next, dates.previous]);
       if (error) throw error;
-      return (data || []) as unknown as LessonPackRow[];
+      const rows = (data || []) as unknown as LessonPackRow[];
+      const classIds = Array.from(new Set(rows.map((pack) => pack.class_id).filter(Boolean)));
+      if (classIds.length === 0) return rows;
+
+      const { data: rosterRows, error: rosterError } = await supabase
+        .from('students')
+        .select('id, class_id, first_name, last_name, archived_at')
+        .in('class_id', classIds)
+        .is('archived_at', null);
+      if (rosterError) throw rosterError;
+
+      const realNameById = new Map(
+        (rosterRows || []).map((student: any) => [student.id, `${student.first_name || ''} ${student.last_name || ''}`.trim()])
+      );
+      return rows.map((pack) => {
+        if (!pack.draft) return pack;
+        const grouping = pack.draft.grouping;
+        return {
+          ...pack,
+          draft: {
+            ...pack.draft,
+            dayNumber: pack.draft.dayNumber ?? pack.day_number,
+            grouping: {
+              ...grouping,
+              groups: grouping.groups.map((group) => ({
+                ...group,
+                students: group.students.map((student) => ({
+                  ...student,
+                  realName: realNameById.get(student.studentId) || student.realName,
+                })),
+              })),
+              noResultsYet: grouping.noResultsYet.map((student) => ({
+                ...student,
+                realName: realNameById.get(student.studentId) || student.realName,
+              })),
+            },
+          },
+        };
+      });
     },
     enabled: !!user?.id,
     refetchInterval: 20000,
@@ -241,7 +279,11 @@ export function useLessonPacks() {
 
         const roster = (rosterRows || [])
           .filter((s: any) => !s.archived_at)
-          .map((s: any) => ({ id: s.id, name: getDisplayName(s.id, s.first_name || '', s.last_name || '') }));
+          .map((s: any) => ({
+            id: s.id,
+            name: getDisplayName(s.id, s.first_name || '', s.last_name || ''),
+            realName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          }));
 
         const draft: NextDayDraft = {
           classId: klass.id,
@@ -288,6 +330,7 @@ export function useLessonPacks() {
           grouping: buildGrouping(digest, worksheetItems, roster),
           nextLessonTitle: lessonTitle,
           nextLessonDate: dateLabel,
+          dayNumber,
         };
 
         const row = await upsertPack({

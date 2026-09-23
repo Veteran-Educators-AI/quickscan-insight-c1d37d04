@@ -162,7 +162,11 @@ export default function NextDayLesson() {
     () =>
       (roster || [])
         .filter((s) => !s.archived_at)
-        .map((s) => ({ id: s.id, name: getDisplayName(s.id, s.first_name || '', s.last_name || '') })),
+        .map((s) => ({
+          id: s.id,
+          name: getDisplayName(s.id, s.first_name || '', s.last_name || ''),
+          realName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+        })),
     [roster, getDisplayName]
   );
 
@@ -273,6 +277,7 @@ export default function NextDayLesson() {
         grouping,
         nextLessonTitle,
         nextLessonDate,
+        dayNumber: null,
       });
       toast.success('Draft ready — review it, then download.');
     } catch (error) {
