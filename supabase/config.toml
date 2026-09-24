@@ -129,3 +129,6 @@ verify_jwt = false
 
 [functions.generate-answer-sheet]
 verify_jwt = false
+
+[functions.drive-sync]
+verify_jwt = false
