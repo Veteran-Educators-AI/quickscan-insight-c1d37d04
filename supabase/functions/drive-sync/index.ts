@@ -73,6 +73,9 @@ async function syncUnit(admin: any, unit: any) {
     return report;
   }
   const manifest = await downloadJson(manifestEntry.fileId);
+  // v2: format "v2", Day folders flat, paths relative to the unit folder root. No format → v1 layout.
+  const format = manifest.format === "v2" ? "v2" : "v1";
+  report.format = format;
   const generated = manifest.generated ? new Date(manifest.generated) : null;
   const periods: string[] = PERIOD_KEYS(manifest.placements).length ? PERIOD_KEYS(manifest.placements) : ["P2", "P7", "P8"];
 
