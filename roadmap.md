@@ -48,3 +48,10 @@
 - [x] Restore deck standards footers, minute badges, and key vocabulary slide
 - [x] Regenerate slide counts and period slide ranges from the deck structure
 - [x] Keep no-publish and no-delete constraints
+
+## Job 8 — 23 Sept exit-ticket import (BLOCKED: waiting on A/B answer — no separate Test database)
+- [ ] Import P5 Day 7 + STAT P2 Day 17 (35 rows) and P9 Day 7 (14 rows) into paper_scan_results; exact-name links only, flagged rows unlinked
+- [ ] Update Day 8 Who Does Which for P9 from next_set (totals 811/933/1312/1395); P5 Day 8 and STAT P2 Day 18 from earlier payload
+- [ ] Report inserted/matched/unlinked counts per class
+
+## Job 9 — Unit 2 Statistics Lessons area from Drive (plan written, awaiting approval)
