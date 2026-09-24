@@ -231,13 +231,13 @@ export default function Lessons() {
   );
 }
 
-function FileFrame({ file, expected, height = 560 }: { file?: LessonFile; expected: string; height?: number }) {
+function FileFrame({ file, expected, height = 560, page }: { file?: LessonFile; expected: string; height?: number; page?: number }) {
   if (!file?.drive_file_id) {
     return <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">Not in Drive yet: <code>{file?.relative_path || expected}</code></div>;
   }
   return (
     <div className="space-y-2">
-      <iframe title={file.relative_path} src={preview(file.drive_file_id)} className="w-full rounded-md border bg-background" style={{ height }} allow="autoplay" />
+      <iframe title={file.relative_path} src={preview(file.drive_file_id) + (page ? `#page=${page}` : '')} className="w-full rounded-md border bg-background" style={{ height }} allow="autoplay" />
       <a className="text-xs text-muted-foreground underline" href={download(file.drive_file_id)} target="_blank" rel="noreferrer">Download {file.relative_path.split('/').pop()}</a>
     </div>
   );
@@ -276,6 +276,10 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
   const sets: Record<string, number[]> = unit.sets || {};
   const timing: any[] = unit.lesson_timing || [];
   const placements = data.placements.filter((p: any) => p.period === period);
+  // v2 manifest (format: "v2"): per-period decks + teacher cards, exit ticket is page 3 of the worksheet.
+  const v2 = unit.last_sync_report?.format === 'v2' || files.some((x) => x.role === 'worksheet_with_exit_ticket' || /^lesson_deck_P\d/.test(x.role));
+  const deckRole = v2 ? `lesson_deck_P${n}` : 'lesson_deck';
+  const wsRole = v2 ? 'worksheet_with_exit_ticket' : 'worksheet';
 
   const confirmDate = async () => {
     await db.from('lessons').update({ date_confirmed: date || null, date_edited_at: new Date().toISOString() }).eq('id', lesson.id);
@@ -290,8 +294,8 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
   const printDay = () => {
     const size = placements.length || 0;
     const plan = [
-      { file: f('worksheet', 'pdf'), label: `Worksheet ×${size} (duplex)` },
-      { file: f('exit_tickets', 'pdf'), label: `Exit tickets ×${Math.ceil(size / 2)} pages (single-sided)` },
+      { file: f(wsRole, 'pdf'), label: v2 ? `Worksheet + exit ticket (page 3) ×${size} (duplex)` : `Worksheet ×${size} (duplex)` },
+      ...(v2 ? [{ file: f(`teacher_card_P${n}`, 'pdf'), label: 'Teacher card ×1' }] : [{ file: f('exit_tickets', 'pdf'), label: `Exit tickets ×${Math.ceil(size / 2)} pages (single-sided)` }]),
       { file: f(`who_does_what_P${n}`, 'pdf'), label: 'Who-does-what teacher list ×1 (single-sided)' },
     ];
     const missing = plan.filter((p) => !p.file?.drive_file_id);
@@ -361,7 +365,8 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
       <Tabs defaultValue="teach">
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="teach">Teach (PowerPoint)</TabsTrigger>
-          <TabsTrigger value="who">Who does what (PowerPoint)</TabsTrigger>
+          <TabsTrigger value="who">Who does what</TabsTrigger>
+          {v2 && <TabsTrigger value="card">Teacher card</TabsTrigger>}
           <TabsTrigger value="worksheet">Worksheet</TabsTrigger>
           <TabsTrigger value="exit">Exit tickets</TabsTrigger>
           <TabsTrigger value="solutions">Solutions (teacher only)</TabsTrigger>
@@ -372,14 +377,22 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
             {timing.map((t, i) => <div key={i} className="px-2 py-1.5 border-r last:border-r-0 bg-muted/40" style={{ flex: t.minutes }}>{t.label} · {t.minutes}</div>)}
           </div>
           <div className="flex flex-wrap gap-2">
-            <FileButton file={f('lesson_deck', 'pptx')} label="Open in PowerPoint (.pptx)" />
-            {f('lesson_deck', 'pdf')?.drive_file_id
-              ? <Button size="sm" asChild><a href={preview(f('lesson_deck', 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Presentation className="h-4 w-4 mr-1" />Present</a></Button>
+            <FileButton file={f(deckRole, 'pptx')} label={`Open in PowerPoint (.pptx)${v2 ? ` — Period ${n}` : ''}`} />
+            {f(deckRole, 'pdf')?.drive_file_id
+              ? <Button size="sm" asChild><a href={preview(f(deckRole, 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Presentation className="h-4 w-4 mr-1" />Present</a></Button>
               : <Button size="sm" disabled>Present</Button>}
             <TalkTimer />
           </div>
-          <FileFrame file={f('lesson_deck', 'pdf')} expected="files.lesson_deck.pdf" height={620} />
+          <FileFrame file={f(deckRole, 'pdf')} expected={`files.${deckRole}.pdf`} height={620} />
         </TabsContent>
+
+        {v2 && (
+          <TabsContent value="card" className="space-y-3">
+            <p className="text-xs text-muted-foreground">Do Now answers, worked-example steps, guided answers, suggested questions with listen-fors, and the clock — Period {n}.</p>
+            <div className="flex gap-2"><FileButton file={f(`teacher_card_P${n}`, 'docx')} label=".docx" /></div>
+            <FileFrame file={f(`teacher_card_P${n}`, 'pdf')} expected={`files.teacher_card_P${n}.pdf`} height={620} />
+          </TabsContent>
+        )}
 
         <TabsContent value="who" className="space-y-3">
           {flags.length > 0 && (
@@ -392,10 +405,12 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
               ))}
             </div>
           )}
-          <div className="grid gap-3 xl:grid-cols-2">
+          {v2 ? (
+            <div><div className="text-sm font-medium mb-1">Who does what — Period {n} (name slides are in the Period {n} lesson deck)</div><FileFrame file={f(`who_does_what_P${n}`, 'pdf')} expected={`files.who_does_what_P${n}.pdf`} height={460} /></div>
+          ) : <div className="grid gap-3 xl:grid-cols-2">
             <div><div className="text-sm font-medium mb-1">Board deck — Period {n}</div><FileFrame file={f(`who_does_what_deck_P${n}`, 'pdf')} expected={`files.who_does_what_deck_P${n}.pdf`} height={420} /><div className="mt-1"><FileButton file={f(`who_does_what_deck_P${n}`, 'pptx')} label=".pptx" /></div></div>
             <div><div className="text-sm font-medium mb-1">Teacher list — Period {n}</div><FileFrame file={f(`who_does_what_P${n}`, 'pdf')} expected={`files.who_does_what_P${n}.pdf`} height={420} /></div>
-          </div>
+          </div>}
           <table className="w-full text-sm border rounded-md">
             <thead className="bg-muted/50"><tr><th className="text-left p-2">Student</th><th className="p-2">Set</th><th className="p-2">Items</th><th className="p-2">Check total</th><th className="text-left p-2">Why</th><th className="text-left p-2">⚑</th></tr></thead>
             <tbody>
@@ -417,21 +432,26 @@ function LessonView({ unit, lesson, data, periods, period, setPeriod, gate, onCh
 
         <TabsContent value="worksheet" className="space-y-3">
           <div className="flex gap-2">
-            {f('worksheet', 'pdf')?.drive_file_id ? <Button size="sm" asChild><a href={preview(f('worksheet', 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4 mr-1" />Print (duplex)</a></Button> : <Button size="sm" disabled>Print (duplex)</Button>}
-            <FileButton file={f('worksheet', 'docx')} label=".docx" />
+            {f(wsRole, 'pdf')?.drive_file_id ? <Button size="sm" asChild><a href={preview(f(wsRole, 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4 mr-1" />Print (duplex)</a></Button> : <Button size="sm" disabled>Print (duplex)</Button>}
+            <FileButton file={f(wsRole, 'docx')} label=".docx" />
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
             {lesson.everyone_all_items ? <div className="rounded border p-2">Everyone works all items today.</div> :
               Object.entries(sets).map(([s, items]) => <div key={s} className="rounded border p-2">Set {s}: items {(items as number[]).join(', ')} · check total <b>{lesson.check_totals?.[s] ?? lesson.check_totals?.[`Set ${s}`] ?? '—'}</b></div>)}
           </div>
           {lesson.strip_excludes?.length > 0 && <p className="text-xs text-muted-foreground">Items {lesson.strip_excludes.join(', ')} have no strip number.</p>}
-          <FileFrame file={f('worksheet', 'pdf')} expected="files.worksheet.pdf" />
+          <FileFrame file={f(wsRole, 'pdf')} expected={`files.${wsRole}.pdf`} />
           {f('quiz', 'pdf') && <><div className="text-sm font-medium">Quiz</div><FileFrame file={f('quiz', 'pdf')} expected="files.quiz.pdf" /></>}
         </TabsContent>
 
         <TabsContent value="exit" className="space-y-3">
-          {f('exit_tickets', 'pdf')?.drive_file_id ? <Button size="sm" asChild><a href={preview(f('exit_tickets', 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4 mr-1" />Print (single-sided)</a></Button> : null}
-          <FileFrame file={f('exit_tickets', 'pdf')} expected="files.exit_tickets.pdf" height={460} />
+          {v2 ? <>
+            <p className="text-xs text-muted-foreground">The exit ticket is page 3 of the worksheet.</p>
+            <FileFrame file={f(wsRole, 'pdf')} expected={`files.${wsRole}.pdf`} height={460} page={3} />
+          </> : <>
+            {f('exit_tickets', 'pdf')?.drive_file_id ? <Button size="sm" asChild><a href={preview(f('exit_tickets', 'pdf')!.drive_file_id)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4 mr-1" />Print (single-sided)</a></Button> : null}
+            <FileFrame file={f('exit_tickets', 'pdf')} expected="files.exit_tickets.pdf" height={460} />
+          </>}
           {questions.length > 0 && <ol className="list-decimal pl-6 text-sm space-y-1">{questions.map((q, i) => <li key={i}>{typeof q === 'string' ? q : q.text || q.prompt || JSON.stringify(q)}</li>)}</ol>}
           <div className="rounded-md border p-3 flex items-center justify-between">
             <div className="text-sm">Score this exit ticket — scanned results attach to this lesson and set the next lesson's gate.</div>
