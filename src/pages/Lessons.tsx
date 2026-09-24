@@ -83,8 +83,6 @@ export default function Lessons() {
   const [showDone, setShowDone] = useState(false);
   const [period, setPeriod] = useState<string>('');
 
-  if (userRole === 'student') return <Navigate to="/student/dashboard" replace />;
-
   const unit = data?.unit;
   const periods: string[] = unit?.periods?.length ? unit.periods : ['P2', 'P7', 'P8'];
   const activePeriod = period || periods[0];
@@ -129,6 +127,8 @@ export default function Lessons() {
     });
     return out;
   }, [data, periods.join(',')]);
+
+  if (userRole === 'student') return <Navigate to="/student/dashboard" replace />;
 
   const sync = async () => {
     setSyncing(true);
