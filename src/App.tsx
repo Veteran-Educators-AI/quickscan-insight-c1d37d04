@@ -48,6 +48,7 @@ const StudentLiveSession = React.lazy(() => import("./pages/StudentLiveSession")
 const PresentationView = React.lazy(() => import("./pages/PresentationView"));
 const PresentationLibrary = React.lazy(() => import("./pages/PresentationLibrary"));
 const TeacherLibrary = React.lazy(() => import("./pages/TeacherLibrary"));
+const Lessons = React.lazy(() => import("./pages/Lessons"));
 const SimpleMode = React.lazy(() => import("./pages/SimpleMode"));
 const SimpleModeResponse = React.lazy(() => import("./pages/SimpleModeResponse"));
 
@@ -183,6 +184,9 @@ function AppRoutes() {
         <Route path="/assessments/*" element={<Navigate to="/questions" replace />} />
         <Route path="/assessment" element={<Navigate to="/questions" replace />} />
         <Route path="/assessment/*" element={<Navigate to="/questions" replace />} />
+        <Route path="/lessons" element={<Navigate to="/lessons/statistics/unit-2" replace />} />
+        <Route path="/lessons/:courseSlug/:unitSlug" element={<ProtectedRoute><Lessons /></ProtectedRoute>} />
+        <Route path="/lessons/:courseSlug/:unitSlug/:lessonId" element={<ProtectedRoute><Lessons /></ProtectedRoute>} />
         <Route path="/scan" element={<ProtectedRoute><Scan /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
         <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />

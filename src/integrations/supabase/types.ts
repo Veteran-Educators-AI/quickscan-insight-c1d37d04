@@ -857,6 +857,53 @@ export type Database = {
           },
         ]
       }
+      exit_ticket_tallies: {
+        Row: {
+          blank: number
+          correct: number
+          created_at: string
+          half: number
+          id: string
+          lesson_id: string
+          period: string
+          question: string
+          teacher_id: string
+          wrong: number
+        }
+        Insert: {
+          blank?: number
+          correct?: number
+          created_at?: string
+          half?: number
+          id?: string
+          lesson_id: string
+          period: string
+          question: string
+          teacher_id: string
+          wrong?: number
+        }
+        Update: {
+          blank?: number
+          correct?: number
+          created_at?: string
+          half?: number
+          id?: string
+          lesson_id?: string
+          period?: string
+          question?: string
+          teacher_id?: string
+          wrong?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exit_ticket_tallies_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_students: {
         Row: {
           class_id: string | null
@@ -988,6 +1035,44 @@ export type Database = {
           user_agent?: string | null
         }
         Relationships: []
+      }
+      gate_overrides: {
+        Row: {
+          created_at: string
+          id: string
+          lesson_id: string
+          note: string | null
+          period: string
+          status: string
+          teacher_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lesson_id: string
+          note?: string | null
+          period: string
+          status: string
+          teacher_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lesson_id?: string
+          note?: string | null
+          period?: string
+          status?: string
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gate_overrides_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       grade_history: {
         Row: {
@@ -1203,6 +1288,56 @@ export type Database = {
           },
         ]
       }
+      lesson_files: {
+        Row: {
+          created_at: string
+          drive_file_id: string | null
+          format: string
+          id: string
+          lesson_id: string
+          mime_type: string | null
+          modified_time: string | null
+          relative_path: string
+          role: string
+          teacher_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          drive_file_id?: string | null
+          format: string
+          id?: string
+          lesson_id: string
+          mime_type?: string | null
+          modified_time?: string | null
+          relative_path: string
+          role: string
+          teacher_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          drive_file_id?: string | null
+          format?: string
+          id?: string
+          lesson_id?: string
+          mime_type?: string | null
+          modified_time?: string | null
+          relative_path?: string
+          role?: string
+          teacher_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lesson_files_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lesson_packs: {
         Row: {
           class_id: string
@@ -1349,6 +1484,110 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lessons: {
+        Row: {
+          aim: string | null
+          check_totals: Json | null
+          course_day: number | null
+          created_at: string
+          date_confirmed: string | null
+          date_edited_at: string | null
+          date_proposed: string | null
+          do_now: string | null
+          everyone_all_items: boolean
+          exit_ticket_questions: Json
+          gate_edited_at: string | null
+          gate_evidence: Json
+          gate_rule: string | null
+          gate_status: Json
+          gates_lesson_key: string | null
+          id: string
+          label: string | null
+          lesson_key: string
+          manifest: Json | null
+          mini_lesson: Json
+          sort_order: number
+          standards: string[]
+          strip_excludes: Json
+          taught_at: string | null
+          teacher_id: string
+          title: string | null
+          type: string | null
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          aim?: string | null
+          check_totals?: Json | null
+          course_day?: number | null
+          created_at?: string
+          date_confirmed?: string | null
+          date_edited_at?: string | null
+          date_proposed?: string | null
+          do_now?: string | null
+          everyone_all_items?: boolean
+          exit_ticket_questions?: Json
+          gate_edited_at?: string | null
+          gate_evidence?: Json
+          gate_rule?: string | null
+          gate_status?: Json
+          gates_lesson_key?: string | null
+          id?: string
+          label?: string | null
+          lesson_key: string
+          manifest?: Json | null
+          mini_lesson?: Json
+          sort_order?: number
+          standards?: string[]
+          strip_excludes?: Json
+          taught_at?: string | null
+          teacher_id: string
+          title?: string | null
+          type?: string | null
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          aim?: string | null
+          check_totals?: Json | null
+          course_day?: number | null
+          created_at?: string
+          date_confirmed?: string | null
+          date_edited_at?: string | null
+          date_proposed?: string | null
+          do_now?: string | null
+          everyone_all_items?: boolean
+          exit_ticket_questions?: Json
+          gate_edited_at?: string | null
+          gate_evidence?: Json
+          gate_rule?: string | null
+          gate_status?: Json
+          gates_lesson_key?: string | null
+          id?: string
+          label?: string | null
+          lesson_key?: string
+          manifest?: Json | null
+          mini_lesson?: Json
+          sort_order?: number
+          standards?: string[]
+          strip_excludes?: Json
+          taught_at?: string | null
+          teacher_id?: string
+          title?: string | null
+          type?: string | null
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -1751,16 +1990,20 @@ export type Database = {
           item_marks: Json
           items_attempted: number | null
           items_correct: number | null
+          name_as_written: string | null
+          name_flag: string | null
+          next_set: number | null
           raw_payload: Json | null
           scanned_at: string | null
           score: number | null
           source_ref: string | null
           standard_code: string | null
           strengths: Json
-          student_id: string
+          student_id: string | null
           submission_type: string | null
           summary: string | null
           teacher_id: string
+          ticket_code: string | null
           topic_name: string
           updated_at: string
           weak_skill_tags: string[]
@@ -1775,16 +2018,20 @@ export type Database = {
           item_marks?: Json
           items_attempted?: number | null
           items_correct?: number | null
+          name_as_written?: string | null
+          name_flag?: string | null
+          next_set?: number | null
           raw_payload?: Json | null
           scanned_at?: string | null
           score?: number | null
           source_ref?: string | null
           standard_code?: string | null
           strengths?: Json
-          student_id: string
+          student_id?: string | null
           submission_type?: string | null
           summary?: string | null
           teacher_id: string
+          ticket_code?: string | null
           topic_name: string
           updated_at?: string
           weak_skill_tags?: string[]
@@ -1799,16 +2046,20 @@ export type Database = {
           item_marks?: Json
           items_attempted?: number | null
           items_correct?: number | null
+          name_as_written?: string | null
+          name_flag?: string | null
+          next_set?: number | null
           raw_payload?: Json | null
           scanned_at?: string | null
           score?: number | null
           source_ref?: string | null
           standard_code?: string | null
           strengths?: Json
-          student_id?: string
+          student_id?: string | null
           submission_type?: string | null
           summary?: string | null
           teacher_id?: string
+          ticket_code?: string | null
           topic_name?: string
           updated_at?: string
           weak_skill_tags?: string[]
@@ -1898,6 +2149,62 @@ export type Database = {
             columns: ["teacher_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      placements: {
+        Row: {
+          created_at: string
+          email: string | null
+          flag: string | null
+          flag_resolved_at: string | null
+          id: string
+          period: string
+          set_number: number | null
+          source: string
+          student_name: string
+          teacher_id: string
+          unit_id: string
+          updated_at: string
+          why: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          flag?: string | null
+          flag_resolved_at?: string | null
+          id?: string
+          period: string
+          set_number?: number | null
+          source?: string
+          student_name: string
+          teacher_id: string
+          unit_id: string
+          updated_at?: string
+          why?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          flag?: string | null
+          flag_resolved_at?: string | null
+          id?: string
+          period?: string
+          set_number?: number | null
+          source?: string
+          student_name?: string
+          teacher_id?: string
+          unit_id?: string
+          updated_at?: string
+          why?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "placements_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -2150,6 +2457,38 @@ export type Database = {
             columns: ["attempt_id"]
             isOneToOne: false
             referencedRelation: "attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roster_flag_resolutions: {
+        Row: {
+          flag_key: string
+          id: string
+          resolved_at: string
+          teacher_id: string
+          unit_id: string
+        }
+        Insert: {
+          flag_key: string
+          id?: string
+          resolved_at?: string
+          teacher_id: string
+          unit_id: string
+        }
+        Update: {
+          flag_key?: string
+          id?: string
+          resolved_at?: string
+          teacher_id?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roster_flag_resolutions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
             referencedColumns: ["id"]
           },
         ]
@@ -3025,6 +3364,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      units: {
+        Row: {
+          course: string
+          course_slug: string
+          created_at: string
+          drive_folder_id: string
+          gate_rule: string | null
+          id: string
+          last_sync_report: Json | null
+          last_synced_at: string | null
+          lesson_timing: Json | null
+          manifest_generated_at: string | null
+          manifest_name: string
+          periods: string[]
+          sets: Json | null
+          teacher_id: string
+          title: string
+          unit_slug: string
+          updated_at: string
+        }
+        Insert: {
+          course: string
+          course_slug: string
+          created_at?: string
+          drive_folder_id: string
+          gate_rule?: string | null
+          id?: string
+          last_sync_report?: Json | null
+          last_synced_at?: string | null
+          lesson_timing?: Json | null
+          manifest_generated_at?: string | null
+          manifest_name?: string
+          periods?: string[]
+          sets?: Json | null
+          teacher_id: string
+          title: string
+          unit_slug: string
+          updated_at?: string
+        }
+        Update: {
+          course?: string
+          course_slug?: string
+          created_at?: string
+          drive_folder_id?: string
+          gate_rule?: string | null
+          id?: string
+          last_sync_report?: Json | null
+          last_synced_at?: string | null
+          lesson_timing?: Json | null
+          manifest_generated_at?: string | null
+          manifest_name?: string
+          periods?: string[]
+          sets?: Json | null
+          teacher_id?: string
+          title?: string
+          unit_slug?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       worksheet_submissions: {
         Row: {
