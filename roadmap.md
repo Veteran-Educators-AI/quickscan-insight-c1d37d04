@@ -49,9 +49,13 @@
 - [x] Regenerate slide counts and period slide ranges from the deck structure
 - [x] Keep no-publish and no-delete constraints
 
-## Job 8 — 23 Sept exit-ticket import (BLOCKED: waiting on A/B answer — no separate Test database)
-- [ ] Import P5 Day 7 + STAT P2 Day 17 (35 rows) and P9 Day 7 (14 rows) into paper_scan_results; exact-name links only, flagged rows unlinked
-- [ ] Update Day 8 Who Does Which for P9 from next_set (totals 811/933/1312/1395); P5 Day 8 and STAT P2 Day 18 from earlier payload
-- [ ] Report inserted/matched/unlinked counts per class
+## Job 8 — 23 Sept exit-ticket import — done
+- [x] 49 papers imported (P5 19, P9 14, STATS2 16); exact-name links only, flagged rows unlinked
+- [ ] Day 8 P9 Who Does Which (new sets, totals 516.25/4355.1/2552.35/5615.35) — BLOCKED: need Day 8 item answers to verify totals
+- [ ] Statistics tickets: never print answer choices beside a blank
 
-## Job 9 — Unit 2 Statistics Lessons area from Drive (plan written, awaiting approval)
+## Job 9 — Lessons area from Drive — built
+- [x] Tables, drive-sync function (public folder, path-resolved), 30-min schedule, /lessons routes, rail, five tabs, gate, tallies, flags
+- [ ] Screenshots of Day 25 — BLOCKED: Unit02_Manifest.json not in Drive yet; preview sign-in needs Gregory
+- [ ] Placements auto-update from scored Unit 2 tickets (no Unit 2 tickets scored yet)
+- [ ] Algebra II unit row once its Drive folder id is given
